@@ -1,0 +1,60 @@
+name: datenow
+description: "DateNow — Premium live-matching dating app."
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.11.5
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+
+  # State management
+  flutter_riverpod: ^2.6.1
+
+  # Navigation
+  go_router: ^14.6.2
+
+  # Backend
+  supabase_flutter: ^2.8.0
+
+  # Models / immutables
+  freezed_annotation: ^2.4.4
+  json_annotation: ^4.9.0
+
+  # UI / design system
+  google_fonts: ^6.2.1
+  flutter_animate: ^4.5.0
+  cached_network_image: ^3.4.1
+  flutter_svg: ^2.0.10+1
+
+  # Storage
+  shared_preferences: ^2.3.3
+  flutter_secure_storage: ^9.2.2
+
+  # Config
+  flutter_dotenv: ^5.2.1
+
+  # Utilities
+  intl: ^0.19.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+  # Code generation
+  build_runner: ^2.4.13
+  freezed: ^2.5.7
+  json_serializable: ^6.8.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - .env
+
+  # Fonts are loaded via google_fonts at runtime — no bundled assets needed.
