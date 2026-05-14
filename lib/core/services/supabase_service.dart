@@ -22,21 +22,33 @@ class SupabaseService {
 
     if (!Env.supabaseConfigured) {
       _log.warn(
-        'Supabase env vars missing — skipping init. '
-        'Auth and persistence will be disabled.',
+        'Supabase NOT initialised — SUPABASE_URL and/or SUPABASE_ANON_KEY '
+        'are missing from .env. Sign up, sign in and every backend-backed '
+        'feature will run against the in-memory mock. Populate .env then '
+        'restart the app to talk to the real Supabase project.',
       );
       return;
     }
 
-    await Supabase.initialize(
-      url: Env.supabaseUrl,
-      anonKey: Env.supabaseAnonKey,
-      authOptions: const FlutterAuthClientOptions(
-        authFlowType: AuthFlowType.pkce,
-      ),
-    );
-    _initialized = true;
-    _log.info('Initialized client at ${Env.supabaseUrl}');
+    try {
+      await Supabase.initialize(
+        url: Env.supabaseUrl,
+        anonKey: Env.supabaseAnonKey,
+        authOptions: const FlutterAuthClientOptions(
+          authFlowType: AuthFlowType.pkce,
+        ),
+      );
+      _initialized = true;
+      _log.info('Supabase initialised at ${Env.supabaseUrl}');
+    } catch (e, st) {
+      _log.error(
+        'Supabase.initialize THREW — env appears set but the SDK refused '
+        'to bring up the client. Check your URL + anon key.',
+        e,
+        st,
+      );
+      rethrow;
+    }
   }
 }
 

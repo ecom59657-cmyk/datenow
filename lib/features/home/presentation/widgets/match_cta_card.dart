@@ -4,6 +4,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
+import '../../../../l10n/app_localizations.dart';
 
 /// Hero CTA inviting the user to start a live date. Tap → matching screen.
 class MatchCtaCard extends StatelessWidget {
@@ -13,6 +14,7 @@ class MatchCtaCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -38,13 +40,12 @@ class MatchCtaCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Find a date now',
+                      l10n.findDateTitle,
                       style: AppTypography.h2.copyWith(color: Colors.white),
                     ),
                     const SizedBox(height: AppSpacing.xs),
                     Text(
-                      'Get matched with someone online and compatible. '
-                      'Live, in seconds.',
+                      l10n.findDateSubtitle,
                       style: AppTypography.body.copyWith(
                         color: Colors.white.withValues(alpha: 0.85),
                         height: 1.4,

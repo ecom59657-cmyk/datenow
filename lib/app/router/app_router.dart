@@ -6,13 +6,30 @@ import '../../features/auth/presentation/providers/auth_provider.dart';
 import '../../features/auth/presentation/screens/auth_landing_screen.dart';
 import '../../features/auth/presentation/screens/sign_in_screen.dart';
 import '../../features/auth/presentation/screens/sign_up_screen.dart';
+import '../../features/auth/presentation/screens/verify_email_screen.dart';
 import '../../features/call/presentation/call_screen.dart';
 import '../../features/discover/presentation/discover_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
 import '../../features/matching/presentation/matching_screen.dart';
+import '../../features/messaging/presentation/conversation_screen.dart';
+import '../../features/messaging/presentation/inbox_screen.dart';
 import '../../features/onboarding/presentation/onboarding_screen.dart';
 import '../../features/onboarding/presentation/providers/onboarding_provider.dart';
+import '../../features/post_call/presentation/post_call_screen.dart';
+import '../../features/profile/presentation/edit/edit_photos_screen.dart';
+import '../../features/profile/presentation/edit/edit_preferences_screen.dart';
+import '../../features/profile/presentation/edit/edit_profile_screen.dart';
 import '../../features/profile/presentation/profile_screen.dart';
+import '../../features/profile_setup/presentation/profile_setup_screen.dart';
+import '../../features/settings/presentation/blocked_accounts_screen.dart';
+import '../../features/settings/presentation/help_screen.dart';
+import '../../features/settings/presentation/legal/privacy_policy_screen.dart';
+import '../../features/settings/presentation/legal/terms_screen.dart';
+import '../../features/settings/presentation/notifications_screen.dart';
+import '../../features/settings/presentation/privacy_screen.dart';
+import '../../features/settings/presentation/security_screen.dart';
+import '../../features/subscription/presentation/subscription_screen.dart';
+import '../../features/profile_setup/presentation/providers/profile_provider.dart';
 import '../../features/settings/presentation/settings_screen.dart';
 import '../../features/splash/presentation/splash_screen.dart';
 import '../scaffold/main_shell.dart';
@@ -53,7 +70,23 @@ final routerProvider = Provider<GoRouter>((ref) {
             name: AppRoute.signUp.name,
             builder: (_, _) => const SignUpScreen(),
           ),
+          GoRoute(
+            path: 'verify-email',
+            name: AppRoute.verifyEmail.name,
+            builder: (_, state) {
+              // Email is passed via `pushReplacementNamed(extra: email)`.
+              final email = state.extra is String ? state.extra as String : '';
+              return VerifyEmailScreen(email: email);
+            },
+          ),
         ],
+      ),
+
+      // Profile-setup is a full-screen route gated by the auth+complete check.
+      GoRoute(
+        path: AppRoute.profileSetup.path,
+        name: AppRoute.profileSetup.name,
+        builder: (_, _) => const ProfileSetupScreen(),
       ),
 
       // Authenticated stack — main shell with bottom nav + full-screen routes.
@@ -87,9 +120,64 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       // Full-screen routes outside the shell.
       GoRoute(
+        path: AppRoute.editProfile.path,
+        name: AppRoute.editProfile.name,
+        builder: (_, _) => const EditProfileScreen(),
+      ),
+      GoRoute(
+        path: AppRoute.editPreferences.path,
+        name: AppRoute.editPreferences.name,
+        builder: (_, _) => const EditPreferencesScreen(),
+      ),
+      GoRoute(
+        path: AppRoute.editPhotos.path,
+        name: AppRoute.editPhotos.name,
+        builder: (_, _) => const EditPhotosScreen(),
+      ),
+      GoRoute(
         path: AppRoute.settings.path,
         name: AppRoute.settings.name,
         builder: (_, _) => const SettingsScreen(),
+      ),
+      GoRoute(
+        path: AppRoute.settingsNotifications.path,
+        name: AppRoute.settingsNotifications.name,
+        builder: (_, _) => const NotificationsScreen(),
+      ),
+      GoRoute(
+        path: AppRoute.settingsPrivacy.path,
+        name: AppRoute.settingsPrivacy.name,
+        builder: (_, _) => const PrivacyScreen(),
+      ),
+      GoRoute(
+        path: AppRoute.settingsSecurity.path,
+        name: AppRoute.settingsSecurity.name,
+        builder: (_, _) => const SecurityScreen(),
+      ),
+      GoRoute(
+        path: AppRoute.settingsBlocked.path,
+        name: AppRoute.settingsBlocked.name,
+        builder: (_, _) => const BlockedAccountsScreen(),
+      ),
+      GoRoute(
+        path: AppRoute.settingsSubscription.path,
+        name: AppRoute.settingsSubscription.name,
+        builder: (_, _) => const SubscriptionScreen(),
+      ),
+      GoRoute(
+        path: AppRoute.settingsHelp.path,
+        name: AppRoute.settingsHelp.name,
+        builder: (_, _) => const HelpScreen(),
+      ),
+      GoRoute(
+        path: AppRoute.settingsTerms.path,
+        name: AppRoute.settingsTerms.name,
+        builder: (_, _) => const TermsScreen(),
+      ),
+      GoRoute(
+        path: AppRoute.settingsPrivacyPolicy.path,
+        name: AppRoute.settingsPrivacyPolicy.name,
+        builder: (_, _) => const PrivacyPolicyScreen(),
       ),
       GoRoute(
         path: AppRoute.matching.path,
@@ -101,6 +189,24 @@ final routerProvider = Provider<GoRouter>((ref) {
         name: AppRoute.call.name,
         builder: (_, _) => const CallScreen(),
       ),
+      GoRoute(
+        path: AppRoute.postCall.path,
+        name: AppRoute.postCall.name,
+        builder: (_, _) => const PostCallScreen(),
+      ),
+      GoRoute(
+        path: AppRoute.messages.path,
+        name: AppRoute.messages.name,
+        builder: (_, _) => const InboxScreen(),
+      ),
+      GoRoute(
+        path: AppRoute.conversation.path,
+        name: AppRoute.conversation.name,
+        builder: (_, state) {
+          final id = state.pathParameters['id']!;
+          return ConversationScreen(conversationId: id);
+        },
+      ),
     ],
   );
 });
@@ -108,7 +214,8 @@ final routerProvider = Provider<GoRouter>((ref) {
 /// Bridges Riverpod state changes into [GoRouter] via [ChangeNotifier].
 ///
 /// GoRouter's [refreshListenable] needs a [Listenable]; we wrap [Ref] and
-/// notify whenever auth or onboarding state changes, so [redirect] runs again.
+/// notify whenever auth, onboarding or profile-setup state changes so
+/// [redirect] runs again.
 class _RouterNotifier extends ChangeNotifier {
   _RouterNotifier(this._ref) {
     _ref.listen<AsyncValue<bool>>(
@@ -116,6 +223,7 @@ class _RouterNotifier extends ChangeNotifier {
       (_, _) => notifyListeners(),
     );
     _ref.listen(authStateProvider, (_, _) => notifyListeners());
+    _ref.listen(currentProfileProvider, (_, _) => notifyListeners());
   }
 
   final Ref _ref;
@@ -136,6 +244,7 @@ class _RouterNotifier extends ChangeNotifier {
     final isOnSplash = location == AppRoute.splash.path;
     final isOnOnboarding = location == AppRoute.onboarding.path;
     final isOnAuth = location.startsWith(AppRoute.authLanding.path);
+    final isOnProfileSetup = location == AppRoute.profileSetup.path;
 
     final onboardingDone = onboarding.value ?? false;
     final user = auth.value;
@@ -150,9 +259,19 @@ class _RouterNotifier extends ChangeNotifier {
       return isOnAuth ? null : AppRoute.authLanding.path;
     }
 
-    // 3) Authenticated: never sit on splash/onboarding/auth.
-    if (user != null && (isOnSplash || isOnOnboarding || isOnAuth)) {
-      return AppRoute.home.path;
+    // 3) Authenticated: gate the main app behind profile setup.
+    if (user != null) {
+      final profileComplete = _ref.read(profileSetupCompletedProvider);
+
+      if (!profileComplete) {
+        // Stay on profile setup until they complete it.
+        return isOnProfileSetup ? null : AppRoute.profileSetup.path;
+      }
+
+      // Profile complete: never sit on splash/onboarding/auth/profile-setup.
+      if (isOnSplash || isOnOnboarding || isOnAuth || isOnProfileSetup) {
+        return AppRoute.home.path;
+      }
     }
 
     return null;

@@ -28,6 +28,18 @@ class Env {
   static String get supabaseUrl => _required('SUPABASE_URL');
   static String get supabaseAnonKey => _required('SUPABASE_ANON_KEY');
 
+  // Agora -------------------------------------------------------------------
+
+  /// Public App ID. Safe to embed in the client (the cryptographic
+  /// privilege lives in the App Certificate, which we keep server-side in
+  /// Supabase secrets).
+  static String get agoraAppId => _optional('AGORA_APP_ID');
+
+  /// True when an App ID is present *and* Supabase is configured (the
+  /// token signer runs as an Edge Function).
+  static bool get agoraConfigured =>
+      agoraAppId.isNotEmpty && supabaseConfigured;
+
   // Feature flags / misc ----------------------------------------------------
 
   static bool get supabaseConfigured =>

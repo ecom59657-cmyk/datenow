@@ -1,110 +1,174 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
-import '../../../app/theme/app_colors.dart';
+import '../../../app/router/app_routes.dart';
 import '../../../app/theme/app_spacing.dart';
-import '../../../app/theme/app_typography.dart';
+import '../../../core/utils/extensions.dart';
+import '../../../l10n/app_localizations.dart';
 import '../../../shared/widgets/app_scaffold.dart';
-import '../../../shared/widgets/glass_card.dart';
+import '../../auth/presentation/providers/auth_provider.dart';
+import 'widgets/destructive_dialog.dart';
+import 'widgets/setting_widgets.dart';
 
-class SettingsScreen extends StatelessWidget {
+/// Main entry to everything account-related. Every tile here is either a
+/// navigation entry to a real sub-screen or a guarded action — no dead taps.
+class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
 
+  Future<void> _confirmSignOut(BuildContext context, WidgetRef ref) async {
+    final l10n = AppLocalizations.of(context);
+    final confirmed = await showDestructiveConfirm(
+      context: context,
+      title: l10n.signOutConfirmTitle,
+      body: l10n.signOutConfirmBody,
+      confirmLabel: l10n.signOutConfirmAction,
+      isDangerous: false,
+    );
+    if (!confirmed || !context.mounted) return;
+    await ref.read(authControllerProvider.notifier).signOut();
+    // Router redirect on auth-state change brings us back to /auth automatically.
+    if (!context.mounted) return;
+    context.showSnack(l10n.signedOutSnack);
+  }
+
+  Future<void> _confirmDelete(BuildContext context, WidgetRef ref) async {
+    final l10n = AppLocalizations.of(context);
+    final confirmed = await showDestructiveConfirm(
+      context: context,
+      title: l10n.deleteAccountConfirmTitle,
+      body: l10n.deleteAccountConfirmBody,
+      confirmLabel: l10n.deleteAccountConfirmAction,
+    );
+    if (!confirmed || !context.mounted) return;
+    await ref.read(authControllerProvider.notifier).deleteAccount();
+    if (!context.mounted) return;
+    context.showSnack(l10n.deletedAccountSnack);
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
+
     return AppScaffold(
       appBar: AppBar(
-        title: const Text('Settings'),
+        title: Text(l10n.settingsTitle),
         leading: const BackButton(),
       ),
       body: ListView(
-        padding: const EdgeInsets.only(top: AppSpacing.md, bottom: 120),
-        physics: const BouncingScrollPhysics(),
-        children: const [
-          _Section(title: 'Account', tiles: [
-            _Tile(icon: Icons.email_outlined, label: 'Email address'),
-            _Tile(icon: Icons.password_rounded, label: 'Password'),
-            _Tile(icon: Icons.phone_iphone_rounded, label: 'Phone number'),
-          ]),
-          SizedBox(height: AppSpacing.lg),
-          _Section(title: 'Notifications', tiles: [
-            _Tile(icon: Icons.notifications_active_outlined, label: 'Push'),
-            _Tile(icon: Icons.email_rounded, label: 'Email summaries'),
-          ]),
-          SizedBox(height: AppSpacing.lg),
-          _Section(title: 'Privacy', tiles: [
-            _Tile(icon: Icons.shield_outlined, label: 'Block list'),
-            _Tile(icon: Icons.history_rounded, label: 'Activity history'),
-            _Tile(icon: Icons.description_outlined, label: 'Privacy policy'),
-          ]),
-        ],
-      ),
-    );
-  }
-}
-
-class _Section extends StatelessWidget {
-  const _Section({required this.title, required this.tiles});
-
-  final String title;
-  final List<_Tile> tiles;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(
-            left: AppSpacing.xs,
-            bottom: AppSpacing.xs,
-          ),
-          child: Text(
-            title.toUpperCase(),
-            style: AppTypography.overline,
-          ),
-        ),
-        GlassCard(
-          padding: EdgeInsets.zero,
-          child: Column(
+        padding: const EdgeInsets.only(top: AppSpacing.md, bottom: 64),
+        children: [
+          SettingSection(
+            title: l10n.settingsProfileSection,
             children: [
-              for (final (i, tile) in tiles.indexed) ...[
-                tile,
-                if (i < tiles.length - 1)
-                  const Divider(
-                    color: AppColors.hairlineSoft,
-                    height: 1,
-                    indent: AppSpacing.md,
-                    endIndent: AppSpacing.md,
-                  ),
-              ],
+              SettingTile(
+                icon: Icons.person_outline_rounded,
+                title: l10n.profilePersonalEntry,
+                subtitle: l10n.profilePersonalSubtitle,
+                onTap: () => context.pushNamed(AppRoute.editProfile.name),
+              ),
+              SettingTile(
+                icon: Icons.tune_rounded,
+                title: l10n.profilePreferences,
+                subtitle: l10n.profilePreferencesSubtitle,
+                onTap: () =>
+                    context.pushNamed(AppRoute.editPreferences.name),
+              ),
+              SettingTile(
+                icon: Icons.photo_library_outlined,
+                title: l10n.profilePhotos,
+                subtitle: l10n.profilePhotosSubtitle,
+                onTap: () => context.pushNamed(AppRoute.editPhotos.name),
+              ),
             ],
           ),
-        ),
-      ],
-    );
-  }
-}
-
-class _Tile extends StatelessWidget {
-  const _Tile({required this.icon, required this.label});
-
-  final IconData icon;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return ListTile(
-      leading: Icon(icon, color: AppColors.textSecondary),
-      title: Text(label, style: AppTypography.bodyLarge),
-      trailing: const Icon(
-        Icons.chevron_right_rounded,
-        color: AppColors.textTertiary,
+          const SizedBox(height: AppSpacing.lg),
+          SettingSection(
+            title: l10n.settingsAccountSection,
+            children: [
+              SettingTile(
+                icon: Icons.notifications_active_outlined,
+                title: l10n.notificationsTitle,
+                subtitle: l10n.notificationsSubtitle,
+                onTap: () =>
+                    context.pushNamed(AppRoute.settingsNotifications.name),
+              ),
+              SettingTile(
+                icon: Icons.shield_outlined,
+                title: l10n.privacyTitle,
+                subtitle: l10n.privacySubtitle,
+                onTap: () =>
+                    context.pushNamed(AppRoute.settingsPrivacy.name),
+              ),
+              SettingTile(
+                icon: Icons.lock_outline_rounded,
+                title: l10n.settingsSecurity,
+                subtitle: l10n.settingsSecuritySubtitle,
+                onTap: () =>
+                    context.pushNamed(AppRoute.settingsSecurity.name),
+              ),
+              SettingTile(
+                icon: Icons.person_off_outlined,
+                title: l10n.settingsBlocked,
+                subtitle: l10n.settingsBlockedSubtitle,
+                onTap: () =>
+                    context.pushNamed(AppRoute.settingsBlocked.name),
+              ),
+              SettingTile(
+                icon: Icons.workspace_premium_rounded,
+                title: l10n.settingsSubscription,
+                subtitle: l10n.settingsSubscriptionSubtitle,
+                onTap: () =>
+                    context.pushNamed(AppRoute.settingsSubscription.name),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          SettingSection(
+            title: l10n.settingsSupportSection,
+            children: [
+              SettingTile(
+                icon: Icons.help_outline_rounded,
+                title: l10n.settingsHelp,
+                subtitle: l10n.settingsHelpSubtitle,
+                onTap: () => context.pushNamed(AppRoute.settingsHelp.name),
+              ),
+              SettingTile(
+                icon: Icons.description_outlined,
+                title: l10n.settingsTerms,
+                subtitle: l10n.settingsTermsSubtitle,
+                onTap: () => context.pushNamed(AppRoute.settingsTerms.name),
+              ),
+              SettingTile(
+                icon: Icons.privacy_tip_outlined,
+                title: l10n.settingsPrivacyPolicy,
+                subtitle: l10n.settingsPrivacyPolicySubtitle,
+                onTap: () => context
+                    .pushNamed(AppRoute.settingsPrivacyPolicy.name),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          SettingSection(
+            title: l10n.settingsDangerSection,
+            children: [
+              SettingTile(
+                icon: Icons.logout_rounded,
+                title: l10n.settingsSignOut,
+                subtitle: l10n.settingsSignOutSubtitle,
+                onTap: () => _confirmSignOut(context, ref),
+              ),
+              SettingTile(
+                icon: Icons.delete_forever_outlined,
+                title: l10n.settingsDeleteAccount,
+                subtitle: l10n.settingsDeleteAccountSubtitle,
+                danger: true,
+                onTap: () => _confirmDelete(context, ref),
+              ),
+            ],
+          ),
+        ],
       ),
-      contentPadding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.md,
-        vertical: 2,
-      ),
-      onTap: () {},
     );
   }
 }

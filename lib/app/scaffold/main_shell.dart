@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../l10n/app_localizations.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
@@ -15,12 +16,6 @@ class MainShell extends StatelessWidget {
 
   final StatefulNavigationShell navigationShell;
 
-  static const _tabs = <_NavItem>[
-    _NavItem(label: 'Home', icon: Icons.home_rounded),
-    _NavItem(label: 'Discover', icon: Icons.explore_rounded),
-    _NavItem(label: 'Profile', icon: Icons.person_rounded),
-  ];
-
   void _onTap(int i) {
     navigationShell.goBranch(
       i,
@@ -31,12 +26,19 @@ class MainShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final tabs = <_NavItem>[
+      _NavItem(label: l10n.navHome, icon: Icons.home_rounded),
+      _NavItem(label: l10n.navDiscover, icon: Icons.explore_rounded),
+      _NavItem(label: l10n.navProfile, icon: Icons.person_rounded),
+    ];
+
     return Scaffold(
       backgroundColor: AppColors.background,
       extendBody: true,
       body: navigationShell,
       bottomNavigationBar: _GlassNavBar(
-        items: _tabs,
+        items: tabs,
         currentIndex: navigationShell.currentIndex,
         onTap: _onTap,
       ),
@@ -150,12 +152,15 @@ class _NavButton extends StatelessWidget {
                   color: selected ? Colors.white : color, size: 22),
               if (selected) ...[
                 const SizedBox(width: 6),
-                Text(
-                  item.label,
-                  style: AppTypography.caption.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 13,
+                Flexible(
+                  child: Text(
+                    item.label,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTypography.caption.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                    ),
                   ),
                 ),
               ],

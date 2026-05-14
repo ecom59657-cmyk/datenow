@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../app/router/app_routes.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
+import '../../../l10n/app_localizations.dart';
 import '../../../shared/widgets/app_button.dart';
 import '../../../shared/widgets/app_scaffold.dart';
 import 'providers/onboarding_provider.dart';
@@ -18,32 +19,9 @@ class OnboardingScreen extends ConsumerStatefulWidget {
 }
 
 class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
-  static const _pages = <OnboardingPageData>[
-    OnboardingPageData(
-      icon: Icons.favorite_rounded,
-      title: 'Welcome to DateNow',
-      subtitle:
-          'A new kind of dating. No swipes, no waiting — just real people, '
-          'live, right now.',
-    ),
-    OnboardingPageData(
-      icon: Icons.bolt_rounded,
-      title: 'Instant live dates',
-      subtitle:
-          'We match you with someone compatible and online, then start a '
-          '5-minute audio or video date instantly.',
-    ),
-    OnboardingPageData(
-      icon: Icons.lock_outline_rounded,
-      title: 'You stay in control',
-      subtitle:
-          'After 5 minutes, choose to keep talking, swap profiles, or move '
-          'on. Always your call.',
-    ),
-  ];
-
   final _controller = PageController();
   int _index = 0;
+  static const _pageCount = 3;
 
   @override
   void dispose() {
@@ -51,7 +29,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     super.dispose();
   }
 
-  bool get _isLast => _index == _pages.length - 1;
+  bool get _isLast => _index == _pageCount - 1;
 
   Future<void> _next() async {
     if (_isLast) {
@@ -70,13 +48,35 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     if (mounted) context.goNamed(AppRoute.authLanding.name);
   }
 
+  List<OnboardingPageData> _buildPages(AppLocalizations l10n) {
+    return [
+      OnboardingPageData(
+        icon: Icons.favorite_rounded,
+        title: l10n.onboarding1Title,
+        subtitle: l10n.onboarding1Subtitle,
+      ),
+      OnboardingPageData(
+        icon: Icons.bolt_rounded,
+        title: l10n.onboarding2Title,
+        subtitle: l10n.onboarding2Subtitle,
+      ),
+      OnboardingPageData(
+        icon: Icons.lock_outline_rounded,
+        title: l10n.onboarding3Title,
+        subtitle: l10n.onboarding3Subtitle,
+      ),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final pages = _buildPages(l10n);
+
     return AppScaffold(
       applyHorizontalPadding: false,
       body: Column(
         children: [
-          // Top bar with skip.
           Padding(
             padding: const EdgeInsets.symmetric(
               horizontal: AppSpacing.lg,
@@ -91,7 +91,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                     style: TextButton.styleFrom(
                       foregroundColor: AppColors.textSecondary,
                     ),
-                    child: const Text('Skip'),
+                    child: Text(l10n.onboardingSkip),
                   ),
               ],
             ),
@@ -99,18 +99,18 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           Expanded(
             child: PageView.builder(
               controller: _controller,
-              itemCount: _pages.length,
+              itemCount: pages.length,
               onPageChanged: (i) => setState(() => _index = i),
-              itemBuilder: (_, i) => OnboardingPage(data: _pages[i]),
+              itemBuilder: (_, i) => OnboardingPage(data: pages[i]),
             ),
           ),
-          // Indicators.
-          _PageIndicators(count: _pages.length, current: _index),
+          _PageIndicators(count: pages.length, current: _index),
           const SizedBox(height: AppSpacing.lg),
           Padding(
             padding: AppSpacing.pagePadding,
             child: AppButton(
-              label: _isLast ? 'Get started' : 'Continue',
+              label:
+                  _isLast ? l10n.onboardingGetStarted : l10n.onboardingContinue,
               icon: _isLast ? Icons.arrow_forward_rounded : null,
               size: AppButtonSize.large,
               onPressed: _next,
@@ -150,4 +150,3 @@ class _PageIndicators extends StatelessWidget {
     );
   }
 }
-

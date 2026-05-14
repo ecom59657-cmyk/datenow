@@ -13,6 +13,7 @@ class AuthUser with _$AuthUser {
     required String id,
     required String email,
     String? displayName,
+    DateTime? birthDate,
     String? avatarUrl,
     DateTime? createdAt,
   }) = _AuthUser;

@@ -1,56 +1,207 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../../app/router/app_routes.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../app/theme/app_typography.dart';
+import '../../../l10n/app_localizations.dart';
 import '../../../shared/widgets/app_scaffold.dart';
 import '../../../shared/widgets/glass_card.dart';
+import '../../../shared/widgets/loading_indicator.dart';
+import '../../messaging/data/messaging_repository.dart';
+import '../../profile_setup/presentation/providers/profile_provider.dart';
+import '../data/discover_repository.dart';
+import 'providers/discover_providers.dart';
+import 'widgets/match_card.dart';
+import 'widgets/suggestion_card.dart';
 
-class DiscoverScreen extends StatelessWidget {
+/// The Discover tab. Two distinct sections:
+/// - Weekly suggestions: up to 3 reciprocal-compatible profiles (≥75 %).
+///   Photos stay hidden until after a real live date.
+/// - Confirmed matches: people the user mutually matched with post-call.
+class DiscoverScreen extends ConsumerStatefulWidget {
   const DiscoverScreen({super.key});
 
   @override
+  ConsumerState<DiscoverScreen> createState() => _DiscoverScreenState();
+}
+
+class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
+  bool _batchEnsured = false;
+
+  @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final profile = ref.watch(currentProfileProvider).asData?.value;
+    final suggestionsAsync = ref.watch(weeklySuggestionsProvider);
+    final matchesAsync = ref.watch(mutualMatchesProvider);
+
+    // Generate this week's batch once per screen mount. Idempotent in the
+    // repository — re-opens within the same week are no-ops.
+    if (!_batchEnsured && profile != null) {
+      _batchEnsured = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ref
+            .read(discoverRepositoryProvider)
+            .ensureWeeklyBatch(profile);
+      });
+    }
+
     return AppScaffold(
       body: ListView(
         padding: const EdgeInsets.only(bottom: 120),
         physics: const BouncingScrollPhysics(),
         children: [
           const SizedBox(height: AppSpacing.md),
-          Text('Discover', style: AppTypography.h1),
+          Text(l10n.discoverTitle, style: AppTypography.h1),
           const SizedBox(height: AppSpacing.xs),
           Text(
-            'Browse profiles you crossed paths with on a live date.',
-            style: AppTypography.body.copyWith(color: AppColors.textSecondary),
+            l10n.discoverSubtitle,
+            style:
+                AppTypography.body.copyWith(color: AppColors.textSecondary),
           ),
           const SizedBox(height: AppSpacing.xl),
-          GlassCard(
-            padding: const EdgeInsets.all(AppSpacing.xl),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(AppSpacing.sm),
-                  decoration: BoxDecoration(
-                    color: AppColors.violetSoft,
-                    borderRadius: AppRadius.brSm,
-                  ),
-                  child: const Icon(
-                    Icons.travel_explore_rounded,
-                    color: AppColors.brandViolet,
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.md),
-                Text('No profiles yet', style: AppTypography.h3),
-                const SizedBox(height: AppSpacing.xs),
-                Text(
-                  'Profiles you swap with after a live date will show up here. '
-                  'Go to Home and tap "Find a date now" to get started.',
-                  style: AppTypography.body.copyWith(
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-              ],
+          _SectionHeader(label: l10n.discoverSuggestionsSection),
+          const SizedBox(height: AppSpacing.sm),
+          _SuggestionsBody(state: suggestionsAsync, emptyLabel: l10n.suggestionsEmpty),
+          const SizedBox(height: AppSpacing.xl),
+          _SectionHeader(label: l10n.discoverMatchesSection),
+          const SizedBox(height: AppSpacing.sm),
+          _MatchesBody(state: matchesAsync, emptyLabel: l10n.matchesEmpty),
+        ],
+      ),
+    );
+  }
+}
+
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      label,
+      style: AppTypography.h3,
+    );
+  }
+}
+
+class _SuggestionsBody extends ConsumerWidget {
+  const _SuggestionsBody({required this.state, required this.emptyLabel});
+
+  final AsyncValue<List<dynamic>> state;
+  final String emptyLabel;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return state.when(
+      loading: () => const Padding(
+        padding: EdgeInsets.all(AppSpacing.lg),
+        child: LoadingIndicator(),
+      ),
+      error: (e, _) => _EmptyCard(message: '$e'),
+      data: (rawList) {
+        if (rawList.isEmpty) return _EmptyCard(message: emptyLabel);
+        final list = ref.watch(weeklySuggestionsProvider).asData!.value;
+        return Column(
+          children: [
+            for (final s in list) ...[
+              SuggestionCard(
+                suggestion: s,
+                onStartDate: () => startDateFromSuggestion(context, ref, s),
+                onDismiss: () => ref
+                    .read(discoverRepositoryProvider)
+                    .dismissSuggestion(s.id),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+            ],
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _MatchesBody extends ConsumerWidget {
+  const _MatchesBody({required this.state, required this.emptyLabel});
+
+  final AsyncValue<List<dynamic>> state;
+  final String emptyLabel;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return state.when(
+      loading: () => const Padding(
+        padding: EdgeInsets.all(AppSpacing.lg),
+        child: LoadingIndicator(),
+      ),
+      error: (e, _) => _EmptyCard(message: '$e'),
+      data: (_) {
+        final list = ref.watch(mutualMatchesProvider).asData!.value;
+        if (list.isEmpty) return _EmptyCard(message: emptyLabel);
+        return Column(
+          children: [
+            for (final m in list) ...[
+              MatchCard(
+                match: m,
+                onTap: () => _openConversationFromMatch(context, ref, m),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+            ],
+          ],
+        );
+      },
+    );
+  }
+}
+
+Future<void> _openConversationFromMatch(
+  BuildContext context,
+  WidgetRef ref,
+  dynamic match,
+) async {
+  final self = ref.read(currentProfileProvider).asData?.value;
+  if (self == null) return;
+  // `ensureConversation` is idempotent — if the conversation was created
+  // at match-time by the post-call screen, we get that one back; if it
+  // wasn't (older match), we create it on the fly. Either way the user
+  // lands inside a real chat room rather than the inbox.
+  final conv = await ref.read(messagingRepositoryProvider).ensureConversation(
+        currentUserId: self.userId,
+        peer: match.candidate,
+      );
+  if (!context.mounted) return;
+  context.pushNamed(
+    AppRoute.conversation.name,
+    pathParameters: {'id': conv.id},
+  );
+}
+
+class _EmptyCard extends StatelessWidget {
+  const _EmptyCard({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return GlassCard(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      child: Row(
+        children: [
+          const Icon(Icons.auto_awesome_rounded,
+              color: AppColors.brandViolet, size: 20),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Text(
+              message,
+              style: AppTypography.body.copyWith(
+                color: AppColors.textSecondary,
+              ),
             ),
           ),
         ],

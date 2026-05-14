@@ -6,6 +6,7 @@ import '../../../../app/router/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
+import '../../../../l10n/app_localizations.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_logo.dart';
 import '../../../../shared/widgets/app_scaffold.dart';
@@ -18,6 +19,7 @@ class AuthLandingScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return AppScaffold(
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -29,7 +31,7 @@ class AuthLandingScreen extends StatelessWidget {
               .slideY(begin: 0.15, end: 0, curve: Curves.easeOutCubic),
           const SizedBox(height: AppSpacing.lg),
           Text(
-            'Real people. Real moments.\nNo more endless swiping.',
+            '${l10n.authTaglineLine1}\n${l10n.authTaglineLine2}',
             textAlign: TextAlign.center,
             style: AppTypography.body.copyWith(
               color: AppColors.textSecondary,
@@ -39,20 +41,20 @@ class AuthLandingScreen extends StatelessWidget {
           ).animate().fadeIn(delay: 200.ms, duration: 600.ms),
           const Spacer(flex: 3),
           AppButton(
-            label: 'Create my account',
+            label: l10n.authCreateAccount,
             size: AppButtonSize.large,
             onPressed: () => context.pushNamed(AppRoute.signUp.name),
           ).animate().fadeIn(delay: 400.ms).slideY(begin: 0.2, end: 0),
           const SizedBox(height: AppSpacing.sm),
           AppButton(
-            label: 'I already have an account',
+            label: l10n.authHaveAccount,
             variant: AppButtonVariant.secondary,
             size: AppButtonSize.large,
             onPressed: () => context.pushNamed(AppRoute.signIn.name),
           ).animate().fadeIn(delay: 500.ms).slideY(begin: 0.2, end: 0),
           const SizedBox(height: AppSpacing.lg),
           Text(
-            'By continuing, you agree to our Terms & Privacy Policy.',
+            l10n.authTerms,
             textAlign: TextAlign.center,
             style: AppTypography.caption,
           ),

@@ -9,6 +9,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
 
   cupertino_icons: ^1.0.8
 
@@ -35,11 +37,17 @@ dependencies:
   shared_preferences: ^2.3.3
   flutter_secure_storage: ^9.2.2
 
+  # Media
+  image_picker: ^1.1.2
+
+  # Real-time audio / video calls
+  agora_rtc_engine: ^6.5.2
+
   # Config
   flutter_dotenv: ^5.2.1
 
-  # Utilities
-  intl: ^0.19.0
+  # Utilities — `intl` is pinned by flutter_localizations, so accept any
+  intl: any
 
 dev_dependencies:
   flutter_test:
@@ -53,6 +61,7 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  generate: true
 
   assets:
     - .env

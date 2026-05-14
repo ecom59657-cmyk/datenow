@@ -1,0 +1,483 @@
+{
+  "@@locale": "en",
+
+  "appTagline": "Live dates, in real time.",
+
+  "onboardingSkip": "Skip",
+  "onboardingContinue": "Continue",
+  "onboardingGetStarted": "Get started",
+  "onboarding1Title": "Welcome to DateNow",
+  "onboarding1Subtitle": "A new kind of dating. No swipes, no waiting — just real people, live, right now.",
+  "onboarding2Title": "Instant live dates",
+  "onboarding2Subtitle": "We match you with someone compatible and online, then start a 5-minute audio or video date instantly.",
+  "onboarding3Title": "You stay in control",
+  "onboarding3Subtitle": "After 5 minutes, choose to keep talking, swap profiles, or move on. Always your call.",
+
+  "authTaglineLine1": "Real people. Real moments.",
+  "authTaglineLine2": "No more endless swiping.",
+  "authCreateAccount": "Create my account",
+  "authHaveAccount": "I already have an account",
+  "authTerms": "By continuing, you agree to our Terms & Privacy Policy.",
+
+  "signInTitle": "Welcome back",
+  "signInSubtitle": "Sign in to find your next live date.",
+  "emailLabel": "Email",
+  "emailHint": "you@datenow.app",
+  "passwordLabel": "Password",
+  "passwordHintCurrent": "Your password",
+  "passwordHintNew": "At least 8 characters",
+  "forgotPassword": "Forgot password?",
+  "signInButton": "Sign in",
+  "couldNotSignIn": "Could not sign you in.",
+
+  "signUpTitle": "Create your account",
+  "signUpSubtitle": "Join DateNow and start meeting people in real time.",
+  "firstNameLabel": "First name",
+  "firstNameHint": "Your first name",
+  "confirmPasswordLabel": "Confirm password",
+  "confirmPasswordHint": "Re-enter your password",
+  "signUpButton": "Create my account",
+  "signUpAgeNotice": "By creating an account, you confirm you are 18 or older.",
+  "signUpAlreadyHaveAccount": "Already have an account?",
+  "signUpSignInLink": "Sign in",
+  "couldNotSignUp": "Could not create your account.",
+  "signupRateLimited": "Request already sent. Wait a few seconds before retrying.",
+  "verifyEmailTitle": "Verify your email",
+  "verifyEmailBody": "We sent a confirmation link to {email}. Click it to activate your account.",
+  "@verifyEmailBody": {
+    "placeholders": {
+      "email": {"type": "String"}
+    }
+  },
+  "verifyEmailHint": "Once confirmed, sign in to finish setting up your profile.",
+  "verifyEmailDoneCta": "I've confirmed, sign me in",
+  "demoModeBanner": "Demo mode — Supabase isn't configured, so accounts won't persist.",
+
+  "homeGreetingMorning": "Good morning",
+  "homeGreetingAfternoon": "Good afternoon",
+  "homeGreetingEvening": "Good evening",
+  "homeGreetingNight": "Good night",
+  "homeFallbackName": "there",
+  "youAreOnline": "You are online",
+  "findDateTitle": "Find a date now",
+  "findDateSubtitle": "Get matched with someone online and compatible. Live, in seconds.",
+  "findDateNotAuthenticated": "You need to sign in first.",
+  "findDateProfileIncomplete": "Finish your profile to start matching.",
+  "findDateError": "Couldn't start a date. Try again.",
+  "tonightOnDatenow": "Tonight on DateNow",
+  "peopleOnline": "People online near you",
+  "avgMatchTime": "Avg. match time",
+  "newLikesValue": "{count} new",
+  "@newLikesValue": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "newLikesLabel": "People who liked you back",
+  "howItWorks": "How it works",
+  "howItWorks1": "We match you instantly with someone online & compatible.",
+  "howItWorks2": "A 5-minute audio or video date starts right away.",
+  "howItWorks3": "Keep chatting, swap profiles, or move on. Your call.",
+
+  "navHome": "Home",
+  "navDiscover": "Discover",
+  "navProfile": "Profile",
+
+  "discoverTitle": "Discover",
+  "discoverSubtitle": "Browse profiles you crossed paths with on a live date.",
+  "discoverEmptyTitle": "No profiles yet",
+  "discoverEmptyBody": "Profiles you swap with after a live date will show up here. Go to Home and tap \"Find a date now\" to get started.",
+
+  "profileTitle": "Profile",
+  "profileSignOut": "Sign out",
+  "profileAnonymousName": "Anonymous Date",
+  "profileNotSignedIn": "Not signed in",
+  "profilePreferences": "Preferences",
+  "profilePreferencesSubtitle": "Age, distance, what you're looking for",
+  "profilePhotos": "Photos",
+  "profilePhotosSubtitle": "Manage your profile pictures",
+  "profileSettings": "Settings",
+  "profileSettingsSubtitle": "Notifications, privacy, account",
+
+  "settingsTitle": "Settings",
+  "settingsAccount": "Account",
+  "settingsNotifications": "Notifications",
+  "settingsPrivacy": "Privacy",
+
+  "matchingTitle": "Matching you live",
+  "matchingStep1": "Finding someone compatible…",
+  "matchingStep2": "Checking who's online near you…",
+  "matchingStep3": "Confirming a match…",
+  "cancel": "Cancel",
+
+  "callTimeLeft": "Time left",
+  "callLive": "LIVE",
+  "callMute": "Mute",
+  "callUnmute": "Unmute",
+  "callVideo": "Video",
+  "callVideoOff": "Off",
+  "callEnd": "End",
+  "callReminder": "Be kind. Be curious. Have fun.",
+  "callConnecting": "Connecting…",
+  "callWaitingPeer": "Waiting for {name} to join…",
+  "@callWaitingPeer": {
+    "placeholders": {"name": {"type": "String"}}
+  },
+  "callDemoNotice": "Demo mode — Agora isn't configured. The call screen is a preview.",
+  "callTokenError": "Couldn't open the live channel. Try again.",
+  "callSwitchCamera": "Flip",
+
+  "validatorEmailRequired": "Please enter your email",
+  "validatorEmailInvalid": "Enter a valid email address",
+  "validatorPasswordRequired": "Please enter a password",
+  "validatorPasswordShort": "Use at least 8 characters",
+  "validatorNameRequired": "Please enter your first name",
+  "validatorNameShort": "Name is too short",
+  "validatorConfirmRequired": "Please confirm your password",
+  "validatorConfirmMismatch": "Passwords don't match",
+  "validatorAgeRequired": "Please enter your age",
+  "validatorAgeTooYoung": "You must be at least 18",
+  "validatorAgeTooOld": "Enter a realistic age",
+  "validatorBirthDateRequired": "Please enter your date of birth",
+  "validatorBirthDateInvalid": "This date is not valid",
+  "validatorBirthDateMinor": "DateNow is reserved for people 18 and older.",
+
+  "birthDateLabel": "Date of birth",
+  "birthDateHint": "Tap to pick your date of birth",
+  "birthDateAgeFormat": "{age} years old",
+  "@birthDateAgeFormat": {
+    "placeholders": {
+      "age": {"type": "int"}
+    }
+  },
+  "birthDateSetAtSignup": "Set at sign up and locked.",
+
+  "profileSetupStepProgress": "Step {current} of {total}",
+  "@profileSetupStepProgress": {
+    "placeholders": {
+      "current": {"type": "int"},
+      "total": {"type": "int"}
+    }
+  },
+  "profileSetupBack": "Back",
+  "profileSetupContinue": "Continue",
+  "profileSetupFinish": "Done",
+
+  "step1Title": "Tell us about you",
+  "step1Subtitle": "Just the basics — we'll never share these without your call.",
+  "ageLabel": "Age",
+  "ageHint": "18",
+  "genderLabel": "I identify as",
+  "orientationLabel": "I'm attracted to",
+
+  "step2Title": "Who you're looking for",
+  "step2Subtitle": "We use this to find compatible people for your live dates.",
+  "seekingGenderLabel": "Looking for",
+  "seekingAgeLabel": "Age range",
+  "ageRangeValue": "{min} – {max}",
+  "@ageRangeValue": {
+    "placeholders": {
+      "min": {"type": "int"},
+      "max": {"type": "int"}
+    }
+  },
+  "distanceLabel": "Max distance",
+  "distanceValue": "{km} km",
+  "@distanceValue": {
+    "placeholders": {
+      "km": {"type": "int"}
+    }
+  },
+
+  "step3Title": "Your vibe",
+  "step3Subtitle": "What are you here for, and what do you love?",
+  "intentionsLabel": "I'm here for",
+  "interestsLabel": "Interests",
+  "interestsHint": "Pick at least 3",
+
+  "step4Title": "Almost there",
+  "step4Subtitle": "Two last things before your first live date.",
+  "availabilityLabel": "Availability",
+  "availabilityImmediateTitle": "Right now",
+  "availabilityImmediateBody": "I'm online and ready to be matched.",
+  "availabilitySometimeTitle": "Later",
+  "availabilitySometimeBody": "Notify me when great matches show up.",
+  "photoLabel": "Profile photo",
+  "photoTapToAdd": "Tap to add your photo",
+  "photoTapToChange": "Tap to change",
+  "photoPrivacyNote": "Your photo stays hidden — it's only revealed after a successful 5-minute live date.",
+  "photoOptional": "(optional for now)",
+  "profileSetupSubmit": "Start matching",
+  "profileSetupSaveError": "We couldn't save your profile: {reason}. Please try again.",
+  "@profileSetupSaveError": {
+    "placeholders": {
+      "reason": {"type": "String"}
+    }
+  },
+  "profileSetupIncomplete": "Some fields are missing.",
+
+  "genderFemale": "Woman",
+  "genderMale": "Man",
+  "genderNonBinary": "Non-binary",
+
+  "orientationStraight": "Straight",
+  "orientationGay": "Gay",
+  "orientationLesbian": "Lesbian",
+  "orientationBi": "Bi",
+  "orientationPan": "Pansexual",
+  "orientationAsexual": "Asexual",
+  "orientationQueer": "Queer",
+
+  "intentionSerious": "Serious relationship",
+  "intentionSeriousBody": "Looking for something real and lasting.",
+  "intentionFeeling": "See where it goes",
+  "intentionFeelingBody": "Open to a connection if it clicks.",
+  "intentionTalk": "Just talk",
+  "intentionTalkBody": "Here to meet new people and chat.",
+  "intentionCasual": "Casual",
+  "intentionCasualBody": "Light, fun and easygoing.",
+
+  "interestMusic": "Music",
+  "interestFilms": "Films",
+  "interestSports": "Sports",
+  "interestFitness": "Fitness",
+  "interestFoodie": "Foodie",
+  "interestTravel": "Travel",
+  "interestBooks": "Books",
+  "interestGaming": "Gaming",
+  "interestDance": "Dance",
+  "interestNature": "Nature",
+  "interestPhotography": "Photography",
+  "interestArt": "Art",
+  "interestFashion": "Fashion",
+  "interestWellness": "Wellness",
+  "interestCooking": "Cooking",
+  "interestAnimals": "Animals",
+
+  "postCallTitle": "Your live date is over",
+  "postCallSubtitle": "Now you've had a real conversation, here's their photo.",
+  "postCallReveal": "Reveal photo",
+  "postCallMatch": "I want to match",
+  "postCallPass": "Pass",
+  "postCallWaiting": "Waiting for their decision…",
+  "postCallMatchedTitle": "It's a match!",
+  "postCallMatchedBody": "You both want to keep talking. Profiles unlocked.",
+  "postCallNoMatchTitle": "Not this time",
+  "postCallNoMatchBody": "Another live date can begin right now.",
+  "postCallPassTitle": "Moving on",
+  "postCallPassBody": "Another live date can begin right now.",
+  "postCallBackHome": "Back home",
+  "postCallFindAnother": "Find another date",
+  "hiddenPhotoLabel": "Photo hidden until the live date",
+
+  "compatibilityLabel": "Compatibility",
+  "compatibilityValue": "{value}% compatible",
+  "@compatibilityValue": {
+    "placeholders": {
+      "value": {"type": "int"}
+    }
+  },
+  "compatibilityBandVeryHigh": "Very high compatibility",
+  "compatibilityBandHigh": "Strong compatibility",
+  "compatibilityBandMedium": "Decent match",
+  "compatibilityBandLow": "Worth a try",
+
+  "matchingFoundTitle": "Match found",
+  "matchingFoundSubtitle": "Connecting you live in a moment",
+  "matchingNoCandidateTitle": "No one online right now",
+  "matchingNoCandidateBody": "Try again in a few seconds — people come online all the time.",
+  "matchingTryAgain": "Try again",
+
+  "profilePersonalEntry": "Personal information",
+  "profilePersonalSubtitle": "Name, age, gender, orientation",
+  "editProfileTitle": "Edit my profile",
+  "editPreferencesTitle": "Edit my preferences",
+  "editPhotosTitle": "My photos",
+  "saveAction": "Save",
+  "savedSnack": "Saved",
+
+  "photosCount": "{count} / {max}",
+  "@photosCount": {
+    "placeholders": {
+      "count": {"type": "int"},
+      "max": {"type": "int"}
+    }
+  },
+  "photosAddCta": "Add a photo",
+  "photosEmptyTitle": "No photos yet",
+  "photosEmptyBody": "Add one to use during your live dates. It stays private until the reveal.",
+  "photosOptionReplace": "Replace photo",
+  "photosOptionDelete": "Delete photo",
+  "photosOptionCancel": "Cancel",
+  "photosMaxReached": "Maximum {max} photos.",
+  "@photosMaxReached": {
+    "placeholders": {
+      "max": {"type": "int"}
+    }
+  },
+  "photosPrivacyHeader": "Stays private until the live date",
+
+  "quotaLimitTitle": "You've used your dates",
+  "quotaLimitBody": "You've used your 5 dates for today. Come back tomorrow or unlock more dates.",
+  "quotaUnlockCta": "Unlock more dates",
+  "quotaComeBackCta": "Come back tomorrow",
+
+  "discoverSuggestionsSection": "This week's suggestions",
+  "discoverMatchesSection": "Confirmed matches",
+  "suggestionStartDate": "Start a date",
+  "suggestionDismiss": "Remove",
+  "suggestionsEmpty": "Your 3 weekly matches arrive soon.",
+  "matchesEmpty": "Your confirmed matches will appear here after your dates.",
+  "matchStatusNew": "New match",
+  "matchStatusConversation": "Conversation open",
+
+  "messagesTitle": "Messages",
+  "messagesSubtitle": "Chat with the people you matched with.",
+  "messagesEmptyTitle": "No conversations yet",
+  "messagesEmptyBody": "Your conversations will appear here after a confirmed match.",
+  "conversationInputHint": "Write a message",
+  "conversationLockedSelf": "Send your first message to get started.",
+  "messageTimeJustNow": "now",
+  "messageTimeMinutes": "{n}m",
+  "@messageTimeMinutes": {
+    "placeholders": {"n": {"type": "int"}}
+  },
+  "messageTimeHours": "{n}h",
+  "@messageTimeHours": {
+    "placeholders": {"n": {"type": "int"}}
+  },
+  "messageTimeYesterday": "Yesterday",
+  "messageTimeDaysAgo": "{n}d",
+  "@messageTimeDaysAgo": {
+    "placeholders": {"n": {"type": "int"}}
+  },
+  "messagesUnreadBadge": "{n}",
+  "@messagesUnreadBadge": {
+    "placeholders": {"n": {"type": "int"}}
+  },
+  "profileMessagesEntry": "Messages",
+  "profileMessagesEntrySubtitle": "Your conversations with matches",
+
+  "settingsProfileSection": "Profile",
+  "settingsAccountSection": "Account",
+  "settingsSupportSection": "Support",
+  "settingsDangerSection": "Account",
+
+  "settingsSecurity": "Security",
+  "settingsSecuritySubtitle": "Password, two-factor, sessions",
+  "settingsBlocked": "Blocked accounts",
+  "settingsBlockedSubtitle": "People you've blocked",
+  "settingsSubscription": "Subscription",
+  "settingsSubscriptionSubtitle": "Manage your DateNow plan",
+  "settingsHelp": "Help & contact",
+  "settingsHelpSubtitle": "FAQ, reach out to support",
+  "settingsTerms": "Terms of use",
+  "settingsTermsSubtitle": "How DateNow works",
+  "settingsPrivacyPolicy": "Privacy policy",
+  "settingsPrivacyPolicySubtitle": "What we collect and why",
+  "settingsSignOut": "Sign out",
+  "settingsSignOutSubtitle": "You'll need to sign back in",
+  "settingsDeleteAccount": "Delete my account",
+  "settingsDeleteAccountSubtitle": "Permanently erase your DateNow account",
+
+  "notificationsTitle": "Notifications",
+  "notificationsSubtitle": "Choose how DateNow can reach you.",
+  "notifPushMatch": "New match",
+  "notifPushSuggestion": "New weekly suggestions",
+  "notifPushMessage": "Messages",
+  "notifEmailDigest": "Weekly recap",
+  "notifEmailMarketing": "Tips & news",
+
+  "privacyTitle": "Privacy",
+  "privacySubtitle": "What others can see and what we collect.",
+  "privacyShowOnline": "Show me as online",
+  "privacyShowOnlineBody": "Other DateNow members can see when you're available.",
+  "privacyBlockScreenshots": "Block screenshots during calls",
+  "privacyBlockScreenshotsBody": "Where supported, blocks the device from capturing your live date.",
+  "privacyShareUsage": "Share anonymous usage data",
+  "privacyShareUsageBody": "Helps us improve matching and reliability.",
+  "privacyMarketing": "Marketing consent",
+  "privacyMarketingBody": "Allow us to send you targeted offers.",
+
+  "securityTitle": "Security",
+  "securitySubtitle": "Keep your account safe.",
+  "securityChangePassword": "Change password",
+  "securityChangePasswordSubtitle": "Update your sign-in password",
+  "securityTwoFactor": "Two-factor authentication",
+  "securityTwoFactorBody": "Add an extra layer of protection.",
+  "securitySessions": "Active sessions",
+  "securitySessionsSubtitle": "Devices currently signed in",
+  "securityHistory": "Recent sign-ins",
+  "securityHistorySubtitle": "Last activity on your account",
+  "securityThisDevice": "This device",
+  "securitySignInEntry": "{place} · {when}",
+  "@securitySignInEntry": {
+    "placeholders": {
+      "place": {"type": "String"},
+      "when": {"type": "String"}
+    }
+  },
+  "changePasswordTitle": "Change password",
+  "changePasswordCurrent": "Current password",
+  "changePasswordNew": "New password",
+  "changePasswordConfirm": "Confirm new password",
+  "changePasswordSubmit": "Update password",
+  "changePasswordSuccess": "Password updated",
+
+  "blockedTitle": "Blocked accounts",
+  "blockedSubtitle": "People you've blocked won't see you and can't match with you.",
+  "blockedEmpty": "You haven't blocked anyone yet.",
+  "blockedUnblock": "Unblock",
+  "blockedUnblockedSnack": "Unblocked",
+
+  "subscriptionTitle": "Subscription",
+  "subscriptionSubtitle": "Manage your DateNow plan.",
+  "subscriptionCurrentFree": "DateNow Free",
+  "subscriptionCurrentPremium": "DateNow Premium",
+  "subscriptionFreeBody": "5 dates a day, weekly suggestions, basic matching.",
+  "subscriptionPremiumBody": "Unlimited dates, priority matching, premium support.",
+  "subscriptionPerkUnlimited": "Unlimited live dates per day",
+  "subscriptionPerkPriority": "Priority matching at peak hours",
+  "subscriptionPerkBadge": "Premium badge on your profile",
+  "subscriptionPerkSupport": "Priority customer support",
+  "subscriptionUpgradeCta": "Go Premium",
+  "subscriptionManageCta": "Manage subscription",
+  "subscriptionUpgradedSnack": "Welcome to DateNow Premium",
+  "subscriptionMockNotice": "Demo upgrade — Stripe isn't configured yet.",
+
+  "helpTitle": "Help & contact",
+  "helpSubtitle": "Find answers or talk to a real human.",
+  "helpFaqSection": "Frequently asked questions",
+  "helpContactSection": "Still need help?",
+  "helpContactCta": "Contact support",
+  "helpContactBody": "We answer within 24 hours.",
+  "helpFaqQ1": "How long does a date last?",
+  "helpFaqA1": "Every live date is exactly 5 minutes. You can choose to continue, swap profiles, or move on at the end.",
+  "helpFaqQ2": "Why are photos hidden?",
+  "helpFaqA2": "DateNow is designed around real conversations first. Photos are revealed only after a successful 5-minute date.",
+  "helpFaqQ3": "How many matches can I start each day?",
+  "helpFaqA3": "Free male accounts get 5 live dates per day. Women and Premium users have unlimited live dates.",
+  "helpFaqQ4": "How do weekly suggestions work?",
+  "helpFaqA4": "Every week we propose up to 3 reciprocal-compatibility profiles (75 % or higher). You can start a live date or remove a suggestion.",
+
+  "termsTitle": "Terms of use",
+  "privacyPolicyTitle": "Privacy policy",
+  "legalLastUpdated": "Last updated {date}",
+  "@legalLastUpdated": {
+    "placeholders": {
+      "date": {"type": "String"}
+    }
+  },
+
+  "signOutConfirmTitle": "Sign out?",
+  "signOutConfirmBody": "You'll be signed out of this device and brought back to the welcome screen.",
+  "signOutConfirmAction": "Sign out",
+  "signedOutSnack": "Signed out",
+
+  "deleteAccountConfirmTitle": "Delete your account?",
+  "deleteAccountConfirmBody": "This permanently erases your profile, photos, and matches. This cannot be undone.",
+  "deleteAccountConfirmAction": "Delete forever",
+  "deletedAccountSnack": "Your account was deleted",
+
+  "commonCancel": "Cancel"
+}

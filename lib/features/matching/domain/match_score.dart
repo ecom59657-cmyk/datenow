@@ -1,0 +1,42 @@
+import '../../../l10n/app_localizations.dart';
+
+/// Banding used to colour-code the score in the UI.
+enum MatchBand { veryHigh, high, medium, low }
+
+extension MatchBandX on MatchBand {
+  String label(AppLocalizations l) => switch (this) {
+        MatchBand.veryHigh => l.compatibilityBandVeryHigh,
+        MatchBand.high => l.compatibilityBandHigh,
+        MatchBand.medium => l.compatibilityBandMedium,
+        MatchBand.low => l.compatibilityBandLow,
+      };
+}
+
+/// Result of running [MatchingService.calculateCompatibility].
+///
+/// `null` is returned upstream when a hard gate (reciprocal gender / age /
+/// distance) fails — meaning the two profiles shouldn't even be proposed to
+/// each other. A non-null score is always in `0..100`.
+class MatchScore {
+  const MatchScore({
+    required this.percentage,
+    required this.breakdown,
+  });
+
+  /// Final compatibility score, clamped to `0..100`.
+  final int percentage;
+
+  /// Per-axis breakdown — handy for debugging and for the UI to surface
+  /// "what made you compatible". Keys are intentionally stable strings.
+  final Map<String, int> breakdown;
+
+  MatchBand get band {
+    if (percentage >= 90) return MatchBand.veryHigh;
+    if (percentage >= 70) return MatchBand.high;
+    if (percentage >= 50) return MatchBand.medium;
+    return MatchBand.low;
+  }
+
+  @override
+  String toString() => 'MatchScore($percentage%, $band)';
+}

@@ -31,6 +31,11 @@
 
   <title>datenow</title>
   <link rel="manifest" href="manifest.json">
+
+  <!-- Agora Web SDK — required for agora_rtc_engine on Flutter web.
+       Safe to keep even if Agora isn't configured; the script just sits
+       idle until the call screen tries to join a channel. -->
+  <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.21.0.js"></script>
 </head>
 <body>
   <!--

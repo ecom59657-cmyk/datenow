@@ -4,7 +4,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../app/theme/app_typography.dart';
-import '../../../core/config/app_config.dart';
+import '../../../l10n/app_localizations.dart';
 import '../../../shared/widgets/app_logo.dart';
 import '../../../shared/widgets/app_scaffold.dart';
 
@@ -16,6 +16,7 @@ class SplashScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return AppScaffold(
       body: Center(
         child: Column(
@@ -24,10 +25,12 @@ class SplashScreen extends StatelessWidget {
             const AppLogo(fontSize: 44)
                 .animate()
                 .fadeIn(duration: 600.ms)
-                .scale(begin: const Offset(0.96, 0.96), end: const Offset(1, 1)),
+                .scale(
+                    begin: const Offset(0.96, 0.96),
+                    end: const Offset(1, 1)),
             const SizedBox(height: AppSpacing.md),
             Text(
-              AppConfig.tagline,
+              l10n.appTagline,
               style: AppTypography.body.copyWith(
                 color: AppColors.textSecondary,
               ),

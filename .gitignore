@@ -50,6 +50,7 @@ app.*.map.json
 .env.*.local
 *.g.dart
 *.freezed.dart
+lib/l10n/app_localizations*.dart
 
 # Tooling
 .claude/
