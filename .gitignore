@@ -54,3 +54,6 @@ lib/l10n/app_localizations*.dart
 
 # Tooling
 .claude/
+
+# Supabase CLI local state
+supabase/.temp/
