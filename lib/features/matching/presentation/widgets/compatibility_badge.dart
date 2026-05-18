@@ -33,31 +33,40 @@ class CompatibilityBadge extends StatelessWidget {
     final color = _color;
     final value = l10n.compatibilityValue(score.percentage);
 
-    return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: compact ? AppSpacing.sm : AppSpacing.md,
-        vertical: compact ? 6 : 8,
-      ),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.14),
-        borderRadius: AppRadius.brPill,
-        border: Border.all(color: color.withValues(alpha: 0.5)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.bolt_rounded, color: color, size: compact ? 14 : 16),
-          const SizedBox(width: 6),
-          Text(
-            compact ? value : '$value · ${score.band.label(l10n)}',
-            style: AppTypography.caption.copyWith(
-              color: color,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.3,
-              fontSize: compact ? 12 : 13,
+    // FittedBox + scaleDown lets the badge keep its intrinsic shape on wide
+    // layouts but shrink gracefully on narrow ones (small iPhones, dense
+    // cards) instead of overflowing horizontally.
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      child: Container(
+        padding: EdgeInsets.symmetric(
+          horizontal: compact ? AppSpacing.sm : AppSpacing.md,
+          vertical: compact ? 6 : 8,
+        ),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.14),
+          borderRadius: AppRadius.brPill,
+          border: Border.all(color: color.withValues(alpha: 0.5)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.bolt_rounded, color: color, size: compact ? 14 : 16),
+            const SizedBox(width: 6),
+            Text(
+              compact ? value : '$value · ${score.band.label(l10n)}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              softWrap: false,
+              style: AppTypography.caption.copyWith(
+                color: color,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.3,
+                fontSize: compact ? 12 : 13,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

@@ -28,24 +28,20 @@ class Env {
   static String get supabaseUrl => _required('SUPABASE_URL');
   static String get supabaseAnonKey => _required('SUPABASE_ANON_KEY');
 
-  // Agora -------------------------------------------------------------------
-
-  /// Public App ID. Safe to embed in the client (the cryptographic
-  /// privilege lives in the App Certificate, which we keep server-side in
-  /// Supabase secrets).
-  static String get agoraAppId => _optional('AGORA_APP_ID');
-
-  /// True when an App ID is present *and* Supabase is configured (the
-  /// token signer runs as an Edge Function).
-  static bool get agoraConfigured =>
-      agoraAppId.isNotEmpty && supabaseConfigured;
-
-  // Feature flags / misc ----------------------------------------------------
-
   static bool get supabaseConfigured =>
       (dotenv.env['SUPABASE_URL']?.isNotEmpty ?? false) &&
       (dotenv.env['SUPABASE_ANON_KEY']?.isNotEmpty ?? false);
 
+  // App ---------------------------------------------------------------------
+
   static String get appEnv => _optional('APP_ENV', fallback: 'development');
   static bool get isProduction => appEnv == 'production';
+
+  // Agora -------------------------------------------------------------------
+
+  /// Public Agora App ID — safe to embed in the client. Project must be
+  /// in App-ID-only auth mode for token-less joins to work, or a token
+  /// endpoint must sign the join request.
+  static String get agoraAppId => _optional('AGORA_APP_ID');
+  static bool get agoraConfigured => agoraAppId.isNotEmpty;
 }

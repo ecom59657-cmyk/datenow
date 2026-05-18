@@ -3,9 +3,11 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 
+import '../../../core/services/supabase_service.dart';
 import '../../../core/utils/logger.dart';
 import '../../matching/data/mock_candidate_factory.dart';
 import '../../matching/domain/match_score.dart';
+import '../../profile_setup/data/profile_repository.dart';
 import '../../profile_setup/domain/user_profile.dart';
 import '../domain/match_status.dart';
 import '../domain/mutual_match.dart';
@@ -42,15 +44,25 @@ abstract class DiscoverRepository {
 // fine for the demo; suggestions auto-regenerate on first open.
 // ---------------------------------------------------------------------------
 
+/// Async source for real candidates — implemented by `ProfileRepository`
+/// against Supabase, swappable in tests, and `null` by default so the
+/// existing mock-only behaviour is preserved.
+typedef CandidateSource = Future<List<UserProfile>> Function(UserProfile self);
+
 class MockDiscoverRepository implements DiscoverRepository {
-  MockDiscoverRepository(this._service, [MockCandidateFactory? factory])
-      : _factory = factory ?? MockCandidateFactory();
+  MockDiscoverRepository(
+    this._service, {
+    MockCandidateFactory? factory,
+    CandidateSource? candidateSource,
+  })  : _factory = factory ?? MockCandidateFactory(),
+        _candidateSource = candidateSource;
 
   final WeeklySuggestionsService _service;
   final MockCandidateFactory _factory;
+  final CandidateSource? _candidateSource;
   static const _log = AppLogger('MockDiscover');
 
-  // How many candidates we try before declaring a sparse week.
+  // How many synthetic candidates we generate when no real source is wired.
   static const _poolSize = 30;
 
   final Map<String, List<WeeklySuggestion>> _suggestionsByUser = {};
@@ -101,19 +113,70 @@ class MockDiscoverRepository implements DiscoverRepository {
       return;
     }
 
-    // Build a pool of synthetic candidates large enough to find a few
-    // scoring at or above the floor.
+    // Audit: dump the preferences the matcher will use so any "why doesn't
+    // this profile match my filters?" question can be answered from logs.
+    _log.info(
+      'prefs self=${self.userId} gender=${self.gender?.name} '
+      'orientation=${self.orientation?.name} age=${self.age} '
+      'seekingGenders=${self.seekingGenders.map((g) => g.name).toList()} '
+      'seekingAge=${self.seekingAgeMin}-${self.seekingAgeMax} '
+      'maxDistance=${self.maxDistanceKm}km '
+      'intentions=${self.intentions.length} interests=${self.interests.length} '
+      'availability=${self.availability?.name}',
+    );
+
+    // Build the exclusion set: anyone the user has already seen in any
+    // prior week (dismissed, call-started, matched) plus everyone they're
+    // already in a mutual match with. selectFor receives this and skips
+    // those candidates before scoring — never re-propose.
+    final priorSuggestedIds =
+        existing.map((s) => s.suggestedUserId).toSet();
+    final mutualMatchIds = (_matchesByUser[self.userId] ?? const <MutualMatch>[])
+        .map((m) => m.candidate.userId)
+        .toSet();
+    final excludedUserIds = {...priorSuggestedIds, ...mutualMatchIds};
+
+    // Build the pool. When a real `CandidateSource` is wired (Supabase mode)
+    // we ask it for every other completed profile; otherwise we fall back to
+    // the synthetic factory so the demo path keeps working.
     final pool = <({UserProfile candidate, int distanceKm})>[];
-    for (var i = 0; i < _poolSize; i++) {
-      final candidate = _factory.build(self);
-      if (candidate == null) {
-        _log.warn('cannot build candidate — self profile is incomplete');
-        return;
+    if (_candidateSource != null) {
+      try {
+        final reals = await _candidateSource(self);
+        _log.info('pool: ${reals.length} real candidates from source');
+        for (final c in reals) {
+          // No geo backend yet — synthesise a plausible distance the same
+          // way the factory does so the existing distance score keeps
+          // weighting cross-user pairs.
+          pool.add((
+            candidate: c,
+            distanceKm: _factory.distanceFor(self),
+          ));
+        }
+      } catch (e, st) {
+        _log.error('candidate source failed; falling back to synthetic', e, st);
       }
-      pool.add((candidate: candidate, distanceKm: _factory.distanceFor(self)));
+    }
+    if (pool.isEmpty) {
+      _log.info('using synthetic candidate factory (no real pool)');
+      for (var i = 0; i < _poolSize; i++) {
+        final candidate = _factory.build(self);
+        if (candidate == null) {
+          _log.warn('cannot build candidate — self profile is incomplete');
+          return;
+        }
+        pool.add((
+          candidate: candidate,
+          distanceKm: _factory.distanceFor(self),
+        ));
+      }
     }
 
-    final selected = _service.selectFor(self: self, pool: pool);
+    final selected = _service.selectFor(
+      self: self,
+      pool: pool,
+      excludedUserIds: excludedUserIds,
+    );
     final missing =
         WeeklySuggestionsService.weeklySlots - currentWeek.length;
     final fresh = <WeeklySuggestion>[];
@@ -138,7 +201,8 @@ class MockDiscoverRepository implements DiscoverRepository {
     _suggStream(self.userId).add(_visibleSuggestions(self.userId));
     _log.info(
       'generated ${fresh.length} suggestions for ${self.userId} '
-      '(week of ${weekStart.toIso8601String()})',
+      '(week of ${weekStart.toIso8601String()}, '
+      'excluded ${excludedUserIds.length} historical ids)',
     );
   }
 
@@ -279,9 +343,18 @@ class SupabaseDiscoverRepository implements DiscoverRepository {
 // ---------------------------------------------------------------------------
 
 final discoverRepositoryProvider = Provider<DiscoverRepository>((ref) {
-  // TODO(datenow): the Supabase weekly-suggestions + mutual-matches
-  // backend hasn't shipped yet (needs a CRON job + materialised view).
-  // We use the in-memory mock even when Supabase is configured so the
-  // Discover tab stays interactive instead of throwing.
-  return MockDiscoverRepository(ref.watch(weeklySuggestionsServiceProvider));
+  final service = ref.watch(weeklySuggestionsServiceProvider);
+  final supabaseUp = ref.watch(supabaseAvailableProvider);
+  if (!supabaseUp) {
+    return MockDiscoverRepository(service);
+  }
+  // Supabase is configured: wire the real candidate pool. We still use the
+  // in-memory orchestrator because the server-side persistence of weekly
+  // batches hasn't shipped yet — but the pool itself is now real users.
+  final profiles = ref.watch(profileRepositoryProvider);
+  return MockDiscoverRepository(
+    service,
+    candidateSource: (self) =>
+        profiles.fetchPotentialCandidates(selfUserId: self.userId),
+  );
 });

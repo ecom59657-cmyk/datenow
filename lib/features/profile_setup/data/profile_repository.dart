@@ -37,6 +37,14 @@ abstract class ProfileRepository {
   /// Resolves the raw bytes for a photo identifier. Returns `null` when the
   /// identifier is unknown.
   Future<Uint8List?> getPhotoBytes(String url);
+
+  /// Returns every other completed profile in the system — the candidate
+  /// pool for matching + weekly suggestions. Implementations decide what
+  /// "completed" means; Supabase ignores rows missing the minimum onboarding
+  /// fields (first_name + gender). Mock backends return an empty list.
+  Future<List<UserProfile>> fetchPotentialCandidates({
+    required String selfUserId,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -95,6 +103,15 @@ class MockProfileRepository implements ProfileRepository {
 
   @override
   Future<Uint8List?> getPhotoBytes(String url) async => _photoBytes[url];
+
+  @override
+  Future<List<UserProfile>> fetchPotentialCandidates({
+    required String selfUserId,
+  }) async {
+    // Mock backend exposes only the current user's own profile — synthetic
+    // candidates are generated elsewhere (see MockCandidateFactory).
+    return const <UserProfile>[];
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -340,6 +357,52 @@ class SupabaseProfileRepository implements ProfileRepository {
       if (v.name == name) return v;
     }
     return null;
+  }
+
+  @override
+  Future<List<UserProfile>> fetchPotentialCandidates({
+    required String selfUserId,
+  }) async {
+    _log.info('fetchPotentialCandidates excluding self=$selfUserId');
+
+    // Embedded select pulls user_preferences in a single round-trip.
+    // We DO NOT pull user_photos here — photos stay private until a mutual
+    // match (enforced by RLS on user_photos).
+    final rows = await _client
+        .from('profiles')
+        .select(
+          'id, first_name, birth_date, gender, sexual_orientation, '
+          'user_preferences(seeking_genders, seeking_age_min, seeking_age_max, '
+          'max_distance_km, intentions, interests, availability)',
+        )
+        .neq('id', selfUserId);
+
+    final profiles = <UserProfile>[];
+    for (final raw in (rows as List)) {
+      final r = raw as Map<String, dynamic>;
+      final id = r['id'] as String;
+
+      // Postgrest returns embedded relations either as a single object or
+      // a list depending on cardinality — be defensive about both shapes.
+      Map<String, dynamic>? prefsRow;
+      final prefsRaw = r['user_preferences'];
+      if (prefsRaw is List && prefsRaw.isNotEmpty) {
+        prefsRow = prefsRaw.first as Map<String, dynamic>;
+      } else if (prefsRaw is Map<String, dynamic>) {
+        prefsRow = prefsRaw;
+      }
+
+      final profileRow = Map<String, dynamic>.from(r)
+        ..remove('user_preferences');
+
+      profiles.add(_mapToProfile(id, profileRow, prefsRow, const []));
+    }
+
+    _log.info(
+      'fetchPotentialCandidates returned ${profiles.length} candidates '
+      '(rows from Supabase=${(rows as List).length})',
+    );
+    return profiles;
   }
 
   UserProfile _mapToProfile(

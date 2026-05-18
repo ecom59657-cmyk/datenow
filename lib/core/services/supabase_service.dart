@@ -1,3 +1,4 @@
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -19,6 +20,20 @@ class SupabaseService {
 
   static Future<void> init() async {
     if (_initialized) return;
+
+    // Boot diagnostics — always logged so it's obvious whether the app is
+    // running against real Supabase or the local mock. Anon key is masked
+    // but length + prefix appear so misconfigurations (truncated paste,
+    // missing newline, etc.) surface immediately.
+    final urlPresent =
+        (dotenv.env['SUPABASE_URL']?.isNotEmpty ?? false);
+    final keyRaw = dotenv.env['SUPABASE_ANON_KEY'] ?? '';
+    final keyPrefix = keyRaw.length >= 8 ? keyRaw.substring(0, 8) : keyRaw;
+    _log.info(
+      'BOOT DIAGNOSTICS — '
+      'SUPABASE_URL=${urlPresent ? dotenv.env['SUPABASE_URL'] : 'MISSING'} '
+      'SUPABASE_ANON_KEY=${keyRaw.isEmpty ? 'MISSING' : '$keyPrefix…(${keyRaw.length} chars)'}',
+    );
 
     if (!Env.supabaseConfigured) {
       _log.warn(

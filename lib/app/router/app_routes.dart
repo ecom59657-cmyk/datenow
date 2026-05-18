@@ -23,6 +23,11 @@ enum AppRoute {
   settingsHelp('/settings/help'),
   settingsTerms('/settings/terms'),
   settingsPrivacyPolicy('/settings/privacy-policy'),
+  // Temporary dev surface — wired to a SettingsTile but kept off the
+  // critical path. Remove with the route when the matching pipeline is
+  // fully verified.
+  debugMatching('/debug-matching'),
+  debugDateNow('/debug-datenow'),
   matching('/matching'),
   call('/call'),
   postCall('/post-call'),

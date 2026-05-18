@@ -22,9 +22,11 @@ class AppLogger {
     StackTrace? stackTrace,
   }) {
     if (!kDebugMode) return;
+    // Uniform `[DateNow][Tag]` prefix so feature streams (Matching, Call,
+    // Reveal, Agora, …) are easy to grep in the device console.
     developer.log(
       '$message',
-      name: '$tag/$level',
+      name: '[DateNow][$tag]/$level',
       error: error,
       stackTrace: stackTrace,
     );

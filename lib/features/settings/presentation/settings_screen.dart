@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -146,6 +147,17 @@ class SettingsScreen extends ConsumerWidget {
                 onTap: () => context
                     .pushNamed(AppRoute.settingsPrivacyPolicy.name),
               ),
+              // Dev-only diagnostic hub — compiled out of release builds
+              // entirely (kDebugMode is a const false in release).
+              if (kDebugMode)
+                SettingTile(
+                  icon: Icons.bug_report_outlined,
+                  title: 'Debug · DateNow',
+                  subtitle:
+                      'Matching / Call / Reveal — outils de test (debug only)',
+                  onTap: () =>
+                      context.pushNamed(AppRoute.debugDateNow.name),
+                ),
             ],
           ),
           const SizedBox(height: AppSpacing.lg),

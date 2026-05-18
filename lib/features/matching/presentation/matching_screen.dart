@@ -9,15 +9,23 @@ import '../../../app/router/app_routes.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../app/theme/app_typography.dart';
+import '../../../core/debug/debug_observer.dart';
 import '../../../core/utils/logger.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../shared/widgets/app_button.dart';
 import '../../../shared/widgets/app_scaffold.dart';
+import '../../call/data/call_session_repository.dart';
+import '../../presence/data/presence_repository.dart';
+import '../../presence/domain/presence_status.dart';
+import '../../presence/presentation/presence_controller.dart';
+import '../../profile_setup/data/profile_repository.dart';
+import '../../profile_setup/domain/user_profile.dart';
 import '../../profile_setup/presentation/providers/profile_provider.dart';
 import '../../profile_setup/presentation/widgets/blurred_avatar.dart';
-import '../../quota/data/quota_repository.dart';
 import '../data/matching_repository.dart';
+import '../data/matchmaking_repository.dart';
 import '../domain/active_match.dart';
+import '../domain/match_score.dart';
 import 'providers/active_match_provider.dart';
 import 'widgets/compatibility_badge.dart';
 
@@ -34,13 +42,29 @@ class MatchingScreen extends ConsumerStatefulWidget {
 enum _Phase { searching, found, empty }
 
 class _MatchingScreenState extends ConsumerState<MatchingScreen> {
+  static const _log = AppLogger('Matching');
+  // Only the two *search* messages loop here. "Confirmation du match…"
+  // belongs to the `found` phase — it must never show while still
+  // searching, so it is not part of this rotation.
+  static const _stepCount = 2;
+  static const _matchFloor = 75;
+
   Timer? _messageRotator;
   Timer? _navTimer;
+  Timer? _pollTimer;
+  Timer? _heartbeatTimer;
+  StreamSubscription<CallSessionRow?>? _callSub;
   int _step = 0;
-  static const _stepCount = 3;
 
   _Phase _phase = _Phase.searching;
   ActiveMatch? _match;
+
+  /// Approximate count of other reachable profiles — drives the "X profils
+  /// actifs" reassurance line. Null until the first fetch lands.
+  int? _activeCount;
+
+  /// Guards against overlapping poll cycles and double-claims.
+  bool _resolving = false;
 
   @override
   void initState() {
@@ -49,92 +73,246 @@ class _MatchingScreenState extends ConsumerState<MatchingScreen> {
   }
 
   void _startSearch() {
+    _log.info('Match flow started — entering matchmaking queue');
+    // Tell the world we're actively searching — feeds the peers' active
+    // count and the Debug presence panel.
+    ref.read(presenceControllerProvider).setIntent(PresenceStatus.searching);
+    DebugObserver.instance.startSession(); // debug-observer
     setState(() {
       _phase = _Phase.searching;
       _step = 0;
       _match = null;
     });
+    // Looping ripple animation — purely cosmetic; the real search is the
+    // poll timer below.
     _messageRotator?.cancel();
     _messageRotator = Timer.periodic(
       const Duration(seconds: 1, milliseconds: 200),
       (timer) {
-        if (_step >= _stepCount - 1) {
+        if (!mounted) {
           timer.cancel();
-          unawaited(_resolveCandidate());
           return;
         }
-        setState(() => _step++);
+        setState(() => _step = (_step + 1) % _stepCount);
       },
     );
+    unawaited(_enterQueueAndSearch());
   }
 
-  static const _log = AppLogger('Matching');
-
-  Future<void> _resolveCandidate() async {
-    _log.info('Resolving candidate…');
+  Future<void> _enterQueueAndSearch() async {
+    final repo = ref.read(matchmakingRepositoryProvider);
     final self = ref.read(currentProfileProvider).asData?.value;
-    if (self == null) {
-      _log.warn('Aborting — no current profile.');
-      if (mounted) context.pop();
+    if (repo == null || self == null) {
+      _log.warn(
+        'Matchmaking unavailable — supabase=${repo != null} '
+        'profile=${self != null}',
+      );
+      if (mounted) setState(() => _phase = _Phase.empty);
       return;
     }
 
-    ActiveMatch? match;
     try {
-      match = await ref.read(matchingRepositoryProvider).findCandidate(self);
+      await repo.joinQueue(self.userId);
+      // Stamp a fresh server heartbeat right away — an upsert on a re-tap
+      // keeps the old (possibly stale) heartbeat_at, so prime it now
+      // instead of waiting up to 12 s for the first timer tick.
+      await repo.heartbeat();
     } catch (e, st) {
-      _log.error('findCandidate threw: $e', e, st);
-      if (!mounted) return;
-      setState(() => _phase = _Phase.empty);
-      return;
-    }
-    if (!mounted) return;
-    if (match == null) {
-      _log.info('No candidate online — showing empty state.');
-      setState(() => _phase = _Phase.empty);
+      _log.error('joinQueue failed', e, st);
+      if (mounted) setState(() => _phase = _Phase.empty);
       return;
     }
 
-    _log.info(
-      'Match found uid=${match.candidate.userId} '
-      'score=${match.score.percentage}%',
+    // Realtime: catch the case where a *peer* claims this user first.
+    _callSub = repo.watchMyActiveCall(self.userId).listen(
+      _onRealtimeCall,
+      onError: (e, st) => _log.error('watchMyActiveCall error', e, st),
     );
 
-    // Quota recording is best-effort: never block the call on it.
-    try {
-      await ref.read(quotaRepositoryProvider).recordMatch(self);
-    } catch (e, st) {
-      _log.error('recordMatch failed (continuing): $e', e, st);
-    }
-    if (!mounted) return;
+    // Heartbeat: keep the queue row fresh so peers see us as active.
+    // A crash / background kills this timer → the row goes stale → we
+    // drop out of everyone's candidate list within 30 s.
+    _heartbeatTimer = Timer.periodic(
+      const Duration(seconds: 12),
+      (_) => unawaited(_heartbeat(repo)),
+    );
 
+    // Active search: poll the queue, score peers, claim the best ≥75 %.
+    _pollTimer = Timer.periodic(
+      const Duration(milliseconds: 2500),
+      (_) => _poll(),
+    );
+    unawaited(_poll());
+    unawaited(_refreshActiveCount());
+  }
+
+  Future<void> _heartbeat(MatchmakingRepository repo) async {
+    if (!mounted || _match != null) return;
+    try {
+      await repo.heartbeat();
+    } catch (e) {
+      _log.warn('queue heartbeat failed (will retry): $e');
+    }
+    await _refreshActiveCount();
+  }
+
+  /// Refreshes the "X profils actifs" reassurance figure. Best-effort —
+  /// a failure just leaves the previous value (or the generic copy).
+  Future<void> _refreshActiveCount() async {
+    final presence = ref.read(presenceRepositoryProvider);
+    if (presence == null || !mounted || _match != null) return;
+    final count = await presence.activeProfilesCount();
+    if (!mounted || count == null) return;
+    setState(() => _activeCount = count);
+  }
+
+  Future<void> _poll() async {
+    if (_resolving || _match != null || !mounted) return;
+    _resolving = true;
+    try {
+      final repo = ref.read(matchmakingRepositoryProvider);
+      final profiles = ref.read(profileRepositoryProvider);
+      final service = ref.read(matchingServiceProvider);
+      final self = ref.read(currentProfileProvider).asData?.value;
+      if (repo == null || self == null) return;
+
+      final queueIds = await repo.fetchQueueUserIds(self.userId);
+      if (queueIds.isEmpty || !mounted || _match != null) return;
+
+      final candidates =
+          await profiles.fetchPotentialCandidates(selfUserId: self.userId);
+      final searching =
+          candidates.where((c) => queueIds.contains(c.userId)).toList();
+      _log.info('poll — ${searching.length} searching candidate(s)');
+
+      UserProfile? best;
+      MatchScore? bestScore;
+      for (final c in searching) {
+        final score = service.calculateCompatibility(self, c, distanceKm: 10);
+        if (score == null || score.percentage < _matchFloor) continue;
+        if (bestScore == null || score.percentage > bestScore.percentage) {
+          best = c;
+          bestScore = score;
+        }
+      }
+      if (best == null || bestScore == null) {
+        _log.info('poll — no peer ≥$_matchFloor% yet');
+        return;
+      }
+
+      _log.info(
+        'poll — claiming ${best.userId} score=${bestScore.percentage}%',
+      );
+      final session = await repo.claimMatch(best.userId);
+      if (!mounted) return;
+      _onMatched(session, best, bestScore);
+    } catch (e, st) {
+      _log.warn('poll attempt failed (will retry): $e\n$st');
+    } finally {
+      _resolving = false;
+    }
+  }
+
+  /// Fires when Supabase Realtime reports a `calls` row where this user
+  /// is a participant — i.e. a peer ran `claim_match` against us.
+  Future<void> _onRealtimeCall(CallSessionRow? session) async {
+    if (session == null || _match != null || !mounted) return;
+    final self = ref.read(currentProfileProvider).asData?.value;
+    if (self == null) return;
+    final peerId = session.callerId == self.userId
+        ? session.calleeId
+        : session.callerId;
+    _log.info(
+      'Realtime — paired via session ${session.id}, peer=$peerId',
+    );
+    final peer = await ref.read(profileRepositoryProvider).getProfile(peerId);
+    if (peer == null || !mounted || _match != null) return;
+    final score = ref
+            .read(matchingServiceProvider)
+            .calculateCompatibility(self, peer, distanceKm: 10) ??
+        const MatchScore(percentage: _matchFloor, breakdown: <String, int>{});
+    _onMatched(session, peer, score);
+  }
+
+  void _onMatched(
+    CallSessionRow session,
+    UserProfile peer,
+    MatchScore score,
+  ) {
+    if (_match != null) return;
+    _log.info(
+      'Matched! peer=${peer.userId} score=${score.percentage}% '
+      'session=${session.id}',
+    );
+    _pollTimer?.cancel();
+    _heartbeatTimer?.cancel();
+    _messageRotator?.cancel();
+    _callSub?.cancel();
+    final match = ActiveMatch(
+      candidate: peer,
+      distanceKm: 10,
+      score: score,
+    );
     setState(() {
       _match = match;
       _phase = _Phase.found;
     });
+    DebugObserver.instance.setPhase('matched'); // debug-observer
     ref.read(activeMatchProvider.notifier).state = match;
-    _navTimer = Timer(const Duration(milliseconds: 1600), () {
-      _log.info('Navigating to call');
-      _goToCall();
-    });
+    _navTimer = Timer(const Duration(milliseconds: 1600), _goToCall);
   }
 
   void _goToCall() {
     if (!mounted) return;
+    final peer = ref.read(activeMatchProvider)?.candidate.userId;
+    _log.info('Navigating to CallScreen — peer=${peer ?? '∅'}');
     context.pushReplacementNamed(AppRoute.call.name);
   }
 
+  /// Fire-and-forget queue exit so a cancelled / disposed search frees
+  /// the user's slot for future matches.
+  void _leaveQueueBestEffort() {
+    final repo = ref.read(matchmakingRepositoryProvider);
+    final self = ref.read(currentProfileProvider).asData?.value;
+    if (repo != null && self != null) {
+      unawaited(repo.leaveQueue(self.userId));
+    }
+  }
+
   void _cancel() {
+    _log.info('Match flow cancelled');
     _messageRotator?.cancel();
     _navTimer?.cancel();
+    _pollTimer?.cancel();
+    _heartbeatTimer?.cancel();
+    _callSub?.cancel();
+    _leaveQueueBestEffort();
+    // No longer searching — drop back to plain "online".
+    ref.read(presenceControllerProvider).setIntent(PresenceStatus.online);
     ref.read(activeMatchProvider.notifier).state = null;
-    context.pop();
+    _log.info('Matching state reset');
+    _log.info('Navigating back after cancel');
+    if (context.canPop()) {
+      context.pop();
+    } else {
+      context.goNamed(AppRoute.home.name);
+    }
   }
 
   @override
   void dispose() {
     _messageRotator?.cancel();
     _navTimer?.cancel();
+    _pollTimer?.cancel();
+    _heartbeatTimer?.cancel();
+    _callSub?.cancel();
+    // Only leave the queue if we didn't match — a match already removed
+    // both users server-side, and we want to keep the user reachable if
+    // they navigated to the call screen.
+    if (_match == null) {
+      _leaveQueueBestEffort();
+      ref.read(presenceControllerProvider).setIntent(PresenceStatus.online);
+    }
     super.dispose();
   }
 
@@ -150,9 +328,18 @@ class _MatchingScreenState extends ConsumerState<MatchingScreen> {
         ),
       ),
       body: switch (_phase) {
-        _Phase.searching => _SearchingView(l10n: l10n, step: _step),
+        _Phase.searching => _SearchingView(
+            l10n: l10n,
+            step: _step,
+            activeCount: _activeCount,
+            onCancel: _cancel,
+          ),
         _Phase.found => _FoundView(l10n: l10n, match: _match!),
-        _Phase.empty => _EmptyView(l10n: l10n, onRetry: _startSearch),
+        _Phase.empty => _EmptyView(
+            l10n: l10n,
+            onRetry: _startSearch,
+            onCancel: _cancel,
+          ),
       },
     );
   }
@@ -163,18 +350,28 @@ class _MatchingScreenState extends ConsumerState<MatchingScreen> {
 // ---------------------------------------------------------------------------
 
 class _SearchingView extends StatelessWidget {
-  const _SearchingView({required this.l10n, required this.step});
+  const _SearchingView({
+    required this.l10n,
+    required this.step,
+    required this.activeCount,
+    required this.onCancel,
+  });
 
   final AppLocalizations l10n;
   final int step;
+  final int? activeCount;
+  final VoidCallback onCancel;
 
   @override
   Widget build(BuildContext context) {
+    // Only the two search-phase messages. "Confirmation du match…"
+    // (matchingStep3) is deliberately NOT here — it belongs to the
+    // `found` phase, once a compatible peer has actually been detected.
     final messages = [
       l10n.matchingStep1,
       l10n.matchingStep2,
-      l10n.matchingStep3,
     ];
+    final index = step % messages.length;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -190,22 +387,79 @@ class _SearchingView extends StatelessWidget {
         AnimatedSwitcher(
           duration: const Duration(milliseconds: 300),
           child: Text(
-            messages[step],
-            key: ValueKey(step),
+            messages[index],
+            key: ValueKey(index),
             textAlign: TextAlign.center,
             style: AppTypography.body.copyWith(
               color: AppColors.textSecondary,
             ),
           ),
         ),
+        const SizedBox(height: AppSpacing.md),
+        _ActivePulse(count: activeCount),
         const Spacer(flex: 3),
         AppButton(
           label: l10n.cancel,
           variant: AppButtonVariant.secondary,
-          onPressed: () => Navigator.of(context).maybePop(),
+          onPressed: onCancel,
         ),
         const SizedBox(height: AppSpacing.lg),
       ],
+    );
+  }
+}
+
+/// A soft "the app is alive" reassurance pill — a pulsing dot plus the
+/// approximate number of reachable profiles. Falls back to a generic
+/// line until the first count lands so it never shows "0".
+class _ActivePulse extends StatelessWidget {
+  const _ActivePulse({required this.count});
+
+  final int? count;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = (count == null || count! <= 0)
+        ? 'Communauté active en ce moment'
+        : '≈ $count ${count == 1 ? 'profil actif' : 'profils actifs'} '
+            'en ce moment';
+    return Center(
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md,
+          vertical: 8,
+        ),
+        decoration: BoxDecoration(
+          color: AppColors.online.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: AppColors.online.withValues(alpha: 0.3)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 7,
+              height: 7,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppColors.online,
+              ),
+            )
+                .animate(onPlay: (c) => c.repeat(reverse: true))
+                .fadeIn(duration: 900.ms)
+                .then()
+                .fadeOut(duration: 900.ms),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: AppTypography.caption.copyWith(
+                color: AppColors.online,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -252,7 +506,9 @@ class _FoundView extends StatelessWidget {
             .fadeIn(delay: 200.ms),
         const SizedBox(height: AppSpacing.sm),
         Text(
-          l10n.matchingFoundSubtitle,
+          // Shown ONLY here, in the `found` phase — a compatible peer has
+          // really been detected and the call is being confirmed.
+          l10n.matchingStep3,
           textAlign: TextAlign.center,
           style: AppTypography.caption.copyWith(
             color: AppColors.textTertiary,
@@ -269,10 +525,15 @@ class _FoundView extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 class _EmptyView extends StatelessWidget {
-  const _EmptyView({required this.l10n, required this.onRetry});
+  const _EmptyView({
+    required this.l10n,
+    required this.onRetry,
+    required this.onCancel,
+  });
 
   final AppLocalizations l10n;
   final VoidCallback onRetry;
+  final VoidCallback onCancel;
 
   @override
   Widget build(BuildContext context) {
@@ -312,7 +573,7 @@ class _EmptyView extends StatelessWidget {
         AppButton(
           label: l10n.cancel,
           variant: AppButtonVariant.secondary,
-          onPressed: () => Navigator.of(context).maybePop(),
+          onPressed: onCancel,
         ),
         const SizedBox(height: AppSpacing.lg),
       ],

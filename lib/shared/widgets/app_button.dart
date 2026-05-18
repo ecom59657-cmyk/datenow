@@ -32,18 +32,16 @@ class AppButton extends StatelessWidget {
 
   bool get _enabled => onPressed != null && !isLoading;
 
-  EdgeInsets get _padding => switch (size) {
-        AppButtonSize.regular => const EdgeInsets.symmetric(
-            horizontal: AppSpacing.lg,
-            vertical: AppSpacing.sm + 2,
-          ),
-        AppButtonSize.large => const EdgeInsets.symmetric(
-            horizontal: AppSpacing.lg,
-            vertical: AppSpacing.md + 2,
-          ),
-      };
+  // Horizontal-only padding. Vertical centering is handled by the inner
+  // Container's `alignment: center`, so adding vertical padding here only
+  // ate into the content area and clipped the text on some devices.
+  EdgeInsets get _padding => const EdgeInsets.symmetric(
+        horizontal: AppSpacing.lg,
+      );
 
-  double get _height => size == AppButtonSize.large ? 56 : 48;
+  // Comfortable tap targets that always fit the 16 pt button text plus its
+  // line-height with margin to spare on every iPhone.
+  double get _height => size == AppButtonSize.large ? 56 : 50;
 
   @override
   Widget build(BuildContext context) {
@@ -240,13 +238,29 @@ class _ButtonContent extends StatelessWidget {
     }
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
-      mainAxisSize: MainAxisSize.min,
+      mainAxisSize: MainAxisSize.max,
       children: [
         if (icon != null) ...[
           Icon(icon, size: 18, color: color),
           const SizedBox(width: 8),
         ],
-        Text(label, style: AppTypography.button.copyWith(color: color)),
+        // Flexible + ellipsis prevents long translations from clipping or
+        // overflowing horizontally. Explicit text `height` keeps the
+        // line-box from creeping above the button height on devices where
+        // the default font metrics are slightly taller.
+        Flexible(
+          child: Text(
+            label,
+            style: AppTypography.button.copyWith(
+              color: color,
+              height: 1.15,
+            ),
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            softWrap: false,
+          ),
+        ),
       ],
     );
   }

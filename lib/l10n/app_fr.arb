@@ -113,6 +113,12 @@
   "callDemoNotice": "Mode démo — Agora n'est pas configuré. L'écran d'appel est une simulation.",
   "callTokenError": "Impossible d'ouvrir le canal en direct. Réessayez.",
   "callSwitchCamera": "Caméra",
+  "callBlurTitle": "Caméra floutée",
+  "callBlurBody": "Vous devinez la présence, mais le visage sera révélé uniquement à la fin du date.",
+  "callPermissionsTitle": "Caméra et micro nécessaires",
+  "callPermissionsBody": "Pour lancer un date en direct, autorise l'accès à ta caméra et ton micro.",
+  "callPermissionsOpenSettings": "Ouvrir les réglages",
+  "callPermissionsCancel": "Annuler",
 
   "validatorEmailRequired": "Saisissez votre e-mail",
   "validatorEmailInvalid": "E-mail invalide",

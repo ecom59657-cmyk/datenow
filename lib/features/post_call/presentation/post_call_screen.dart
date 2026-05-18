@@ -12,6 +12,8 @@ import '../../../app/router/app_routes.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../app/theme/app_typography.dart';
+import '../../../core/debug/debug_observer.dart';
+import '../../../core/utils/logger.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../shared/widgets/app_button.dart';
 import '../../../shared/widgets/app_scaffold.dart';
@@ -24,6 +26,7 @@ import '../../matching/presentation/widgets/compatibility_badge.dart';
 import '../../profile_setup/data/profile_repository.dart';
 import '../../profile_setup/presentation/providers/profile_provider.dart';
 import '../../profile_setup/presentation/widgets/blurred_avatar.dart';
+import '../data/reveal_repository.dart';
 
 /// Post-call decision screen. Reveals the candidate photo + compatibility
 /// score and lets the user match or pass. Real photos surface **only** here.
@@ -37,14 +40,26 @@ class PostCallScreen extends ConsumerStatefulWidget {
 enum _Stage { decide, waiting, matched, noMatch, passed }
 
 class _PostCallScreenState extends ConsumerState<PostCallScreen> {
+  static const _log = AppLogger('PostCall');
+
+  /// How long to wait on the peer's reveal decision before offering the
+  /// user a way out — prevents an infinite "waiting" spinner when the
+  /// peer closed the app or never decides.
+  static const _revealTimeout = Duration(minutes: 2);
+
   _Stage _stage = _Stage.decide;
   bool _revealed = false;
   Uint8List? _peerPhotoBytes;
   Timer? _peerDecisionTimer;
+  Timer? _revealTimeoutTimer;
+  bool _revealTimedOut = false;
+  StreamSubscription<List<RevealRow>>? _revealSub;
+  bool _matchPersisted = false;
 
   @override
   void initState() {
     super.initState();
+    DebugObserver.instance.setPhase('reveal'); // debug-observer
     _loadPeerPhoto();
   }
 
@@ -68,78 +83,223 @@ class _PostCallScreenState extends ConsumerState<PostCallScreen> {
     if (match == null || self == null) return;
 
     setState(() => _stage = _Stage.waiting);
+
+    final callId = ref.read(activeCallIdProvider);
+    final revealRepo = ref.read(revealRepositoryProvider);
+
+    // Real path: persist this user's "reveal" decision and listen for
+    // the peer's via Supabase Realtime.
+    if (callId != null && revealRepo != null) {
+      try {
+        await revealRepo.submitReveal(
+          callId: callId,
+          userId: self.userId,
+          revealed: true,
+        );
+        DebugLog.reveal('reveal submitted'); // debug-observer
+      } catch (e, st) {
+        _log.error('submitReveal(true) failed', e, st);
+      }
+      _revealSub = revealRepo.watchReveals(callId).listen(
+        (rows) => _onReveals(
+          rows,
+          callId: callId,
+          self: self,
+          match: match,
+        ),
+        onError: (e, st) => _log.error('watchReveals error', e, st),
+      );
+      _startRevealTimeout();
+      return;
+    }
+
+    // Fallback (no Supabase / no call id): keep the demo alive with a
+    // mocked peer decision so the flow is still testable offline.
+    _log.warn('No callId/revealRepo — falling back to mock peer decision');
     await ref.read(matchingRepositoryProvider).recordDecision(
           self: self,
           candidate: match.candidate,
           wantsMatch: true,
         );
-
-    // Mock the peer's decision after a short wait — 60% accept, 40% pass.
-    // In production this will arrive over realtime.
     _peerDecisionTimer = Timer(const Duration(milliseconds: 1600), () async {
       if (!mounted) return;
       final peerAccepts = Random().nextDouble() < 0.6;
       setState(() => _stage = peerAccepts ? _Stage.matched : _Stage.noMatch);
-
       if (peerAccepts) {
-        final discover = ref.read(discoverRepositoryProvider);
-        await discover.recordMutualMatch(
-          self: self,
-          candidate: match.candidate,
-          score: match.score,
-        );
-        final sourceId = match.sourceSuggestionId;
-        if (sourceId != null) {
-          await discover.markSuggestionMatched(sourceId);
-        }
-        // Spin up the private messaging room. This is the ONLY place in
-        // the app where a conversation is created — per the product rule
-        // "no chat before a mutual match".
-        try {
-          await ref.read(messagingRepositoryProvider).ensureConversation(
-                currentUserId: self.userId,
-                peer: match.candidate,
-              );
-        } catch (e) {
-          // Non-fatal: the user can still match. They'll be able to start
-          // the conversation later from the Discover match card, which
-          // calls ensureConversation again.
-          // ignore: avoid_print
-          // (silent — log already happens in the repo)
-        }
+        await _persistMatch(self: self, match: match, callId: null);
       }
     });
+  }
+
+  /// (Re)arms the reveal-timeout timer. When it fires the waiting view
+  /// surfaces "Continuer à attendre" / "Passer" so the user is never
+  /// stuck waiting on a peer who has gone silent.
+  void _startRevealTimeout() {
+    _revealTimeoutTimer?.cancel();
+    _revealTimedOut = false;
+    _revealTimeoutTimer = Timer(_revealTimeout, () {
+      if (!mounted || _stage != _Stage.waiting) return;
+      _log.info('Reveal wait timed out — offering exit to user');
+      setState(() => _revealTimedOut = true);
+    });
+  }
+
+  /// "Continuer à attendre" — give the peer another full window.
+  void _keepWaiting() {
+    _log.info('User chose to keep waiting for the reveal');
+    setState(() => _revealTimedOut = false);
+    _startRevealTimeout();
+  }
+
+  /// Resolves the mutual reveal outcome from the live reveal rows.
+  Future<void> _onReveals(
+    List<RevealRow> rows, {
+    required String callId,
+    required dynamic self,
+    required ActiveMatch match,
+  }) async {
+    if (!mounted) return;
+    final repo = ref.read(revealRepositoryProvider);
+    if (repo == null) return;
+    final outcome = repo.outcomeFor(
+      rows,
+      selfId: self.userId as String,
+      peerId: match.candidate.userId,
+    );
+    _log.info('Reveal outcome — $outcome (${rows.length} row(s))');
+    switch (outcome) {
+      case RevealOutcome.pending:
+        // Still waiting for the peer — stay on the waiting view.
+        break;
+      case RevealOutcome.mutual:
+        _revealTimeoutTimer?.cancel();
+        DebugLog.reveal('reveal mutual'); // debug-observer
+        DebugObserver.instance.setRevealOutcome('mutual');
+        setState(() => _stage = _Stage.matched);
+        await _persistMatch(self: self, match: match, callId: callId);
+      case RevealOutcome.declined:
+        _revealTimeoutTimer?.cancel();
+        DebugLog.reveal('declined'); // debug-observer
+        DebugObserver.instance.setRevealOutcome('declined');
+        setState(() => _stage = _Stage.noMatch);
+    }
+  }
+
+  /// Writes the permanent match + opens the conversation. Idempotent —
+  /// `_matchPersisted` guards against the reveal stream firing twice.
+  Future<void> _persistMatch({
+    required dynamic self,
+    required ActiveMatch match,
+    required String? callId,
+  }) async {
+    if (_matchPersisted) return;
+    _matchPersisted = true;
+    final selfId = self.userId as String;
+
+    if (callId != null) {
+      final repo = ref.read(revealRepositoryProvider);
+      try {
+        await repo?.createMatch(
+          callId: callId,
+          userA: selfId,
+          userB: match.candidate.userId,
+          compatibilityScore: match.score.percentage,
+        );
+      } catch (e, st) {
+        _log.error('createMatch failed', e, st);
+      }
+    }
+
+    // Keep the Discover "matches" surface in sync.
+    try {
+      await ref.read(discoverRepositoryProvider).recordMutualMatch(
+            self: self,
+            candidate: match.candidate,
+            score: match.score,
+          );
+      final sourceId = match.sourceSuggestionId;
+      if (sourceId != null) {
+        await ref
+            .read(discoverRepositoryProvider)
+            .markSuggestionMatched(sourceId);
+      }
+    } catch (e, st) {
+      _log.error('recordMutualMatch failed (non-fatal)', e, st);
+    }
+
+    // Open the private conversation — the only place chat is created.
+    try {
+      await ref.read(messagingRepositoryProvider).ensureConversation(
+            currentUserId: selfId,
+            peer: match.candidate,
+          );
+    } catch (e, st) {
+      _log.error('ensureConversation failed (non-fatal)', e, st);
+    }
   }
 
   void _pass() async {
     final match = ref.read(activeMatchProvider);
     final self = ref.read(currentProfileProvider).asData?.value;
     if (match != null && self != null) {
-      await ref.read(matchingRepositoryProvider).recordDecision(
-            self: self,
-            candidate: match.candidate,
-            wantsMatch: false,
+      _log.info('Passed candidate uid=${match.candidate.userId}');
+      final callId = ref.read(activeCallIdProvider);
+      final revealRepo = ref.read(revealRepositoryProvider);
+      if (callId != null && revealRepo != null) {
+        // Record the explicit pass so the peer's screen resolves to
+        // "declined" instead of waiting forever.
+        try {
+          await revealRepo.submitReveal(
+            callId: callId,
+            userId: self.userId,
+            revealed: false,
           );
+          DebugLog.reveal('reveal submitted (pass)'); // debug-observer
+        } catch (e, st) {
+          _log.error('submitReveal(false) failed', e, st);
+        }
+      } else {
+        await ref.read(matchingRepositoryProvider).recordDecision(
+              self: self,
+              candidate: match.candidate,
+              wantsMatch: false,
+            );
+      }
     }
     if (!mounted) return;
+    _revealSub?.cancel();
+    _revealTimeoutTimer?.cancel();
+    // Reset the shared match state immediately. _findAnother also does this,
+    // but resetting here guarantees no stale match leaks into a subsequent
+    // flow regardless of which exit the user takes from _PassedView.
+    ref.read(activeMatchProvider.notifier).state = null;
+    _log.info('Matching state reset');
     setState(() => _stage = _Stage.passed);
   }
 
   void _backHome() {
     ref.read(activeMatchProvider.notifier).state = null;
+    _log.info('Matching state reset');
     if (!mounted) return;
     context.goNamed(AppRoute.home.name);
   }
 
   void _findAnother() {
     ref.read(activeMatchProvider.notifier).state = null;
+    _log.info('Matching state reset');
     if (!mounted) return;
-    context.goNamed(AppRoute.matching.name);
+    _log.info('New match flow started');
+    // Use pushReplacement instead of goNamed so the matching → call →
+    // post-call chain keeps a sane back stack: the cross / Annuler buttons
+    // on the next MatchingScreen need a real route to pop back to.
+    context.pushReplacementNamed(AppRoute.matching.name);
   }
 
   @override
   void dispose() {
     _peerDecisionTimer?.cancel();
+    _revealTimeoutTimer?.cancel();
+    _revealSub?.cancel();
     super.dispose();
   }
 
@@ -157,7 +317,11 @@ class _PostCallScreenState extends ConsumerState<PostCallScreen> {
           onMatch: _match,
           onPass: _pass,
         ),
-      _Stage.waiting => const _WaitingView(),
+      _Stage.waiting => _WaitingView(
+          timedOut: _revealTimedOut,
+          onKeepWaiting: _keepWaiting,
+          onGiveUp: _pass,
+        ),
       _Stage.matched => _ResolvedView(
           matched: true,
           onBackHome: _backHome,
@@ -168,7 +332,10 @@ class _PostCallScreenState extends ConsumerState<PostCallScreen> {
           onBackHome: _backHome,
           onFindAnother: _findAnother,
         ),
-      _Stage.passed => _PassedView(onFindAnother: _findAnother),
+      _Stage.passed => _PassedView(
+          onFindAnother: _findAnother,
+          onBackHome: _backHome,
+        ),
     };
 
     return AppScaffold(
@@ -273,30 +440,67 @@ class _DecideView extends StatelessWidget {
 }
 
 class _WaitingView extends StatelessWidget {
-  const _WaitingView();
+  const _WaitingView({
+    required this.timedOut,
+    required this.onKeepWaiting,
+    required this.onGiveUp,
+  });
+
+  /// True once the reveal wait has exceeded its timeout — surfaces an
+  /// explicit way out instead of an endless spinner.
+  final bool timedOut;
+  final VoidCallback onKeepWaiting;
+  final VoidCallback onGiveUp;
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const SizedBox(
-            height: 36,
-            width: 36,
-            child: CircularProgressIndicator(
-              strokeWidth: 2.4,
-              valueColor: AlwaysStoppedAnimation(AppColors.brandPink),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const SizedBox(
+              height: 36,
+              width: 36,
+              child: CircularProgressIndicator(
+                strokeWidth: 2.4,
+                valueColor: AlwaysStoppedAnimation(AppColors.brandPink),
+              ),
             ),
-          ),
-          const SizedBox(height: AppSpacing.lg),
-          Text(
-            l10n.postCallWaiting,
-            style:
-                AppTypography.body.copyWith(color: AppColors.textSecondary),
-          ),
-        ],
+            const SizedBox(height: AppSpacing.lg),
+            Text(
+              'Votre date réfléchit…',
+              textAlign: TextAlign.center,
+              style:
+                  AppTypography.body.copyWith(color: AppColors.textSecondary),
+            ),
+            if (timedOut) ...[
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                'Cette personne n\'a pas encore répondu.',
+                textAlign: TextAlign.center,
+                style: AppTypography.caption.copyWith(
+                  color: AppColors.textTertiary,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              AppButton(
+                label: 'Continuer à attendre',
+                icon: Icons.hourglass_bottom_rounded,
+                size: AppButtonSize.large,
+                onPressed: onKeepWaiting,
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              AppButton(
+                label: 'Passer',
+                variant: AppButtonVariant.secondary,
+                size: AppButtonSize.large,
+                onPressed: onGiveUp,
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -331,7 +535,7 @@ class _ResolvedView extends StatelessWidget {
             ),
         const SizedBox(height: AppSpacing.lg),
         Text(
-          matched ? l10n.postCallMatchedTitle : l10n.postCallNoMatchTitle,
+          matched ? 'C\'est réciproque ✨' : 'Pas cette fois',
           style: AppTypography.h1,
           textAlign: TextAlign.center,
         ),
@@ -374,9 +578,13 @@ class _ResolvedView extends StatelessWidget {
 }
 
 class _PassedView extends StatelessWidget {
-  const _PassedView({required this.onFindAnother});
+  const _PassedView({
+    required this.onFindAnother,
+    required this.onBackHome,
+  });
 
   final VoidCallback onFindAnother;
+  final VoidCallback onBackHome;
 
   @override
   Widget build(BuildContext context) {
@@ -416,6 +624,15 @@ class _PassedView extends StatelessWidget {
           icon: Icons.favorite_rounded,
           size: AppButtonSize.large,
           onPressed: onFindAnother,
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        // Secondary escape — lets the user step out of the date flow
+        // entirely instead of being funnelled into another match.
+        AppButton(
+          label: l10n.postCallBackHome,
+          icon: Icons.home_rounded,
+          variant: AppButtonVariant.secondary,
+          onPressed: onBackHome,
         ),
         const SizedBox(height: AppSpacing.lg),
       ],
@@ -465,18 +682,34 @@ class _PhotoReveal extends StatelessWidget {
       );
     }
 
+    // Reveal animation — the photo "develops" from a heavy blur into
+    // focus, giving the moment a beat of suspense instead of a hard cut.
     return ClipOval(
-      child: Image.memory(
-        bytes!,
-        width: size,
-        height: size,
-        fit: BoxFit.cover,
+      child: TweenAnimationBuilder<double>(
+        tween: Tween<double>(begin: 26, end: 0),
+        duration: const Duration(milliseconds: 1100),
+        curve: Curves.easeOutCubic,
+        builder: (context, sigma, child) {
+          return ImageFiltered(
+            imageFilter: ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
+            child: child,
+          );
+        },
+        child: Image.memory(
+          bytes!,
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
+        ),
       ),
-    ).animate().scale(
-          duration: 400.ms,
-          begin: const Offset(0.85, 0.85),
+    )
+        .animate()
+        .scale(
+          duration: 520.ms,
+          begin: const Offset(0.9, 0.9),
           end: const Offset(1, 1),
           curve: Curves.easeOutBack,
-        );
+        )
+        .fadeIn(duration: 380.ms);
   }
 }

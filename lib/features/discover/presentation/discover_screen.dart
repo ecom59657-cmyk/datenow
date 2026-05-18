@@ -63,7 +63,12 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
             style:
                 AppTypography.body.copyWith(color: AppColors.textSecondary),
           ),
-          const SizedBox(height: AppSpacing.xl),
+          const SizedBox(height: AppSpacing.md),
+          _DiscoverDebugBanner(
+            currentUserId: profile?.userId,
+            suggestionsAsync: suggestionsAsync,
+          ),
+          const SizedBox(height: AppSpacing.md),
           _SectionHeader(label: l10n.discoverSuggestionsSection),
           const SizedBox(height: AppSpacing.sm),
           _SuggestionsBody(state: suggestionsAsync, emptyLabel: l10n.suggestionsEmpty),
@@ -203,6 +208,85 @@ class _EmptyCard extends StatelessWidget {
                 color: AppColors.textSecondary,
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Compact diagnostic banner — surfaces matching state without leaving
+/// the Discover tab. Mirrors what the full `Debug · Matching` screen
+/// shows but keeps it one tap away.
+class _DiscoverDebugBanner extends StatelessWidget {
+  const _DiscoverDebugBanner({
+    required this.currentUserId,
+    required this.suggestionsAsync,
+  });
+
+  final String? currentUserId;
+  final AsyncValue<List<dynamic>> suggestionsAsync;
+
+  @override
+  Widget build(BuildContext context) {
+    final count = suggestionsAsync.maybeWhen(
+      data: (rows) => rows.length,
+      orElse: () => null,
+    );
+    return GlassCard(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.sm,
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: AppColors.brandViolet.withValues(alpha: 0.18),
+              border: Border.all(
+                color: AppColors.brandViolet.withValues(alpha: 0.4),
+              ),
+            ),
+            alignment: Alignment.center,
+            child: const Icon(
+              Icons.bug_report_outlined,
+              color: AppColors.brandViolet,
+              size: 16,
+            ),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'me: ${currentUserId == null ? '—' : '${currentUserId!.substring(0, 8)}…'}'
+                  '   suggestions: ${count ?? '—'}',
+                  style: AppTypography.caption.copyWith(
+                    color: AppColors.textSecondary,
+                    fontFamily: 'monospace',
+                  ),
+                ),
+                Text(
+                  'Tap → Debug Matching',
+                  style: AppTypography.caption.copyWith(
+                    color: AppColors.brandViolet,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            icon: const Icon(
+              Icons.chevron_right_rounded,
+              color: AppColors.brandViolet,
+            ),
+            onPressed: () =>
+                context.pushNamed(AppRoute.debugMatching.name),
           ),
         ],
       ),

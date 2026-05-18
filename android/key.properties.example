@@ -1,0 +1,13 @@
+# Android release signing — TEMPLATE.
+#
+# Copy this file to android/key.properties (which is git-ignored) and fill
+# in the real values. NEVER commit android/key.properties or the .jks file.
+#
+# Generate a keystore once with:
+#   keytool -genkey -v -keystore ~/datenow-release.jks \
+#     -keyalg RSA -keysize 2048 -validity 10000 -alias datenow
+
+storeFile=/absolute/path/to/datenow-release.jks
+storePassword=CHANGE_ME
+keyAlias=datenow
+keyPassword=CHANGE_ME

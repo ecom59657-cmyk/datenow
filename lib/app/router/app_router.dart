@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -22,6 +23,8 @@ import '../../features/profile/presentation/edit/edit_profile_screen.dart';
 import '../../features/profile/presentation/profile_screen.dart';
 import '../../features/profile_setup/presentation/profile_setup_screen.dart';
 import '../../features/settings/presentation/blocked_accounts_screen.dart';
+import '../../features/settings/presentation/debug_datenow_screen.dart';
+import '../../features/settings/presentation/debug_matching_screen.dart';
 import '../../features/settings/presentation/help_screen.dart';
 import '../../features/settings/presentation/legal/privacy_policy_screen.dart';
 import '../../features/settings/presentation/legal/terms_screen.dart';
@@ -179,6 +182,21 @@ final routerProvider = Provider<GoRouter>((ref) {
         name: AppRoute.settingsPrivacyPolicy.name,
         builder: (_, _) => const PrivacyPolicyScreen(),
       ),
+      // Diagnostic surfaces — registered ONLY in debug builds. In a
+      // release / TestFlight build `kDebugMode` is a compile-time false,
+      // so these routes don't exist at all (not even via deep link).
+      if (kDebugMode)
+        GoRoute(
+          path: AppRoute.debugMatching.path,
+          name: AppRoute.debugMatching.name,
+          builder: (_, _) => const DebugMatchingScreen(),
+        ),
+      if (kDebugMode)
+        GoRoute(
+          path: AppRoute.debugDateNow.path,
+          name: AppRoute.debugDateNow.name,
+          builder: (_, _) => const DebugDateNowScreen(),
+        ),
       GoRoute(
         path: AppRoute.matching.path,
         name: AppRoute.matching.name,

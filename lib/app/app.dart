@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/config/app_config.dart';
+import '../core/debug/debug_observer.dart';
+import '../features/presence/presentation/presence_controller.dart';
 import '../l10n/app_localizations.dart';
 import 'locale/locale_resolver.dart';
 import 'router/app_router.dart';
@@ -16,17 +18,21 @@ class DateNowApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(routerProvider);
 
-    return MaterialApp.router(
-      title: AppConfig.appName,
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.light,
-      darkTheme: AppTheme.dark,
-      themeMode: ThemeMode.dark,
-      routerConfig: router,
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      localeResolutionCallback: (deviceLocale, _) =>
-          resolveAppLocale(deviceLocale),
+    return PresenceScope(
+      child: MaterialApp.router(
+        title: AppConfig.appName,
+        debugShowCheckedModeBanner: false,
+        theme: AppTheme.light,
+        darkTheme: AppTheme.dark,
+        themeMode: ThemeMode.dark,
+        routerConfig: router,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        localeResolutionCallback: (deviceLocale, _) =>
+            resolveAppLocale(deviceLocale),
+        // debug-observer — discreet test-observation overlay; no-op in release.
+        builder: (context, child) => DebugOverlay(child: child ?? const SizedBox()),
+      ),
     );
   }
 }

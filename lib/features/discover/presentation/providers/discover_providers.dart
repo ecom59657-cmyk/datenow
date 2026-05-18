@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../app/router/app_routes.dart';
+import '../../../../core/utils/logger.dart';
 import '../../../matching/data/matching_repository.dart';
 import '../../../matching/domain/active_match.dart';
 import '../../../matching/domain/match_score.dart';
@@ -13,6 +14,8 @@ import '../../../quota/presentation/widgets/quota_limit_sheet.dart';
 import '../../data/discover_repository.dart';
 import '../../domain/mutual_match.dart';
 import '../../domain/weekly_suggestion.dart';
+
+const _log = AppLogger('Discover');
 
 /// Streams the visible (non-dismissed) suggestions for the current week.
 final weeklySuggestionsProvider =
@@ -69,11 +72,19 @@ Future<void> startDateFromSuggestion(
         breakdown: const {},
       );
 
+  _log.info(
+    'Lancer un date clicked — currentUserId=${self.userId} '
+    'targetUserId=${suggestion.candidate.userId} suggestionId=${suggestion.id}',
+  );
+
   ref.read(activeMatchProvider.notifier).state = ActiveMatch(
     candidate: suggestion.candidate,
     distanceKm: suggestion.distanceKm,
     score: score,
     sourceSuggestionId: suggestion.id,
+  );
+  _log.info(
+    'activeMatchProvider set — peer=${suggestion.candidate.userId}',
   );
 
   await ref
@@ -82,5 +93,6 @@ Future<void> startDateFromSuggestion(
   await quotaRepo.recordMatch(self);
 
   if (!context.mounted) return;
+  _log.info('Navigating to CallScreen for peer=${suggestion.candidate.userId}');
   context.pushNamed(AppRoute.call.name);
 }

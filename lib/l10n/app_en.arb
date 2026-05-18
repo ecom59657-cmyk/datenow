@@ -126,6 +126,12 @@
   "callDemoNotice": "Demo mode — Agora isn't configured. The call screen is a preview.",
   "callTokenError": "Couldn't open the live channel. Try again.",
   "callSwitchCamera": "Flip",
+  "callBlurTitle": "Camera blurred",
+  "callBlurBody": "You can sense their presence — the face is revealed only when the date ends.",
+  "callPermissionsTitle": "Camera & microphone required",
+  "callPermissionsBody": "To start a live date, allow access to your camera and microphone.",
+  "callPermissionsOpenSettings": "Open settings",
+  "callPermissionsCancel": "Cancel",
 
   "validatorEmailRequired": "Please enter your email",
   "validatorEmailInvalid": "Enter a valid email address",

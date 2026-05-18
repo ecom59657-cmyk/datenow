@@ -52,6 +52,18 @@ app.*.map.json
 *.freezed.dart
 lib/l10n/app_localizations*.dart
 
+# DateNow — Android release signing (NEVER commit these)
+android/key.properties
+**/key.properties
+*.jks
+*.keystore
+
+# DateNow — iOS signing / provisioning (NEVER commit these)
+*.mobileprovision
+*.p12
+*.cer
+*.certSigningRequest
+
 # Tooling
 .claude/
 

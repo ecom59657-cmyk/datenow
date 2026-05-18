@@ -1,7 +1,7 @@
 import 'dart:async';
 
-import 'package:agora_rtc_engine/agora_rtc_engine.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -11,31 +11,30 @@ import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../app/theme/app_typography.dart';
 import '../../../core/config/app_config.dart';
-import '../../../core/config/env.dart';
+import '../../../core/debug/debug_observer.dart';
 import '../../../core/utils/extensions.dart';
 import '../../../core/utils/logger.dart';
-import '../../../l10n/app_localizations.dart';
-import '../../../shared/widgets/app_scaffold.dart';
-import '../../../shared/widgets/glass_card.dart';
+import '../../../shared/widgets/app_button.dart';
 import '../../auth/presentation/providers/auth_provider.dart';
 import '../../matching/presentation/providers/active_match_provider.dart';
-import '../../profile_setup/presentation/widgets/blurred_avatar.dart';
-import '../data/agora_token_repository.dart';
-import '../domain/agora_token.dart';
-import '../services/agora_call_service.dart';
+import '../../post_call/data/reveal_repository.dart';
+import '../../presence/domain/presence_status.dart';
+import '../../presence/presentation/presence_controller.dart';
+import '../data/call_session_repository.dart';
+import 'agora_call_view.dart';
 
-/// Live 5-minute call screen.
+/// 5-minute live call screen — Jitsi-only.
 ///
-/// Two modes wired up:
-/// - **Agora** when `AGORA_APP_ID` + Supabase are configured AND the token
-///   Edge Function returns a valid token. Real audio/video, real
-///   controls.
-/// - **Mock** otherwise (no Agora env, token fetch fails, or running on
-///   an unsupported platform). Same countdown + controls, but the peer
-///   avatar stays blurred.
-///
-/// Either way, the screen owns the 5-minute timer and pushes the user to
-/// `/post-call` when the call ends.
+/// Responsibilities reduced to:
+///   1. Open (or join) the shared `calls` row in Supabase via
+///      [CallSessionRepository]. The row is the source of truth for both
+///      peers and powers the realtime end-of-call signal.
+///   2. Build the deterministic Jitsi URL `https://meet.jit.si/datenow_<id>`
+///      and let the user open it in their native browser. DateNow never
+///      touches camera/mic itself.
+///   3. Run the 5-minute countdown; auto-end when it hits zero.
+///   4. Listen for the peer's `status='ended'` flip and tear down locally.
+///   5. Push the user to the post-call screen on end.
 class CallScreen extends ConsumerStatefulWidget {
   const CallScreen({super.key});
 
@@ -43,75 +42,219 @@ class CallScreen extends ConsumerStatefulWidget {
   ConsumerState<CallScreen> createState() => _CallScreenState();
 }
 
-class _CallScreenState extends ConsumerState<CallScreen> {
-  static const _log = AppLogger('CallScreen');
+/// Pre-call handshake phases. The Agora video only mounts at [live] — the
+/// earlier phases run a calm "Connexion du date…" screen so the call
+/// never appears as an abrupt black flash.
+enum _PreCall { opening, waitingPeer, joining, live }
 
-  late final DateTime _start;
+class _CallScreenState extends ConsumerState<CallScreen> {
+  static const _log = AppLogger('Call');
+
+  /// Max time to wait for the peer's ready flag before joining anyway —
+  /// a peer who never readies (closed the app) must not freeze us here.
+  static const _peerReadyTimeout = Duration(seconds: 15);
+
+  /// Length of the closing "Connexion du date…" flourish before the
+  /// video mounts.
+  static const _joiningFlourish = Duration(milliseconds: 1300);
+
+  /// Countdown anchor. Seeded with the local clock so the timer ticks
+  /// from the moment the screen mounts, then overwritten with the call
+  /// row's server `started_at` once the session opens — that makes the
+  /// countdown identical on both devices and survives a re-join.
+  late DateTime _start;
   Duration _remaining = AppConfig.maxCallDuration;
   Timer? _ticker;
 
-  bool _micOn = true;
-  bool _videoOn = true;
+  String? _callId;
+  String? _selfUserId;
+  String? _channelName;
+  String _supabaseCallStatus = '—';
 
-  /// `true` once we've decided real Agora is in play. Stays `false` for
-  /// the fallback path (Env not configured, token fetch error).
-  bool _agoraActive = false;
-  StreamSubscription<AgoraCallState>? _agoraSub;
-  AgoraCallState _agoraState = const AgoraCallState();
+  _PreCall _precall = _PreCall.opening;
+  Timer? _peerReadyTimer;
+  Timer? _joiningTimer;
+
+  StreamSubscription<CallSessionRow>? _sessionSub;
+
+  bool _opened = false;
+  bool _ending = false;
+  bool _bootstrapFailed = false;
 
   @override
   void initState() {
     super.initState();
     _start = DateTime.now();
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
-    WidgetsBinding.instance.addPostFrameCallback((_) => _bootstrap());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_opened) return;
+      _opened = true;
+      // Presence: the user is now in a date video.
+      ref.read(presenceControllerProvider).setIntent(PresenceStatus.inCall);
+      ref.read(precallStateProvider.notifier).state = 'opening';
+      _bootstrap();
+    });
   }
 
   Future<void> _bootstrap() async {
-    if (!Env.agoraConfigured) {
-      _log.info('Agora not configured — running in mock mode.');
-      return;
-    }
-
     final selfId = ref.read(currentUserProvider)?.id;
     final match = ref.read(activeMatchProvider);
-    if (selfId == null || match == null) {
-      _log.warn('Missing self id or active match — falling back to mock.');
-      return;
-    }
-
-    final channel = AgoraTokenRepository.channelNameFor(
-      selfId,
-      match.candidate.userId,
+    _selfUserId = selfId;
+    _log.info(
+      'Bootstrap — selfId=${selfId ?? '∅'} peer=${match?.candidate.userId ?? '∅'}',
     );
-    final uid = AgoraTokenRepository.uidFromUserId(selfId);
 
-    AgoraToken token;
-    try {
-      token = await ref
-          .read(agoraTokenRepositoryProvider)
-          .fetchToken(channelName: channel, uid: uid);
-    } catch (e, st) {
-      _log.error('Token fetch failed — staying in mock mode.', e, st);
-      if (mounted) {
-        context.showSnack(AppLocalizations.of(context).callTokenError);
+    if (selfId == null || match == null) {
+      _log.error(
+        'CallScreen opened without an active session — bailing.',
+        null,
+        null,
+      );
+      if (!mounted) return;
+      context.showSnack(
+        'Impossible de démarrer le date. Réessaie depuis Discover.',
+      );
+      if (context.canPop()) {
+        context.pop();
+      } else {
+        context.goNamed(AppRoute.discover.name);
       }
       return;
     }
 
-    final service = ref.read(agoraCallServiceProvider);
-    _agoraSub = service.stream.listen((state) {
-      if (!mounted) return;
-      setState(() => _agoraState = state);
-    });
+    final repo = ref.read(callSessionRepositoryProvider);
+    if (repo == null) {
+      _log.warn('Supabase unavailable — cannot open call session');
+      return;
+    }
 
     try {
-      await service.join(token);
+      final result = await repo.open(
+        meUserId: selfId,
+        peerUserId: match.candidate.userId,
+      );
+      final session = result.row;
       if (!mounted) return;
-      setState(() => _agoraActive = true);
+      _callId = session.id;
+      // Re-anchor the countdown on the server clock so both peers see the
+      // same time-left regardless of who mounted first or device skew.
+      _start = session.startedAt;
+      // Publish the call id so the post-call reveal screen knows which
+      // `calls` row its reveal decisions attach to.
+      ref.read(activeCallIdProvider.notifier).state = session.id;
+      // The DB is the single source of truth for the channel name: the
+      // first peer to open the session writes `channel_name = dn_<id>`
+      // and every subsequent peer reads it back unchanged. Computing it
+      // client-side would risk a divergence (different prefixes, char
+      // mangling, …) — using the DB value guarantees both peers join
+      // exactly the same Agora room.
+      final channelName = session.channelName ?? 'dn_${session.id}';
+      setState(() {
+        _channelName = channelName;
+        _supabaseCallStatus = session.status;
+      });
+      _log.info(
+        'Call session ${result.source} — currentUserId=$selfId '
+        'targetUserId=${match.candidate.userId} '
+        'callId=${session.id} channelName=$channelName',
+      );
+      // debug-observer — feed the test overlay with the session facts.
+      DebugObserver.instance.setCall(
+            callId: session.id,
+            channelName: channelName,
+            selfUserId: selfId,
+            peerUserId: match.candidate.userId,
+            startedAt: session.startedAt,
+          );
+
+      // Enter the pre-call handshake: announce we're ready, then wait
+      // (briefly) for the peer before mounting the video.
+      setState(() => _precall = _PreCall.waitingPeer);
+      ref.read(precallStateProvider.notifier).state = 'waiting_peer_ready';
+      DebugObserver.instance.setPhase('waiting_peer'); // debug-observer
+      try {
+        await repo.markReady(session.id);
+      } catch (e, st) {
+        _log.warn('markReady failed (will still join): $e\n$st');
+      }
+      // Safety valve — a peer who never readies (closed the app) must
+      // not strand us on the connecting screen.
+      _peerReadyTimer = Timer(_peerReadyTimeout, () {
+        if (mounted && _precall == _PreCall.waitingPeer) {
+          _log.info('Peer ready timed out — joining anyway');
+          _advanceToJoining();
+        }
+      });
+
+      _sessionSub = repo.watch(session.id).listen(
+        (row) {
+          if (!mounted) return;
+          setState(() => _supabaseCallStatus = row.status);
+          _log.info(
+            'Realtime status — ${row.status} '
+            'ready(caller=${row.callerReady} callee=${row.calleeReady})',
+          );
+          if (row.endedByPeer(selfId)) {
+            _log.info('Call ended remotely by ${row.endedBy}');
+            _endCall(remote: true);
+            return;
+          }
+          // Both peers' CallScreens are up → start the join flourish.
+          if (_precall == _PreCall.waitingPeer && row.bothReady) {
+            _log.info('Both peers ready — joining call');
+            _advanceToJoining();
+          }
+        },
+        onError: (e, st) =>
+            _log.error('Realtime subscription error', e, st),
+      );
     } catch (e, st) {
-      _log.error('Engine join failed — mock fallback.', e, st);
+      _log.error('Could not open call session', e, st);
+      if (mounted) setState(() => _bootstrapFailed = true);
     }
+  }
+
+  /// Bails out of the pre-call screen (user tapped Annuler / Retour, or
+  /// bootstrap failed). Ends the call server-side so the peer isn't left
+  /// hanging, then returns home rather than to the post-call reveal.
+  Future<void> _cancelPreCall() async {
+    if (_ending) return;
+    _ending = true;
+    _log.info('Pre-call cancelled by user');
+    _peerReadyTimer?.cancel();
+    _joiningTimer?.cancel();
+    if (_callId != null && _selfUserId != null) {
+      final repo = ref.read(callSessionRepositoryProvider);
+      try {
+        await repo?.end(callId: _callId!, byUserId: _selfUserId!);
+      } catch (e, st) {
+        _log.error('Could not end call on pre-call cancel', e, st);
+      }
+    }
+    ref.read(presenceControllerProvider).setIntent(PresenceStatus.online);
+    ref.read(precallStateProvider.notifier).state = 'idle';
+    ref.read(activeMatchProvider.notifier).state = null;
+    if (!mounted) return;
+    if (context.canPop()) {
+      context.pop();
+    } else {
+      context.goNamed(AppRoute.home.name);
+    }
+  }
+
+  /// Runs the short "Connexion du date…" flourish, then mounts the video.
+  void _advanceToJoining() {
+    if (_precall == _PreCall.joining || _precall == _PreCall.live) return;
+    _peerReadyTimer?.cancel();
+    setState(() => _precall = _PreCall.joining);
+    ref.read(precallStateProvider.notifier).state = 'joining_call';
+    DebugObserver.instance.setPhase('joining'); // debug-observer
+    _joiningTimer = Timer(_joiningFlourish, () {
+      if (!mounted) return;
+      setState(() => _precall = _PreCall.live);
+      ref.read(precallStateProvider.notifier).state = 'live';
+      DebugObserver.instance.setPhase('live'); // debug-observer
+    });
   }
 
   void _tick() {
@@ -119,380 +262,227 @@ class _CallScreenState extends ConsumerState<CallScreen> {
     final r = AppConfig.maxCallDuration - elapsed;
     if (r.isNegative) {
       _ticker?.cancel();
+      DebugLog.call('timer end'); // debug-observer
       _endCall();
       return;
     }
     setState(() => _remaining = r);
+    DebugObserver.instance.setRemaining(r.inSeconds); // debug-observer
   }
 
-  Future<void> _toggleMic() async {
-    final next = !_micOn;
-    setState(() => _micOn = next);
-    if (_agoraActive) {
-      await ref.read(agoraCallServiceProvider).setMicMuted(!next);
-    }
-  }
-
-  Future<void> _toggleVideo() async {
-    final next = !_videoOn;
-    setState(() => _videoOn = next);
-    if (_agoraActive) {
-      await ref.read(agoraCallServiceProvider).setCameraEnabled(next);
-    }
-  }
-
-  Future<void> _switchCamera() async {
-    if (!_agoraActive) return;
-    await ref.read(agoraCallServiceProvider).switchCamera();
-  }
-
-  Future<void> _endCall() async {
+  Future<void> _endCall({bool remote = false}) async {
+    if (_ending) return;
+    _ending = true;
     if (!mounted) return;
-    if (_agoraActive) {
-      await ref.read(agoraCallServiceProvider).leave();
+    _log.info(remote ? 'Call ended remotely' : 'Call ended locally');
+    // AgoraCallView's dispose() runs `client.release()` when the parent
+    // widget unmounts via pushReplacementNamed, so there's nothing to
+    // tear down imperatively here.
+    if (!remote && _callId != null && _selfUserId != null) {
+      final repo = ref.read(callSessionRepositoryProvider);
+      if (repo != null) {
+        try {
+          await repo.end(callId: _callId!, byUserId: _selfUserId!);
+        } catch (e, st) {
+          _log.error('Could not flip call to ended in Supabase', e, st);
+        }
+      }
     }
+    // Date video is over — drop presence back to plain "online".
+    ref.read(presenceControllerProvider).setIntent(PresenceStatus.online);
+    ref.read(precallStateProvider.notifier).state = 'ended';
+    DebugObserver.instance.markEnded(); // debug-observer
     if (!mounted) return;
-    // Replace the call route with the post-call screen so back-navigation
-    // doesn't bounce the user back into the (now ended) call.
     context.pushReplacementNamed(AppRoute.postCall.name);
   }
 
   @override
   void dispose() {
     _ticker?.cancel();
-    _agoraSub?.cancel();
-    // The service disposes itself via Riverpod onDispose when the provider
-    // is invalidated, but to be safe we also fire leave() here. It's
-    // idempotent.
-    if (_agoraActive) {
-      ref.read(agoraCallServiceProvider).leave();
-    }
+    _peerReadyTimer?.cancel();
+    _joiningTimer?.cancel();
+    _sessionSub?.cancel();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    final progress = _remaining.inSeconds /
-        AppConfig.maxCallDuration.inSeconds.clamp(1, 1 << 30);
-
-    return AppScaffold(
-      glowIntensity: 0.6,
-      body: Column(
-        children: [
-          const SizedBox(height: AppSpacing.md),
-          _TopBar(
-            remaining: _remaining,
-            progress: progress,
-            timeLeftLabel: l10n.callTimeLeft,
-            liveLabel: l10n.callLive,
-          ),
-          const SizedBox(height: AppSpacing.lg),
-          Expanded(
-            child: _CallStage(
-              agoraActive: _agoraActive,
-              agoraState: _agoraState,
-              showDemoNotice: !Env.agoraConfigured,
-            ),
-          ),
-          const SizedBox(height: AppSpacing.lg),
-          _Controls(
-            micOn: _micOn,
-            videoOn: _videoOn,
-            agoraActive: _agoraActive,
-            micLabel: _micOn ? l10n.callMute : l10n.callUnmute,
-            videoLabel: _videoOn ? l10n.callVideo : l10n.callVideoOff,
-            switchLabel: l10n.callSwitchCamera,
-            endLabel: l10n.callEnd,
-            onMicToggle: _toggleMic,
-            onVideoToggle: _toggleVideo,
-            onSwitchCamera: _switchCamera,
-            onEnd: _endCall,
-          ),
-          const SizedBox(height: AppSpacing.md),
-        ],
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// The stage: real video tiles when Agora is up, blurred mock otherwise.
-// ---------------------------------------------------------------------------
-
-class _CallStage extends ConsumerWidget {
-  const _CallStage({
-    required this.agoraActive,
-    required this.agoraState,
-    required this.showDemoNotice,
-  });
-
-  final bool agoraActive;
-  final AgoraCallState agoraState;
-  final bool showDemoNotice;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final l10n = AppLocalizations.of(context);
     final match = ref.watch(activeMatchProvider);
     final candidate = match?.candidate;
     final name = candidate?.firstName ?? 'Anonymous';
     final age = candidate?.age;
-    final dist = match?.distanceKm;
 
-    return GlassCard(
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Column(
-            children: [
-              const SizedBox(height: AppSpacing.lg),
-              SizedBox(
-                height: 220,
-                width: 220,
-                child: agoraActive
-                    ? _AgoraRemoteVideo(state: agoraState, name: name)
-                    : const BlurredAvatar(size: 200)
-                        .animate(onPlay: (c) => c.repeat(reverse: true))
-                        .scaleXY(
-                          duration: 1800.ms,
-                          begin: 1,
-                          end: 1.04,
-                          curve: Curves.easeInOut,
-                        ),
-              ),
-              const SizedBox(height: AppSpacing.lg),
-              Text(
-                age != null ? '$name, $age' : name,
-                style: AppTypography.h2,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                dist != null ? '$dist km · live' : 'live',
-                style: AppTypography.body.copyWith(
-                  color: AppColors.textSecondary,
-                ),
-              ),
-              if (agoraActive && agoraState.remoteUid == null) ...[
-                const SizedBox(height: AppSpacing.sm),
-                Text(
-                  l10n.callWaitingPeer(name),
-                  style: AppTypography.caption.copyWith(
-                    color: AppColors.textTertiary,
-                  ),
-                ),
-              ],
-            ],
-          ),
-          Column(
-            children: [
-              if (showDemoNotice)
-                _DemoNotice(message: l10n.callDemoNotice)
-              else if (agoraActive)
-                _LocalVideoPip(state: agoraState),
-              const SizedBox(height: AppSpacing.sm),
-              Text(
-                l10n.callReminder,
-                textAlign: TextAlign.center,
-                style: AppTypography.caption.copyWith(
-                  color: AppColors.textSecondary,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _AgoraRemoteVideo extends ConsumerWidget {
-  const _AgoraRemoteVideo({required this.state, required this.name});
-
-  final AgoraCallState state;
-  final String name;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final engine = ref.read(agoraCallServiceProvider).engine;
-    final remoteUid = state.remoteUid;
-
-    if (engine == null || remoteUid == null) {
-      // Waiting for the peer to join — blurred placeholder keeps the
-      // privacy rule (no photo) intact.
-      return const BlurredAvatar(size: 200);
-    }
-
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(20),
-      child: AgoraVideoView(
-        controller: VideoViewController.remote(
-          rtcEngine: engine,
-          canvas: VideoCanvas(uid: remoteUid),
-          connection: const RtcConnection(channelId: ''),
+    // Pre-call: a calm, branded connecting screen — no abrupt black flash,
+    // no HUD over an empty video surface.
+    if (_precall != _PreCall.live) {
+      return AnnotatedRegion<SystemUiOverlayStyle>(
+        value: SystemUiOverlayStyle.light.copyWith(
+          statusBarColor: Colors.transparent,
+          statusBarIconBrightness: Brightness.light,
         ),
-      ),
-    );
-  }
-}
-
-class _LocalVideoPip extends ConsumerWidget {
-  const _LocalVideoPip({required this.state});
-
-  final AgoraCallState state;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final engine = ref.read(agoraCallServiceProvider).engine;
-    if (engine == null) return const SizedBox.shrink();
-    if (!state.cameraEnabled) {
-      return Container(
-        width: 96,
-        height: 128,
-        decoration: BoxDecoration(
-          color: AppColors.surfaceElevated,
-          borderRadius: AppRadius.brMd,
-          border: Border.all(color: AppColors.hairline),
-        ),
-        alignment: Alignment.center,
-        child: const Icon(
-          Icons.videocam_off_rounded,
-          color: AppColors.textTertiary,
+        child: Scaffold(
+          backgroundColor: AppColors.background,
+          body: _ConnectingView(
+            phase: _bootstrapFailed ? null : _precall,
+            peerName: candidate?.firstName,
+            onCancel: _cancelPreCall,
+          ),
         ),
       );
     }
 
-    return Align(
-      alignment: Alignment.centerRight,
-      child: Container(
-        width: 96,
-        height: 128,
-        decoration: BoxDecoration(
-          borderRadius: AppRadius.brMd,
-          border: Border.all(color: AppColors.hairline),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: AgoraVideoView(
-          controller: VideoViewController(
-            rtcEngine: engine,
-            canvas: const VideoCanvas(uid: 0),
-          ),
-        ),
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.light.copyWith(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.light,
+        statusBarBrightness: Brightness.dark,
       ),
-    );
-  }
-}
+      child: Scaffold(
+        backgroundColor: AppColors.background,
+        resizeToAvoidBottomInset: false,
+        body: Stack(
+          fit: StackFit.expand,
+          children: [
+            // Agora UIKit takes the call from here. _precall == live
+            // guarantees the channel name + call id are both set.
+            (_channelName == null || _callId == null)
+                ? const _LoadingHint()
+                : AgoraCallView(
+                    callId: _callId!,
+                    channelName: _channelName!,
+                    onLeave: () {
+                      if (mounted && !_ending) _endCall();
+                    },
+                  ),
 
-class _DemoNotice extends StatelessWidget {
-  const _DemoNotice({required this.message});
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.md,
-        vertical: AppSpacing.sm,
-      ),
-      decoration: BoxDecoration(
-        color: AppColors.warning.withValues(alpha: 0.12),
-        borderRadius: AppRadius.brSm,
-        border: Border.all(color: AppColors.warning.withValues(alpha: 0.4)),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.info_outline_rounded,
-              color: AppColors.warning, size: 18),
-          const SizedBox(width: AppSpacing.sm),
-          Expanded(
-            child: Text(
-              message,
-              style: AppTypography.caption.copyWith(
-                color: AppColors.warning,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Top bar + Controls (unchanged from before, but Controls grew a
-// "switch camera" tile + only enables it in real Agora mode).
-// ---------------------------------------------------------------------------
-
-class _TopBar extends StatelessWidget {
-  const _TopBar({
-    required this.remaining,
-    required this.progress,
-    required this.timeLeftLabel,
-    required this.liveLabel,
-  });
-
-  final Duration remaining;
-  final double progress;
-  final String timeLeftLabel;
-  final String liveLabel;
-
-  @override
-  Widget build(BuildContext context) {
-    return GlassCard(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.md,
-        vertical: AppSpacing.sm,
-      ),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 36,
-            height: 36,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                SizedBox(
-                  width: 36,
-                  height: 36,
-                  child: CircularProgressIndicator(
-                    value: progress,
-                    strokeWidth: 3,
-                    backgroundColor: AppColors.hairline,
-                    valueColor:
-                        const AlwaysStoppedAnimation(AppColors.brandPink),
+            // Top HUD — back + timer + EN DIRECT. SafeArea ensures the
+            // header sits below the iPhone notch.
+            SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.md,
+                  AppSpacing.sm,
+                  AppSpacing.md,
+                  0,
+                ),
+                child: Align(
+                  alignment: Alignment.topCenter,
+                  child: _Header(
+                    remaining: _remaining,
+                    onBack: () => _endCall(),
                   ),
                 ),
-                const Icon(Icons.timer_rounded,
-                    color: AppColors.textSecondary, size: 14),
-              ],
+              ),
             ),
-          ),
-          const SizedBox(width: AppSpacing.sm),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(timeLeftLabel, style: AppTypography.caption),
-                Text(
-                  remaining.toMmSs(),
-                  style: AppTypography.h3.copyWith(letterSpacing: 1),
+
+            // Bottom HUD — name plate + "Terminer le date" CTA, semi-
+            // transparent so the Jitsi UI behind remains tap-through
+            // wherever this isn't.
+            Align(
+              alignment: Alignment.bottomCenter,
+              child: SafeArea(
+                top: false,
+                child: Container(
+                  margin: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.md,
+                  ),
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.md,
+                    AppSpacing.sm,
+                    AppSpacing.md,
+                    AppSpacing.sm,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.45),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.12),
+                    ),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _NamePlate(name: name, age: age),
+                      const SizedBox(height: AppSpacing.sm),
+                      AppButton(
+                        label: 'Terminer le date',
+                        icon: Icons.call_end_rounded,
+                        onPressed: () => _endCall(),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Statut Supabase : $_supabaseCallStatus',
+                        style: AppTypography.caption.copyWith(
+                          color: Colors.white.withValues(alpha: 0.55),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Header — back button + compact timer + LIVE pill
+// ---------------------------------------------------------------------------
+
+class _Header extends StatelessWidget {
+  const _Header({required this.remaining, required this.onBack});
+
+  final Duration remaining;
+  final VoidCallback onBack;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 44,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Material(
+              color: Colors.transparent,
+              shape: const CircleBorder(),
+              child: InkWell(
+                onTap: onBack,
+                customBorder: const CircleBorder(),
+                child: Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.black.withValues(alpha: 0.45),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.15),
+                    ),
+                  ),
+                  alignment: Alignment.center,
+                  child: const Icon(
+                    Icons.chevron_left_rounded,
+                    color: Colors.white,
+                    size: 22,
+                  ),
+                ),
+              ),
             ),
           ),
           Container(
             padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.sm,
-              vertical: 6,
+              horizontal: AppSpacing.md,
+              vertical: 8,
             ),
             decoration: BoxDecoration(
-              color: AppColors.online.withValues(alpha: 0.18),
+              color: Colors.black.withValues(alpha: 0.45),
               borderRadius: AppRadius.brPill,
               border: Border.all(
-                color: AppColors.online.withValues(alpha: 0.5),
+                color: Colors.white.withValues(alpha: 0.15),
               ),
             ),
             child: Row(
@@ -503,19 +493,58 @@ class _TopBar extends StatelessWidget {
                   height: 6,
                   decoration: const BoxDecoration(
                     shape: BoxShape.circle,
-                    color: AppColors.online,
+                    color: AppColors.brandPink,
                   ),
                 ),
                 const SizedBox(width: 6),
                 Text(
-                  liveLabel,
-                  style: AppTypography.caption.copyWith(
-                    color: AppColors.online,
+                  remaining.toMmSs(),
+                  style: AppTypography.body.copyWith(
+                    color: Colors.white,
                     fontWeight: FontWeight.w700,
-                    letterSpacing: 1,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                    letterSpacing: 0.5,
                   ),
                 ),
               ],
+            ),
+          ),
+          Align(
+            alignment: Alignment.centerRight,
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.sm + 2,
+                vertical: 7,
+              ),
+              decoration: BoxDecoration(
+                color: AppColors.online.withValues(alpha: 0.22),
+                borderRadius: AppRadius.brPill,
+                border: Border.all(
+                  color: AppColors.online.withValues(alpha: 0.5),
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 6,
+                    height: 6,
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: AppColors.online,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    'EN DIRECT',
+                    style: AppTypography.caption.copyWith(
+                      color: AppColors.online,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
@@ -524,121 +553,249 @@ class _TopBar extends StatelessWidget {
   }
 }
 
-class _Controls extends StatelessWidget {
-  const _Controls({
-    required this.micOn,
-    required this.videoOn,
-    required this.agoraActive,
-    required this.micLabel,
-    required this.videoLabel,
-    required this.switchLabel,
-    required this.endLabel,
-    required this.onMicToggle,
-    required this.onVideoToggle,
-    required this.onSwitchCamera,
-    required this.onEnd,
-  });
+// ---------------------------------------------------------------------------
+// Name plate
+// ---------------------------------------------------------------------------
 
-  final bool micOn;
-  final bool videoOn;
-  final bool agoraActive;
-  final String micLabel;
-  final String videoLabel;
-  final String switchLabel;
-  final String endLabel;
-  final VoidCallback onMicToggle;
-  final VoidCallback onVideoToggle;
-  final VoidCallback onSwitchCamera;
-  final VoidCallback onEnd;
+class _NamePlate extends StatelessWidget {
+  const _NamePlate({required this.name, required this.age});
+
+  final String name;
+  final int? age;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-      children: [
-        _CircleAction(
-          icon: micOn ? Icons.mic_rounded : Icons.mic_off_rounded,
-          label: micLabel,
-          onTap: onMicToggle,
+    final title = age != null ? '$name, $age' : name;
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.sm,
+      ),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.08),
+        borderRadius: AppRadius.brPill,
+        border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
+      ),
+      child: Text(
+        title,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        softWrap: false,
+        style: AppTypography.body.copyWith(
+          color: Colors.white,
+          fontWeight: FontWeight.w700,
         ),
-        _CircleAction(
-          icon: videoOn ? Icons.videocam_rounded : Icons.videocam_off_rounded,
-          label: videoLabel,
-          onTap: onVideoToggle,
-        ),
-        if (agoraActive)
-          _CircleAction(
-            icon: Icons.cameraswitch_rounded,
-            label: switchLabel,
-            onTap: onSwitchCamera,
-          ),
-        _CircleAction(
-          icon: Icons.call_end_rounded,
-          label: endLabel,
-          onTap: onEnd,
-          danger: true,
-        ),
-      ],
+      ),
     );
   }
 }
 
-class _CircleAction extends StatelessWidget {
-  const _CircleAction({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-    this.danger = false,
-  });
+// ---------------------------------------------------------------------------
+// Loading hint while the session row is being created/fetched
+// ---------------------------------------------------------------------------
 
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-  final bool danger;
+class _LoadingHint extends StatelessWidget {
+  const _LoadingHint();
 
   @override
   Widget build(BuildContext context) {
-    final color = danger ? AppColors.error : AppColors.surfaceElevated;
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: onTap,
-            customBorder: const CircleBorder(),
-            child: Container(
-              width: 64,
-              height: 64,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: color,
-                border: Border.all(
-                  color: danger
-                      ? AppColors.error.withValues(alpha: 0.4)
-                      : AppColors.hairline,
-                ),
-                boxShadow: danger
-                    ? [
-                        BoxShadow(
-                          color: AppColors.error.withValues(alpha: 0.5),
-                          blurRadius: 24,
-                          offset: const Offset(0, 6),
-                        ),
-                      ]
-                    : null,
-              ),
-              child: Icon(
-                icon,
-                color: danger ? Colors.white : AppColors.textPrimary,
-                size: 24,
-              ),
-            ),
+        const SizedBox(
+          height: 28,
+          width: 28,
+          child: CircularProgressIndicator(
+            strokeWidth: 2.5,
+            valueColor: AlwaysStoppedAnimation(AppColors.brandPink),
           ),
         ),
-        const SizedBox(height: 6),
-        Text(label, style: AppTypography.caption),
+        const SizedBox(height: AppSpacing.md),
+        Text(
+          'Préparation du salon…',
+          style: AppTypography.caption.copyWith(
+            color: AppColors.textSecondary,
+          ),
+        ),
       ],
     );
   }
 }
+
+// ---------------------------------------------------------------------------
+// Pre-call connecting screen — calm transition before the video mounts
+// ---------------------------------------------------------------------------
+
+/// Full-screen "Connexion du date…" experience. [phase] null signals a
+/// bootstrap failure and switches the view to a non-technical error.
+class _ConnectingView extends StatelessWidget {
+  const _ConnectingView({
+    required this.phase,
+    required this.peerName,
+    required this.onCancel,
+  });
+
+  final _PreCall? phase;
+  final String? peerName;
+  final VoidCallback onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    if (phase == null) {
+      return _ErrorState(onCancel: onCancel);
+    }
+    final (title, subtitle) = switch (phase!) {
+      _PreCall.opening => (
+          'Préparation de votre date',
+          'On installe le salon vidéo…',
+        ),
+      _PreCall.waitingPeer => (
+          'Nous avons trouvé quelqu\'un',
+          peerName != null
+              ? 'On attend que $peerName se connecte…'
+              : 'On attend que votre date se connecte…',
+        ),
+      _PreCall.joining => (
+          'Connexion du date…',
+          'Caméra floutée — la révélation, c\'est pour la fin ✨',
+        ),
+      _PreCall.live => ('', ''),
+    };
+    final joining = phase == _PreCall.joining;
+
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+        child: Column(
+          children: [
+            const Spacer(flex: 2),
+            _PulseHeart(active: joining),
+            const SizedBox(height: AppSpacing.xl),
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 350),
+              child: Text(
+                title,
+                key: ValueKey(title),
+                textAlign: TextAlign.center,
+                style: AppTypography.h1,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 350),
+              child: Text(
+                subtitle,
+                key: ValueKey(subtitle),
+                textAlign: TextAlign.center,
+                style: AppTypography.body
+                    .copyWith(color: AppColors.textSecondary),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            SizedBox(
+              width: 28,
+              height: 28,
+              child: CircularProgressIndicator(
+                strokeWidth: 2.4,
+                valueColor: AlwaysStoppedAnimation(
+                  joining ? AppColors.online : AppColors.brandPink,
+                ),
+              ),
+            ),
+            const Spacer(flex: 3),
+            // Always offer an exit so the user is never trapped here.
+            AppButton(
+              label: 'Annuler',
+              variant: AppButtonVariant.secondary,
+              onPressed: onCancel,
+            ),
+            const SizedBox(height: AppSpacing.lg),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PulseHeart extends StatelessWidget {
+  const _PulseHeart({required this.active});
+
+  /// When true the heart pulses faster + glows brighter (join flourish).
+  final bool active;
+
+  @override
+  Widget build(BuildContext context) {
+    final core = Container(
+      width: 108,
+      height: 108,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: AppColors.brandGradient,
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.brandPink.withValues(alpha: active ? 0.6 : 0.4),
+            blurRadius: active ? 48 : 32,
+            spreadRadius: active ? 8 : 4,
+          ),
+        ],
+      ),
+      child: const Icon(Icons.favorite_rounded,
+          color: Colors.white, size: 46),
+    );
+    return core
+        .animate(onPlay: (c) => c.repeat(reverse: true))
+        .scaleXY(
+          duration: (active ? 700 : 1100).ms,
+          begin: 1,
+          end: active ? 1.12 : 1.06,
+          curve: Curves.easeInOut,
+        );
+  }
+}
+
+class _ErrorState extends StatelessWidget {
+  const _ErrorState({required this.onCancel});
+
+  final VoidCallback onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+        child: Column(
+          children: [
+            const Spacer(flex: 2),
+            const Icon(
+              Icons.cloud_off_rounded,
+              size: 64,
+              color: AppColors.textTertiary,
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            Text(
+              'Connexion impossible',
+              textAlign: TextAlign.center,
+              style: AppTypography.h2,
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              'On n\'a pas pu démarrer ce date. Vérifie ta connexion '
+              'et réessaie dans un instant.',
+              textAlign: TextAlign.center,
+              style:
+                  AppTypography.body.copyWith(color: AppColors.textSecondary),
+            ),
+            const Spacer(flex: 3),
+            AppButton(
+              label: 'Retour',
+              size: AppButtonSize.large,
+              onPressed: onCancel,
+            ),
+            const SizedBox(height: AppSpacing.lg),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
