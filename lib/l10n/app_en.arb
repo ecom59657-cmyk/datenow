@@ -59,7 +59,8 @@
   "homeGreetingNight": "Good night",
   "homeFallbackName": "there",
   "youAreOnline": "You are online",
-  "findDateTitle": "Find a date now",
+  "findDateTitle": "Find a date",
+  "findDateHook": "Ready for a date tonight?",
   "findDateSubtitle": "Get matched with someone online and compatible. Live, in seconds.",
   "findDateNotAuthenticated": "You need to sign in first.",
   "findDateProfileIncomplete": "Finish your profile to start matching.",
@@ -86,7 +87,7 @@
   "discoverTitle": "Discover",
   "discoverSubtitle": "Browse profiles you crossed paths with on a live date.",
   "discoverEmptyTitle": "No profiles yet",
-  "discoverEmptyBody": "Profiles you swap with after a live date will show up here. Go to Home and tap \"Find a date now\" to get started.",
+  "discoverEmptyBody": "Profiles you swap with after a live date will show up here. Go to Home and tap \"Find a date\" to get started.",
 
   "profileTitle": "Profile",
   "profileSignOut": "Sign out",
