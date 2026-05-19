@@ -6,7 +6,6 @@ import 'package:go_router/go_router.dart';
 import '../../l10n/app_localizations.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
-import '../theme/app_typography.dart';
 
 /// Persistent shell hosting the bottom nav. Renders the active tab via
 /// [StatefulShellRoute.indexedStack] so each branch keeps its own navigation
@@ -27,10 +26,12 @@ class MainShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    // Emoji-only tabs: instantly readable, no text. The accessible name
+    // (l10n label) is kept on each button via Semantics.
     final tabs = <_NavItem>[
-      _NavItem(label: l10n.navHome, icon: Icons.home_rounded),
-      _NavItem(label: l10n.navDiscover, icon: Icons.explore_rounded),
-      _NavItem(label: l10n.navProfile, icon: Icons.person_rounded),
+      _NavItem(label: l10n.navHome, emoji: '🏠'),
+      _NavItem(label: l10n.navDiscover, emoji: '✨'),
+      _NavItem(label: l10n.navProfile, emoji: '👤'),
     ];
 
     return Scaffold(
@@ -47,10 +48,12 @@ class MainShell extends StatelessWidget {
 }
 
 class _NavItem {
-  const _NavItem({required this.label, required this.icon});
+  const _NavItem({required this.label, required this.emoji});
 
+  /// Accessible name — surfaced to screen readers even though the bar
+  /// only renders an emoji.
   final String label;
-  final IconData icon;
+  final String emoji;
 }
 
 class _GlassNavBar extends StatelessWidget {
@@ -120,51 +123,51 @@ class _NavButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color =
-        selected ? AppColors.textPrimary : AppColors.textTertiary;
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(28),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 220),
-          curve: Curves.easeOut,
-          margin: const EdgeInsets.all(6),
-          decoration: selected
-              ? BoxDecoration(
-                  gradient: AppColors.brandGradient,
-                  borderRadius: BorderRadius.circular(22),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.brandPink.withValues(alpha: 0.35),
-                      blurRadius: 16,
-                      offset: const Offset(0, 6),
-                    ),
-                  ],
-                )
-              : null,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(item.icon,
-                  color: selected ? Colors.white : color, size: 22),
-              if (selected) ...[
-                const SizedBox(width: 6),
-                Flexible(
-                  child: Text(
-                    item.label,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppTypography.caption.copyWith(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 13,
-                    ),
-                  ),
+    // Active: a luminous brand-gradient pill with a soft pink glow.
+    // Inactive: no pill, just the emoji dimmed down so it stays visible
+    // but clearly secondary.
+    return Semantics(
+      label: item.label,
+      button: true,
+      selected: selected,
+      excludeSemantics: true,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(28),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOut,
+            margin: const EdgeInsets.all(6),
+            alignment: Alignment.center,
+            decoration: selected
+                ? BoxDecoration(
+                    gradient: AppColors.brandGradient,
+                    borderRadius: BorderRadius.circular(22),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.brandPink.withValues(alpha: 0.45),
+                        blurRadius: 18,
+                        spreadRadius: 1,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
+                  )
+                : null,
+            child: AnimatedScale(
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeOutBack,
+              scale: selected ? 1.18 : 1.0,
+              child: AnimatedOpacity(
+                duration: const Duration(milliseconds: 220),
+                opacity: selected ? 1.0 : 0.45,
+                child: Text(
+                  item.emoji,
+                  style: const TextStyle(fontSize: 22, height: 1.0),
                 ),
-              ],
-            ],
+              ),
+            ),
           ),
         ),
       ),

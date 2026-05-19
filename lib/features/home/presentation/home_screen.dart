@@ -34,9 +34,12 @@ class HomeScreen extends ConsumerWidget {
         physics: const BouncingScrollPhysics(),
         children: [
           const SizedBox(height: AppSpacing.md),
-          HomeHeader(displayName: user?.displayName ?? user?.email)
-              .animate()
-              .fadeIn(duration: 350.ms),
+          HomeHeader(
+            displayName: user?.displayName ?? user?.email,
+            // Tapping the avatar switches to the Profile tab via the
+            // existing shell branch — no new screen, no extra route.
+            onAvatarTap: () => context.goNamed(AppRoute.profile.name),
+          ).animate().fadeIn(duration: 350.ms),
           const SizedBox(height: AppSpacing.xl),
           MatchCtaCard(
             onPressed: () => _onFindDate(context, ref),
@@ -69,6 +72,9 @@ class HomeScreen extends ConsumerWidget {
             icon: Icons.favorite_rounded,
             value: l10n.newLikesValue(4),
             label: l10n.newLikesLabel,
+            // Tapping the "new likes" tile switches to the Discover tab via
+            // the existing shell branch.
+            onTap: () => context.goNamed(AppRoute.discover.name),
           ),
           const SizedBox(height: AppSpacing.xl),
           Text(l10n.howItWorks, style: AppTypography.h3),

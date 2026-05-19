@@ -9,9 +9,13 @@ import '../../../../shared/widgets/status_pill.dart';
 import '../../../profile/presentation/edit/providers/profile_photos_provider.dart';
 
 class HomeHeader extends StatelessWidget {
-  const HomeHeader({super.key, this.displayName});
+  const HomeHeader({super.key, this.displayName, this.onAvatarTap});
 
   final String? displayName;
+
+  /// Tapping the avatar opens the Profile space. Navigation is owned by the
+  /// caller so this widget stays a pure presentation component.
+  final VoidCallback? onAvatarTap;
 
   @override
   Widget build(BuildContext context) {
@@ -38,7 +42,7 @@ class HomeHeader extends StatelessWidget {
             ],
           ),
         ),
-        const _AvatarBadge(),
+        _AvatarBadge(onTap: onAvatarTap),
       ],
     );
   }
@@ -53,35 +57,53 @@ class HomeHeader extends StatelessWidget {
 }
 
 class _AvatarBadge extends ConsumerWidget {
-  const _AvatarBadge();
+  const _AvatarBadge({this.onTap});
+
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     const size = 52.0;
     final image = ref.watch(primaryProfilePhotoProvider).asData?.value;
 
-    if (image != null) {
-      return Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          image: DecorationImage(image: image, fit: BoxFit.cover),
-          border: Border.all(color: AppColors.hairline, width: 2),
-        ),
-      );
-    }
+    final Widget avatar = image != null
+        ? Container(
+            width: size,
+            height: size,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              image: DecorationImage(image: image, fit: BoxFit.cover),
+              border: Border.all(color: AppColors.hairline, width: 2),
+            ),
+          )
+        : Container(
+            width: size,
+            height: size,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: AppColors.brandGradient,
+              border: Border.all(color: AppColors.hairline, width: 2),
+            ),
+            child: const Center(
+              child: Icon(Icons.person_rounded, color: Colors.white, size: 28),
+            ),
+          );
 
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: AppColors.brandGradient,
-        border: Border.all(color: AppColors.hairline, width: 2),
-      ),
-      child: const Center(
-        child: Icon(Icons.person_rounded, color: Colors.white, size: 28),
+    if (onTap == null) return avatar;
+
+    // Tappable: a circular ink ripple + haptic feedback signals the avatar
+    // is a shortcut to the Profile space.
+    return Semantics(
+      button: true,
+      label: AppLocalizations.of(context).navProfile,
+      child: Material(
+        color: Colors.transparent,
+        shape: const CircleBorder(),
+        child: InkWell(
+          onTap: onTap,
+          customBorder: const CircleBorder(),
+          child: avatar,
+        ),
       ),
     );
   }

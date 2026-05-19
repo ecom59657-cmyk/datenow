@@ -12,6 +12,7 @@ class StatTile extends StatelessWidget {
     required this.value,
     required this.label,
     this.accent,
+    this.onTap,
   });
 
   final IconData icon;
@@ -19,21 +20,38 @@ class StatTile extends StatelessWidget {
   final String label;
   final Color? accent;
 
+  /// When provided, the whole tile becomes tappable (ink ripple + haptic)
+  /// and shows a chevron so it reads as a navigation shortcut.
+  final VoidCallback? onTap;
+
   @override
   Widget build(BuildContext context) {
     final color = accent ?? AppColors.brandPink;
     return GlassCard(
       padding: const EdgeInsets.all(AppSpacing.md),
+      onTap: onTap,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.18),
-              borderRadius: AppRadius.brSm,
-            ),
-            child: Icon(icon, color: color, size: 18),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.18),
+                  borderRadius: AppRadius.brSm,
+                ),
+                child: Icon(icon, color: color, size: 18),
+              ),
+              if (onTap != null) ...[
+                const Spacer(),
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  color: AppColors.textTertiary,
+                  size: 22,
+                ),
+              ],
+            ],
           ),
           const SizedBox(height: AppSpacing.sm),
           Text(value, style: AppTypography.h2),
