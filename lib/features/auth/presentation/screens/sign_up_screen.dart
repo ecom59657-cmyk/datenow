@@ -186,6 +186,29 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
               textAlign: TextAlign.center,
               style: AppTypography.caption,
             ),
+            // Tappable Terms + Privacy links — Apple expects them within
+            // one tap of the sign-up CTA, not only from Settings.
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                TextButton(
+                  onPressed: busy
+                      ? null
+                      : () =>
+                          context.pushNamed(AppRoute.settingsTerms.name),
+                  child: Text(l10n.settingsTerms),
+                ),
+                const Text('·',
+                    style: TextStyle(color: AppColors.textTertiary)),
+                TextButton(
+                  onPressed: busy
+                      ? null
+                      : () => context
+                          .pushNamed(AppRoute.settingsPrivacyPolicy.name),
+                  child: Text(l10n.settingsPrivacyPolicy),
+                ),
+              ],
+            ),
             const SizedBox(height: AppSpacing.lg),
             Wrap(
               alignment: WrapAlignment.center,

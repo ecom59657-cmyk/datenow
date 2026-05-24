@@ -67,5 +67,9 @@ android/key.properties
 # Tooling
 .claude/
 
+# Flutter verbose build log dumps (regenerated on demand, no historical value)
+build_log.txt
+build_log*.txt
+
 # Supabase CLI local state
 supabase/.temp/

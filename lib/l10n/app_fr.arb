@@ -56,6 +56,8 @@
   "youAreOnline": "Vous êtes en ligne",
   "findDateTitle": "Trouver un date",
   "findDateHook": "Envie d'un date ce soir ?",
+  "homeHeroTitle": "Quelqu'un t'attend ce soir.",
+  "homeOnlineNow": "en ligne maintenant",
   "findDateSubtitle": "On vous met en relation avec quelqu'un en ligne et compatible. En direct, en quelques secondes.",
   "findDateNotAuthenticated": "Connecte-toi d'abord.",
   "findDateProfileIncomplete": "Termine ton profil pour commencer à matcher.",

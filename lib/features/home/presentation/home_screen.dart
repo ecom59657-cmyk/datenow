@@ -17,7 +17,7 @@ import '../../profile_setup/presentation/providers/profile_provider.dart';
 import '../../quota/data/quota_repository.dart';
 import '../../quota/presentation/widgets/quota_limit_sheet.dart';
 import 'widgets/home_header.dart';
-import 'widgets/match_cta_card.dart';
+import 'widgets/home_hero_card.dart';
 import 'widgets/stat_tile.dart';
 
 class HomeScreen extends ConsumerWidget {
@@ -41,7 +41,7 @@ class HomeScreen extends ConsumerWidget {
             onAvatarTap: () => context.goNamed(AppRoute.profile.name),
           ).animate().fadeIn(duration: 350.ms),
           const SizedBox(height: AppSpacing.xl),
-          MatchCtaCard(
+          HomeHeroCard(
             onPressed: () => _onFindDate(context, ref),
           ),
           const SizedBox(height: AppSpacing.xl),
@@ -183,7 +183,7 @@ class _HowItWorksCard extends StatelessWidget {
                 Container(
                   width: 28,
                   height: 28,
-                  decoration: BoxDecoration(
+                  decoration: const BoxDecoration(
                     gradient: AppColors.brandGradient,
                     borderRadius: AppRadius.brSm,
                   ),

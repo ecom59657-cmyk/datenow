@@ -26,6 +26,7 @@ import '../../matching/presentation/widgets/compatibility_badge.dart';
 import '../../profile_setup/data/profile_repository.dart';
 import '../../profile_setup/presentation/providers/profile_provider.dart';
 import '../../profile_setup/presentation/widgets/blurred_avatar.dart';
+import '../../safety/presentation/report_sheet.dart';
 import '../data/reveal_repository.dart';
 
 /// Post-call decision screen. Reveals the candidate photo + compatibility
@@ -64,17 +65,26 @@ class _PostCallScreenState extends ConsumerState<PostCallScreen> {
   }
 
   Future<void> _loadPeerPhoto() async {
-    // For MVP demo we don't ship real candidate photos. Reuse the current
-    // user's own primary photo as the stand-in so the reveal effect is
-    // demoable end-to-end. Real builds will pull the matched profile's
-    // primary photo from the repository.
-    final ownProfile = ref.read(currentProfileProvider).asData?.value;
-    final ownUrl = ownProfile?.primaryPhotoUrl;
-    if (ownUrl != null) {
-      final bytes =
-          await ref.read(profileRepositoryProvider).getPhotoBytes(ownUrl);
-      if (mounted) setState(() => _peerPhotoBytes = bytes);
-    }
+    // Load the *peer's* primary photo — never the current user's. Showing
+    // the wrong photo at reveal would convince testers the match is buggy.
+    // If the peer photo can't be resolved (no URL, or RLS denies storage
+    // before the match row exists), _PhotoReveal falls back to the
+    // blurred placeholder rather than surface a stranger's face.
+    final match = ref.read(activeMatchProvider);
+    if (match == null) return;
+    final peerId = match.candidate.userId;
+    final profileRepo = ref.read(profileRepositoryProvider);
+
+    // Refetch in case the cached candidate doesn't yet carry photo URLs
+    // (matching reads happen before the peer's photos become readable
+    // under the post-match RLS); fall back to the cached candidate so a
+    // refetch failure doesn't strip a URL we already had.
+    final peer = await profileRepo.getProfile(peerId) ?? match.candidate;
+    final url = peer.primaryPhotoUrl;
+    if (url == null) return;
+
+    final bytes = await profileRepo.getPhotoBytes(url);
+    if (mounted) setState(() => _peerPhotoBytes = bytes);
   }
 
   void _match() async {
@@ -343,6 +353,21 @@ class _PostCallScreenState extends ConsumerState<PostCallScreen> {
       appBar: AppBar(
         automaticallyImplyLeading: false,
         title: Text(l10n.postCallTitle),
+        actions: [
+          if (match != null)
+            IconButton(
+              tooltip:
+                  Localizations.localeOf(context).languageCode == 'fr'
+                      ? 'Signaler'
+                      : 'Report',
+              icon: const Icon(Icons.flag_outlined),
+              onPressed: () => showReportSheet(
+                context,
+                reportedUserId: match.candidate.userId,
+                reportedDisplayName: match.candidate.firstName,
+              ),
+            ),
+        ],
       ),
       body: body,
     );

@@ -53,10 +53,28 @@ class AuthLandingScreen extends StatelessWidget {
             onPressed: () => context.pushNamed(AppRoute.signIn.name),
           ).animate().fadeIn(delay: 500.ms).slideY(begin: 0.2, end: 0),
           const SizedBox(height: AppSpacing.lg),
+          // Apple expects easy access to Terms + Privacy from any pre-auth
+          // surface. Keep the legal sentence above the two tappable links.
           Text(
             l10n.authTerms,
             textAlign: TextAlign.center,
             style: AppTypography.caption,
+          ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              TextButton(
+                onPressed: () =>
+                    context.pushNamed(AppRoute.settingsTerms.name),
+                child: Text(l10n.settingsTerms),
+              ),
+              const Text('·', style: TextStyle(color: AppColors.textTertiary)),
+              TextButton(
+                onPressed: () =>
+                    context.pushNamed(AppRoute.settingsPrivacyPolicy.name),
+                child: Text(l10n.settingsPrivacyPolicy),
+              ),
+            ],
           ),
           const SizedBox(height: AppSpacing.md),
         ],

@@ -4,13 +4,6 @@
 <dict>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
-	<!-- DateNow — dates vidéo en direct (Agora) + photo de profil -->
-	<key>NSCameraUsageDescription</key>
-	<string>DateNow utilise la caméra pour vos dates vidéo de 5 minutes et pour ajouter votre photo de profil.</string>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>DateNow utilise le micro pendant vos dates vidéo en direct de 5 minutes.</string>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>DateNow accède à vos photos pour que vous puissiez choisir votre photo de profil.</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
@@ -33,6 +26,12 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>DateNow utilise la caméra pour vos dates vidéo de 5 minutes et pour ajouter votre photo de profil.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>DateNow utilise le micro pendant vos dates vidéo en direct de 5 minutes.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>DateNow accède à vos photos pour que vous puissiez choisir votre photo de profil.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

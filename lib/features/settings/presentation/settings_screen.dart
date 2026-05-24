@@ -42,9 +42,17 @@ class SettingsScreen extends ConsumerWidget {
       confirmLabel: l10n.deleteAccountConfirmAction,
     );
     if (!confirmed || !context.mounted) return;
-    await ref.read(authControllerProvider.notifier).deleteAccount();
-    if (!context.mounted) return;
-    context.showSnack(l10n.deletedAccountSnack);
+    try {
+      await ref.read(authControllerProvider.notifier).deleteAccount();
+      if (!context.mounted) return;
+      context.showSnack(l10n.deletedAccountSnack);
+    } catch (e) {
+      if (!context.mounted) return;
+      // Surface the failure so the user knows nothing happened and can
+      // retry or contact support — silently sliding back to settings
+      // after a "delete forever" tap would be misleading.
+      context.showSnack('$e');
+    }
   }
 
   @override

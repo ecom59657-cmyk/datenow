@@ -180,9 +180,32 @@ class SupabaseAuthRepository implements AuthRepository {
 
   @override
   Future<void> deleteAccount() async {
-    // TODO(datenow): call a Postgres function `delete_my_account` that wipes
-    // the user's profile, photos and linked rows server-side using the
-    // service role. Then sign the client out.
+    // 1. Wipe data + delete the auth.users row via the `delete-account`
+    //    Edge Function (it uses the service role, never shipped to the
+    //    client). If the function errored we still want to sign out
+    //    locally so a stale session can't reach a non-existent profile.
+    try {
+      final res = await _client.functions.invoke('delete-account');
+      if (res.status != 200) {
+        _log.error(
+          'delete-account returned ${res.status} data=${res.data}',
+        );
+        throw AuthFailure(
+          'Account deletion failed (server returned ${res.status}).',
+          code: 'delete_failed',
+        );
+      }
+    } on AuthFailure {
+      rethrow;
+    } catch (e, st) {
+      _log.error('delete-account invocation failed', e, st);
+      throw const AuthFailure(
+        'Account deletion failed. Please try again or contact support.',
+        code: 'delete_failed',
+      );
+    }
+    // 2. Local sign-out so the auth-state stream emits null and the
+    //    router redirects back to the auth landing.
     await _client.auth.signOut();
   }
 

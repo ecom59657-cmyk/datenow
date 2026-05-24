@@ -10,6 +10,7 @@ import '../../../shared/widgets/app_scaffold.dart';
 import '../../../shared/widgets/loading_indicator.dart';
 import '../../auth/presentation/providers/auth_provider.dart';
 import '../../profile_setup/data/profile_repository.dart';
+import '../../safety/presentation/report_sheet.dart';
 import '../data/messaging_repository.dart';
 import '../domain/conversation.dart';
 import '../domain/message.dart';
@@ -102,6 +103,14 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
       });
     });
 
+    final isFr = Localizations.localeOf(context).languageCode == 'fr';
+    final selfId = ref.watch(currentUserProvider)?.id;
+    final peerId = conversation == null || selfId == null
+        ? null
+        : (conversation.userAId == selfId
+            ? conversation.userBId
+            : conversation.userAId);
+
     return AppScaffold(
       glowIntensity: 0.5,
       applyHorizontalPadding: false,
@@ -109,6 +118,33 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
         leading: const BackButton(),
         title: _PeerTitle(conversation: conversation),
         centerTitle: false,
+        actions: [
+          if (peerId != null)
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert),
+              onSelected: (value) {
+                if (value == 'report') {
+                  showReportSheet(
+                    context,
+                    reportedUserId: peerId,
+                    reportedDisplayName: conversation?.peerFirstName,
+                  );
+                }
+              },
+              itemBuilder: (_) => [
+                PopupMenuItem(
+                  value: 'report',
+                  child: Row(
+                    children: [
+                      const Icon(Icons.flag_outlined, size: 18),
+                      const SizedBox(width: AppSpacing.sm),
+                      Text(isFr ? 'Signaler' : 'Report'),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+        ],
       ),
       body: Column(
         children: [

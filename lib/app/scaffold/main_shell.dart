@@ -26,12 +26,27 @@ class MainShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    // Emoji-only tabs: instantly readable, no text. The accessible name
-    // (l10n label) is kept on each button via Semantics.
+    // Sober, premium Material glyphs — no emoji, so nothing renders as a
+    // colored "cartoon" icon. Tinted white to match the home avatar; the
+    // Discover heart keeps a rose accent. Accessible names via Semantics.
     final tabs = <_NavItem>[
-      _NavItem(label: l10n.navHome, emoji: '🏠'),
-      _NavItem(label: l10n.navDiscover, emoji: '✨'),
-      _NavItem(label: l10n.navProfile, emoji: '👤'),
+      _NavItem(
+        label: l10n.navHome,
+        icon: Icons.home_rounded,
+        tint: Colors.white,
+      ),
+      _NavItem(
+        label: l10n.navDiscover,
+        icon: Icons.favorite_rounded,
+        tint: AppColors.brandPink,
+      ),
+      // Same glyph as the default home _AvatarBadge (Icons.person_rounded)
+      // so the tab visually points back to "your profile".
+      _NavItem(
+        label: l10n.navProfile,
+        icon: Icons.person_rounded,
+        tint: Colors.white,
+      ),
     ];
 
     return Scaffold(
@@ -48,12 +63,22 @@ class MainShell extends StatelessWidget {
 }
 
 class _NavItem {
-  const _NavItem({required this.label, required this.emoji});
+  const _NavItem({
+    required this.label,
+    required this.icon,
+    required this.tint,
+  });
 
   /// Accessible name — surfaced to screen readers even though the bar
-  /// only renders an emoji.
+  /// only renders an icon.
   final String label;
-  final String emoji;
+
+  /// Material glyph rendered in the bar — sober, minimalist, no emoji.
+  final IconData icon;
+
+  /// Base tint when the tab is inactive. Active tabs render white for
+  /// crisp contrast on the gradient pill.
+  final Color tint;
 }
 
 class _GlassNavBar extends StatelessWidget {
@@ -124,7 +149,7 @@ class _NavButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Active: a luminous brand-gradient pill with a soft pink glow.
-    // Inactive: no pill, just the emoji dimmed down so it stays visible
+    // Inactive: no pill, just the icon dimmed down so it stays visible
     // but clearly secondary.
     return Semantics(
       label: item.label,
@@ -162,9 +187,10 @@ class _NavButton extends StatelessWidget {
               child: AnimatedOpacity(
                 duration: const Duration(milliseconds: 220),
                 opacity: selected ? 1.0 : 0.45,
-                child: Text(
-                  item.emoji,
-                  style: const TextStyle(fontSize: 22, height: 1.0),
+                child: Icon(
+                  item.icon,
+                  size: 24,
+                  color: selected ? Colors.white : item.tint,
                 ),
               ),
             ),
