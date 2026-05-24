@@ -39,5 +39,40 @@ end
 post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
+    target.build_configurations.each do |config|
+      # Apple removed bitcode support in Xcode 14+. Force OFF for every
+      # pod target so the archive itself contains no bitcode references.
+      config.build_settings['ENABLE_BITCODE'] = 'NO'
+      # dSYMs for Release → fewer "Upload Symbols Failed" warnings at
+      # App Store ingestion.
+      if config.name == 'Release'
+        config.build_settings['DEBUG_INFORMATION_FORMAT'] = 'dwarf-with-dsym'
+      end
+    end
   end
+
+  # Agora ships its iOS xcframeworks with embedded bitcode. TestFlight
+  # rejects the build with "Invalid Executable — AgoraRtmKit.framework
+  # contains bitcode" (and the same for AgoraRtcKit, IrisRTC, …).
+  # bitcode_strip removes the bitcode Mach-O section in place — the
+  # executable code itself is untouched, so matching / RTC / RTM / video
+  # behaviour is unchanged.
+  bitcode_strip = `xcrun --find bitcode_strip`.chomp
+  if bitcode_strip.empty?
+    raise '[DateNow] bitcode_strip not found in the active Xcode toolchain'
+  end
+  pods_root = installer.sandbox.root.to_s
+  stripped = 0
+  Dir.glob(
+    "#{pods_root}/{AgoraRtm_iOS,AgoraRtcEngine_iOS,AgoraIrisRTC_iOS}/**/*.xcframework",
+  ).each do |xcf|
+    Dir.glob("#{xcf}/**/*.framework").each do |fw|
+      binary = File.join(fw, File.basename(fw, '.framework'))
+      next unless File.file?(binary)
+      if system("'#{bitcode_strip}' -r '#{binary}' -o '#{binary}' >/dev/null 2>&1")
+        stripped += 1
+      end
+    end
+  end
+  puts "[DateNow] Stripped bitcode from #{stripped} Agora framework binaries"
 end
