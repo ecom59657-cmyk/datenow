@@ -264,49 +264,83 @@ class _RouterNotifier extends ChangeNotifier {
   String? redirect(BuildContext context, GoRouterState state) {
     final auth = _ref.read(authStateProvider);
     final onboarding = _ref.read(onboardingCompletedProvider);
-
-    // Wait for both async providers to resolve once before navigating away
-    // from the splash screen.
-    if (auth.isLoading || onboarding.isLoading) {
-      return state.matchedLocation == AppRoute.splash.path
-          ? null
-          : AppRoute.splash.path;
-    }
-
-    final location = state.matchedLocation;
-    final isOnSplash = location == AppRoute.splash.path;
-    final isOnOnboarding = location == AppRoute.onboarding.path;
-    final isOnAuth = location.startsWith(AppRoute.authLanding.path);
-    final isOnProfileSetup = location == AppRoute.profileSetup.path;
-
-    final onboardingDone = onboarding.value ?? false;
-    final user = auth.value;
-
-    // 1) Onboarding first.
-    if (!onboardingDone && !isOnOnboarding) {
-      return AppRoute.onboarding.path;
-    }
-
-    // 2) Then auth.
-    if (onboardingDone && user == null) {
-      return isOnAuth ? null : AppRoute.authLanding.path;
-    }
-
-    // 3) Authenticated: gate the main app behind profile setup.
-    if (user != null) {
-      final profileComplete = _ref.read(profileSetupCompletedProvider);
-
-      if (!profileComplete) {
-        // Stay on profile setup until they complete it.
-        return isOnProfileSetup ? null : AppRoute.profileSetup.path;
-      }
-
-      // Profile complete: never sit on splash/onboarding/auth/profile-setup.
-      if (isOnSplash || isOnOnboarding || isOnAuth || isOnProfileSetup) {
-        return AppRoute.home.path;
-      }
-    }
-
-    return null;
+    final profile = _ref.read(currentProfileProvider);
+    return decideRedirect(
+      authLoading: auth.isLoading,
+      onboardingLoading: onboarding.isLoading,
+      onboardingDone: onboarding.value ?? false,
+      signedIn: auth.value != null,
+      profileLoading: profile.isLoading,
+      profileHasValue: profile.hasValue,
+      profileComplete: profile.value?.isComplete ?? false,
+      location: state.matchedLocation,
+    );
   }
+}
+
+/// Pure routing decision — extracted out of [_RouterNotifier] so it can be
+/// unit-tested with deterministic inputs. Returns the redirect target or
+/// `null` to stay on [location].
+///
+/// The five gates, in order:
+///   1. Auth or onboarding still loading → splash (never decide blind).
+///   2. Onboarding not done yet → /onboarding.
+///   3. Onboarded but not signed in → /auth.
+///   4. Signed in but the profile stream hasn't emitted yet → splash.
+///      ⚠ Returning users have a fully-completed profile in DB but it
+///      takes one round-trip to fetch on cold start; if we treated that
+///      loading window as "no profile" the router would bounce them to
+///      ProfileSetup 1/4 — the exact bug this layout exists to prevent.
+///   5. Signed in + profile loaded but not complete → /profile-setup.
+///   6. Signed in + profile complete → /home if currently on a pre-app
+///      surface, else stay put.
+@visibleForTesting
+String? decideRedirect({
+  required bool authLoading,
+  required bool onboardingLoading,
+  required bool onboardingDone,
+  required bool signedIn,
+  required bool profileLoading,
+  required bool profileHasValue,
+  required bool profileComplete,
+  required String location,
+}) {
+  final isOnSplash = location == AppRoute.splash.path;
+  final isOnOnboarding = location == AppRoute.onboarding.path;
+  final isOnAuth = location.startsWith(AppRoute.authLanding.path);
+  final isOnProfileSetup = location == AppRoute.profileSetup.path;
+
+  // 1. Auth / onboarding loading → splash.
+  if (authLoading || onboardingLoading) {
+    return isOnSplash ? null : AppRoute.splash.path;
+  }
+
+  // 2. Onboarding gate.
+  if (!onboardingDone && !isOnOnboarding) {
+    return AppRoute.onboarding.path;
+  }
+
+  // 3. Auth gate.
+  if (onboardingDone && !signedIn) {
+    return isOnAuth ? null : AppRoute.authLanding.path;
+  }
+
+  // 4. Profile stream still loading (returning user, cold start) → splash.
+  if (signedIn && profileLoading && !profileHasValue) {
+    return isOnSplash ? null : AppRoute.splash.path;
+  }
+
+  // 5. Signed in + profile decided but incomplete → /profile-setup.
+  if (signedIn && !profileComplete) {
+    return isOnProfileSetup ? null : AppRoute.profileSetup.path;
+  }
+
+  // 6. Signed in + profile complete: clear any pre-app surface.
+  if (signedIn &&
+      profileComplete &&
+      (isOnSplash || isOnOnboarding || isOnAuth || isOnProfileSetup)) {
+    return AppRoute.home.path;
+  }
+
+  return null;
 }

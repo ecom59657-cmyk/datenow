@@ -15,11 +15,12 @@ final currentProfileProvider = StreamProvider<UserProfile?>((ref) {
   return ref.watch(profileRepositoryProvider).watchProfile(user.id);
 });
 
-/// Convenience boolean used by the router redirect.
-///
-/// Returns `false` while the profile stream is loading so we don't briefly
-/// flash the home screen on cold start. Once the stream resolves, the value
-/// reflects `UserProfile.isComplete` (or `false` when no profile exists).
+/// Convenience boolean — only meaningful AFTER the profile stream has
+/// resolved. Returns `false` for both "loading" and "no profile / not
+/// complete", so callers MUST gate on
+/// `currentProfileProvider.isLoading` first or they will treat a
+/// returning user as a brand-new one (bug fixed in app_router.dart's
+/// redirect — it now checks `currentProfileProvider` directly).
 final profileSetupCompletedProvider = Provider<bool>((ref) {
   final state = ref.watch(currentProfileProvider);
   return state.maybeWhen(
