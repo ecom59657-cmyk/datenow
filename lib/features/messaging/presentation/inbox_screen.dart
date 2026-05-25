@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../app/router/app_routes.dart';
@@ -46,15 +47,48 @@ class _InboxScreenState extends ConsumerState<InboxScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) => _maybeAskPush());
   }
 
-  /// Shows the in-app push permission sheet ONCE per device, only when
-  /// Firebase is actually wired up (i.e. GoogleService-Info.plist is in
-  /// the bundle). If the user taps Activer we hand off to iOS for the
-  /// real system permission prompt.
+  /// Shows the in-app push permission sheet when:
+  ///   • Firebase is up (GoogleService-Info.plist bundled), AND
+  ///   • iOS permission is still `notDetermined` (we never asked OR the
+  ///     user reinstalled the app), AND
+  ///   • the user has no row in `device_tokens` yet.
+  ///
+  /// The SharedPreferences `push_asked_flag` is consulted but a missing
+  /// token always trumps the flag — that way a user who tapped "Plus
+  /// tard" once but never registered still gets nudged on later visits
+  /// (until they explicitly decline at the iOS system prompt, after
+  /// which the iOS status becomes `denied` and we stop nudging).
   Future<void> _maybeAskPush() async {
     if (!mounted) return;
-    if (!PushNotificationsService.instance.isAvailable) return;
-    final prefs = await SharedPreferences.getInstance();
-    if (prefs.getBool(_pushAskedFlag) ?? false) return;
+    final push = PushNotificationsService.instance;
+    if (!push.isAvailable) {
+      const AppLogger('Push').info(
+        'inbox: skip sheet — Firebase not ready '
+        '(lastInitError=${'…check Push logs at startup'})',
+      );
+      return;
+    }
+    final status = await push.currentAuthorizationStatus();
+    // Already granted → no need to show our sheet again.
+    if (status == AuthorizationStatus.authorized ||
+        status == AuthorizationStatus.provisional) {
+      // But check that the token landed in device_tokens — Apple may
+      // have rotated it, or the previous upsert may have failed.
+      final hasToken = await push.hasRegisteredTokenForCurrentUser();
+      if (!hasToken) {
+        const AppLogger('Push').info(
+          'inbox: permission granted but no token row — re-registering',
+        );
+        // ignore: discarded_futures
+        push.requestPermissionAndRegister();
+      }
+      return;
+    }
+    // User explicitly denied at the system prompt — we can't re-show
+    // the OS dialog, so just stop nudging.
+    if (status == AuthorizationStatus.denied) return;
+    // status == notDetermined (or null when getNotificationSettings
+    // failed). Show the in-app explainer + button.
     if (!mounted) return;
     final accepted = await showModalBottomSheet<bool>(
       context: context,
@@ -66,9 +100,10 @@ class _InboxScreenState extends ConsumerState<InboxScreen>
       ),
       builder: (_) => const _PushPermissionSheet(),
     );
+    final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_pushAskedFlag, true);
     if (accepted == true) {
-      await PushNotificationsService.instance.requestPermissionAndRegister();
+      await push.requestPermissionAndRegister();
     }
   }
 

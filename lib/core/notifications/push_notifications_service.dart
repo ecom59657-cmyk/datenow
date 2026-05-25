@@ -34,6 +34,7 @@ class PushNotificationsService {
 
   bool _initialized = false;
   bool _firebaseReady = false;
+  String? _lastInitError;
   FirebaseMessaging? _fm;
 
   /// True once Firebase is up and the iOS APNs bridge is wired. False
@@ -41,16 +42,22 @@ class PushNotificationsService {
   /// case every public method is a no-op.
   bool get isAvailable => _firebaseReady;
 
+  /// Human-readable reason explaining why [isAvailable] is false (null
+  /// when init succeeded or hasn't run yet). Useful for surfacing a
+  /// "Push disabled because…" hint in a debug screen.
+  String? get lastInitError => _lastInitError;
+
   /// Called from `main()`. Never throws — a missing Firebase config
   /// just disables push features for this run.
   Future<void> initialize() async {
     if (_initialized) return;
     _initialized = true;
+    _log.info('init: starting Firebase + APNs bridge…');
     try {
       await Firebase.initializeApp();
       _fm = FirebaseMessaging.instance;
       _firebaseReady = true;
-      _log.info('Firebase ready — APNs bridge available');
+      _log.info('init: Firebase ready — APNs bridge available');
 
       // iOS: show the system banner / play sound / update badge even
       // when the app is foreground (otherwise iOS suppresses the
@@ -64,7 +71,10 @@ class PushNotificationsService {
 
       // Token refresh — Apple may rotate the APNs token (reinstall,
       // restore, debug ↔ prod). Persist the new value automatically.
-      _fm!.onTokenRefresh.listen(_persistToken);
+      _fm!.onTokenRefresh.listen((t) {
+        _log.info('onTokenRefresh fired');
+        _persistToken(t);
+      });
 
       // Foreground tap → conversation deep link.
       FirebaseMessaging.onMessageOpenedApp.listen(_handleTap);
@@ -81,22 +91,72 @@ class PushNotificationsService {
       // ignore: discarded_futures
       _logCurrentTokenWithRetry();
     } catch (e, st) {
+      _lastInitError = '$e';
       _log.warn(
-        'Firebase init skipped — push notifications disabled for this '
-        'session ($e). Drop GoogleService-Info.plist into ios/Runner/ '
-        'to enable.\n$st',
+        '╔════════════════════════════════════════════════════════════════╗\n'
+        '║ FIREBASE INIT FAILED — push notifications disabled this run     ║\n'
+        '╚════════════════════════════════════════════════════════════════╝\n'
+        'Reason: $e\n'
+        'Most likely cause: GoogleService-Info.plist not bundled in the iOS\n'
+        'app (must be at ios/Runner/GoogleService-Info.plist AND referenced\n'
+        'in Xcode under the Runner target → Copy Bundle Resources).\n'
+        'Stack:\n$st',
       );
+    }
+  }
+
+  /// Snapshot of the current iOS notification permission, without
+  /// triggering a prompt. Returns null if Firebase isn't ready. Useful
+  /// for deciding whether to show the in-app permission sheet.
+  Future<AuthorizationStatus?> currentAuthorizationStatus() async {
+    final fm = _fm;
+    if (!_firebaseReady || fm == null) return null;
+    try {
+      final settings = await fm.getNotificationSettings();
+      _log.info(
+        'currentAuthorizationStatus = ${settings.authorizationStatus.name}',
+      );
+      return settings.authorizationStatus;
+    } catch (e) {
+      _log.warn('getNotificationSettings failed: $e');
+      return null;
+    }
+  }
+
+  /// True if the signed-in user already has at least one row in
+  /// `device_tokens`. Used by the inbox to re-prompt when the
+  /// SharedPreferences "already asked" flag is stale (e.g. user denied,
+  /// app reinstalled, token never landed in the DB).
+  Future<bool> hasRegisteredTokenForCurrentUser() async {
+    try {
+      final client = Supabase.instance.client;
+      final userId = client.auth.currentUser?.id;
+      if (userId == null) return false;
+      final rows = await client
+          .from('device_tokens')
+          .select('id')
+          .eq('user_id', userId)
+          .limit(1);
+      final has = (rows as List).isNotEmpty;
+      _log.info('hasRegisteredToken($userId) = $has');
+      return has;
+    } catch (e) {
+      _log.warn('hasRegisteredToken failed: $e');
+      return false;
     }
   }
 
   /// Request iOS notification permission + persist the APNs token.
   /// Called from the in-app permission sheet (first Messages tab open
-  /// or first match). Returns `true` if the user granted and the token
-  /// was stored.
+  /// or first match) and from the Profile "Activer les notifications"
+  /// row. Returns `true` if the user granted and the token was stored.
   Future<bool> requestPermissionAndRegister() async {
     final fm = _fm;
     if (!_firebaseReady || fm == null) {
-      _log.info('requestPermission ignored — Firebase not ready');
+      _log.warn(
+        'requestPermission ignored — Firebase not ready '
+        '(lastInitError=${_lastInitError ?? "n/a"})',
+      );
       return false;
     }
     final settings = await fm.requestPermission(
@@ -104,21 +164,75 @@ class PushNotificationsService {
       badge: true,
       sound: true,
     );
-    final granted =
-        settings.authorizationStatus == AuthorizationStatus.authorized ||
-            settings.authorizationStatus == AuthorizationStatus.provisional;
+    final status = settings.authorizationStatus;
+    final granted = status == AuthorizationStatus.authorized ||
+        status == AuthorizationStatus.provisional;
     _log.info(
-      'requestPermission → ${settings.authorizationStatus.name}'
-      ' (granted=$granted)',
+      'requestPermission → ${status.name} (granted=$granted, '
+      'alert=${settings.alert.name}, sound=${settings.sound.name}, '
+      'badge=${settings.badge.name})',
     );
-    if (!granted) return false;
-    final token = await fm.getAPNSToken();
+    if (!granted) {
+      switch (status) {
+        case AuthorizationStatus.denied:
+          _log.warn(
+            'iOS reports DENIED. User must enable in Réglages → DateNow → '
+            'Notifications (we cannot re-prompt programmatically).',
+          );
+        case AuthorizationStatus.notDetermined:
+          _log.warn(
+            'iOS reports NOT_DETERMINED after requestPermission — this is '
+            'rare and usually means the system prompt failed to display '
+            '(check that aps-environment is set in Runner.entitlements and '
+            'that Push Notifications capability is enabled in Xcode).',
+          );
+        default:
+          break;
+      }
+      return false;
+    }
+
+    // iOS may take a moment to assign the token after the user grants
+    // permission. Retry a few times with backoff before giving up.
+    final token = await _getAPNSTokenWithRetry();
     if (token == null) {
-      _log.warn('getAPNSToken returned null — token not registered');
+      _log.warn(
+        'getAPNSToken returned null after retries. Likely causes:\n'
+        '  • running on simulator (APNs unsupported)\n'
+        '  • iOS Developer Mode not enabled on the device\n'
+        '  • aps-environment entitlement missing from Runner.entitlements\n'
+        '  • Push Notifications capability not enabled in Xcode\n'
+        '  • Apple Developer Console: bundle id com.datenow.app has no '
+        'Push Notifications capability\n',
+      );
       return false;
     }
     await _persistToken(token);
     return true;
+  }
+
+  /// Poll `getAPNSToken()` a handful of times because iOS sometimes
+  /// returns null right after `registerForRemoteNotifications` and
+  /// resolves a second or two later.
+  Future<String?> _getAPNSTokenWithRetry() async {
+    final fm = _fm;
+    if (fm == null) return null;
+    for (var attempt = 1; attempt <= 6; attempt++) {
+      try {
+        final token = await fm.getAPNSToken();
+        if (token != null && token.isNotEmpty) {
+          _log.info(
+            'getAPNSToken success on attempt $attempt (len=${token.length})',
+          );
+          return token;
+        }
+        _log.info('getAPNSToken attempt $attempt → null, retrying…');
+      } catch (e) {
+        _log.warn('getAPNSToken attempt $attempt threw: $e');
+      }
+      await Future<void>.delayed(Duration(milliseconds: 500 * attempt));
+    }
+    return null;
   }
 
   /// Upserts the (user_id, token) pair into `public.device_tokens`.
@@ -129,27 +243,41 @@ class PushNotificationsService {
       final client = Supabase.instance.client;
       final userId = client.auth.currentUser?.id;
       if (userId == null) {
-        _log.info('persistToken skipped — no signed-in user');
+        _log.warn(
+          'persistToken skipped — no signed-in Supabase user. Token will '
+          'be re-tried on the next onTokenRefresh or sign-in.',
+        );
         return;
       }
-      await client.from('device_tokens').upsert(
-        {
-          'user_id': userId,
-          'platform': 'ios',
-          'token': token,
-          'updated_at': DateTime.now().toUtc().toIso8601String(),
-        },
-        onConflict: 'user_id,token',
-      );
+      final response = await client
+          .from('device_tokens')
+          .upsert(
+            {
+              'user_id': userId,
+              'platform': 'ios',
+              'token': token,
+              'updated_at': DateTime.now().toUtc().toIso8601String(),
+            },
+            onConflict: 'user_id,token',
+          )
+          .select('id, user_id, updated_at')
+          .maybeSingle();
       _log.info(
-        'persistToken upserted (token suffix=…${token.substring(token.length - 6)})',
+        'persistToken upserted user=$userId '
+        'suffix=…${token.substring(token.length - 6)} '
+        'row=$response',
       );
       // TEMP DEBUG — also log the FULL token so it can be copied straight
       // out of `flutter logs` / Xcode console for end-to-end testing.
       // REMOVE before TestFlight public rollout. Grep: [TEMP-APNS-TOKEN]
       _log.warn('[TEMP-APNS-TOKEN] $token');
+    } on PostgrestException catch (e, st) {
+      _log.warn(
+        'persistToken Postgrest error: code=${e.code} '
+        'message=${e.message} details=${e.details}\n$st',
+      );
     } catch (e, st) {
-      _log.warn('persistToken failed (will retry on refresh): $e\n$st');
+      _log.warn('persistToken failed (${e.runtimeType}): $e\n$st');
     }
   }
 
