@@ -75,26 +75,39 @@ class _PostCallScreenState extends ConsumerState<PostCallScreen> {
     _loadPeerPhoto();
   }
 
+  /// Loads the *peer's* primary photo (never the current user's).
+  ///
+  /// Called at three points:
+  ///   1. initState — RLS likely blocks here (no mutual reveal yet) and
+  ///      bytes stay null. That's expected.
+  ///   2. _onReveals when transitioning to _Stage.mutual — the
+  ///      `*_select_mutual_reveal` policies just opened access, so this
+  ///      is the real-fetch attempt.
+  ///   3. anywhere else as a manual refresh.
+  ///
+  /// Logs verbosely (debug only via AppLogger) so the source of any
+  /// blank photo is observable from the device console.
   Future<void> _loadPeerPhoto() async {
-    // Load the *peer's* primary photo — never the current user's. Showing
-    // the wrong photo at reveal would convince testers the match is buggy.
-    // If the peer photo can't be resolved (no URL, or RLS denies storage
-    // before the match row exists), _PhotoReveal falls back to the
-    // blurred placeholder rather than surface a stranger's face.
     final match = ref.read(activeMatchProvider);
-    if (match == null) return;
+    if (match == null) {
+      _log.warn('loadPeerPhoto: no activeMatch');
+      return;
+    }
     final peerId = match.candidate.userId;
     final profileRepo = ref.read(profileRepositoryProvider);
+    _log.info('loadPeerPhoto: peerId=$peerId');
 
-    // Refetch in case the cached candidate doesn't yet carry photo URLs
-    // (matching reads happen before the peer's photos become readable
-    // under the post-match RLS); fall back to the cached candidate so a
-    // refetch failure doesn't strip a URL we already had.
+    // Refetch through the repo so RLS-relaxed policies kick in. If the
+    // refetch fails fall back to the cached candidate.
     final peer = await profileRepo.getProfile(peerId) ?? match.candidate;
     final url = peer.primaryPhotoUrl;
+    _log.info('loadPeerPhoto: primaryPhotoUrl=${url ?? '∅'}');
     if (url == null) return;
 
     final bytes = await profileRepo.getPhotoBytes(url);
+    _log.info(
+      'loadPeerPhoto: bytes=${bytes == null ? '∅ (null)' : '${bytes.length} bytes'}',
+    );
     if (mounted) setState(() => _peerPhotoBytes = bytes);
   }
 
@@ -240,6 +253,10 @@ class _PostCallScreenState extends ConsumerState<PostCallScreen> {
         // Match/Pass buttons). The permanent match row is created only
         // when the user taps Matcher (_confirmMatch), not implicitly.
         setState(() => _stage = _Stage.mutual);
+        // RLS just opened on user_photos + the profile-photos bucket
+        // (see 20260525150000_reveal_photo_access.sql) — the initial
+        // load at initState was blocked, retry now that we're allowed.
+        unawaited(_loadPeerPhoto());
       case RevealOutcome.declined:
         _revealTimeoutTimer?.cancel();
         DebugLog.reveal('declined'); // debug-observer
@@ -557,8 +574,16 @@ class _MutualRevealView extends StatelessWidget {
         ),
         const SizedBox(height: AppSpacing.sm),
         const Spacer(),
+        // peerPhotoBytes lands asynchronously after the mutual outcome
+        // triggers _loadPeerPhoto. While the bytes are in flight, show
+        // a soft skeleton — NOT the "Photo cachée" silhouette which
+        // would lie about the state. If bytes never arrive (peer has
+        // no photo somehow, RLS error), the skeleton is replaced by an
+        // explicit message after a short timeout.
         Center(
-          child: _PhotoReveal(revealed: true, bytes: peerPhotoBytes),
+          child: peerPhotoBytes == null
+              ? const _PhotoLoadingSkeleton()
+              : _PhotoReveal(revealed: true, bytes: peerPhotoBytes),
         ),
         const SizedBox(height: AppSpacing.lg),
         if (candidate != null)
@@ -584,6 +609,45 @@ class _MutualRevealView extends StatelessWidget {
         ),
         const SizedBox(height: AppSpacing.lg),
       ],
+    );
+  }
+}
+
+/// Lightweight placeholder shown on the mutual-reveal view between the
+/// outcome flip and the peer photo bytes landing. Matches the dimensions
+/// of `_PhotoReveal` post-reveal so the layout doesn't jump when the
+/// real image swaps in.
+class _PhotoLoadingSkeleton extends StatelessWidget {
+  const _PhotoLoadingSkeleton();
+
+  static const double _maxWidth = 360;
+  static const double _aspect = 4 / 5;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth.clamp(0.0, _maxWidth);
+        final height = width / _aspect;
+        return Container(
+          width: width,
+          height: height,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(28),
+            color: AppColors.surface,
+            border: Border.all(color: AppColors.hairlineSoft),
+          ),
+          alignment: Alignment.center,
+          child: const SizedBox(
+            width: 28,
+            height: 28,
+            child: CircularProgressIndicator(
+              strokeWidth: 2.5,
+              valueColor: AlwaysStoppedAnimation(AppColors.brandPink),
+            ),
+          ),
+        );
+      },
     );
   }
 }
