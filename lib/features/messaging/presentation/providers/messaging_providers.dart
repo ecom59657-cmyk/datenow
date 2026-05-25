@@ -15,6 +15,21 @@ final inboxProvider = StreamProvider<List<Conversation>>((ref) {
   return ref.watch(messagingRepositoryProvider).watchInbox(user.id);
 });
 
+/// Live count of incoming unread messages — drives the badge on the
+/// Messages bottom-nav tab. Recomputes whenever [inboxProvider] emits
+/// (the trigger on `messages` updates `last_message_at`, which is what
+/// the inbox stream observes), so a new message refreshes the badge
+/// without manual invalidation.
+final unreadMessagesCountProvider = FutureProvider<int>((ref) async {
+  final user = ref.watch(currentUserProvider);
+  if (user == null) return 0;
+  // Force re-eval on every inbox emission.
+  ref.watch(inboxProvider);
+  return ref
+      .read(messagingRepositoryProvider)
+      .unreadMessagesCount(user.id);
+});
+
 /// Live message stream for [conversationId]. Family-scoped so multiple
 /// chats can be opened in different routes without crossing wires.
 final conversationMessagesProvider =

@@ -54,6 +54,11 @@ abstract class MessagingRepository {
     required String conversationId,
     required String readerId,
   });
+
+  /// Total number of incoming unread messages across the user's
+  /// conversations. Drives the bottom-nav Messages badge. Returns 0 on
+  /// error so the UI never shows a stale or wrong count.
+  Future<int> unreadMessagesCount(String userId);
 }
 
 // ---------------------------------------------------------------------------
@@ -219,6 +224,20 @@ class MockMessagingRepository implements MessagingRepository {
       _emitInbox(conv.userBId);
     }
   }
+
+  @override
+  Future<int> unreadMessagesCount(String userId) async {
+    var n = 0;
+    for (final conv in _conversations.values) {
+      if (conv.userAId != userId && conv.userBId != userId) continue;
+      final msgs = _messages[conv.id];
+      if (msgs == null) continue;
+      for (final m in msgs) {
+        if (m.senderId != userId && m.readAt == null) n++;
+      }
+    }
+    return n;
+  }
 }
 
 extension on Iterable<Conversation> {
@@ -327,11 +346,15 @@ class SupabaseMessagingRepository implements MessagingRepository {
 
   @override
   Stream<List<Message>> watchMessages(String conversationId) {
+    // Supabase `.order()` defaults to ascending=false. We need oldest →
+    // newest so the ListView renders the conversation in chat-app order
+    // (oldest top, newest bottom) and `_scrollToBottom` lands on the
+    // most recent message.
     return _client
         .from('messages')
         .stream(primaryKey: ['id'])
         .eq('conversation_id', conversationId)
-        .order('created_at')
+        .order('created_at', ascending: true)
         .map(
           (rows) => rows.map(_mapMessage).toList(growable: false),
         );
@@ -425,6 +448,19 @@ class SupabaseMessagingRepository implements MessagingRepository {
         .eq('conversation_id', conversationId)
         .neq('sender_id', readerId)
         .isFilter('read_at', null);
+  }
+
+  @override
+  Future<int> unreadMessagesCount(String userId) async {
+    try {
+      final res = await _client.rpc<dynamic>('unread_messages_count');
+      if (res is int) return res;
+      if (res is num) return res.toInt();
+      return 0;
+    } catch (e) {
+      _log.warn('unread_messages_count failed: $e');
+      return 0;
+    }
   }
 }
 

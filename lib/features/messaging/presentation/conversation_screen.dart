@@ -36,6 +36,14 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
   final _scrollController = ScrollController();
   bool _readMarked = false;
 
+  /// Forces a hard jump-to-bottom on the very first emission so the
+  /// user lands on the latest message. Subsequent emissions only
+  /// auto-scroll if the user is already near the bottom (so reading
+  /// older messages isn't yanked away by a fresh incoming).
+  bool _initialScrollDone = false;
+  int _lastMessageCount = 0;
+  static const double _autoScrollThreshold = 80;
+
   @override
   void dispose() {
     _scrollController.dispose();
@@ -47,12 +55,36 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
     final user = ref.read(currentUserProvider);
     if (user == null) return;
     _readMarked = true;
-    ref.read(messagingRepositoryProvider).markAsRead(
+    ref
+        .read(messagingRepositoryProvider)
+        .markAsRead(
           conversationId: widget.conversationId,
           readerId: user.id,
-        );
+        )
+        .then((_) {
+      // `markAsRead` updates `messages.read_at` only — the inbox stream
+      // watches `conversations`, so it won't re-emit on its own. We
+      // invalidate BOTH:
+      //   • inboxProvider → re-hydrates each tile's `unreadCount` (the
+      //     per-conversation pink badge in the list),
+      //   • unreadMessagesCountProvider → re-fetches the bottom-nav
+      //     global counter (recomputed automatically once the inbox
+      //     emits, but invalidate is more responsive).
+      if (mounted) {
+        ref.invalidate(inboxProvider);
+        ref.invalidate(unreadMessagesCountProvider);
+      }
+    });
   }
 
+  /// Hard jump (no animation) — used for the initial landing on the
+  /// most recent message before the user has had a chance to scroll.
+  void _jumpToBottom() {
+    if (!_scrollController.hasClients) return;
+    _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+  }
+
+  /// Smooth scroll to the latest message.
   void _scrollToBottom() {
     if (!_scrollController.hasClients) return;
     _scrollController.animateTo(
@@ -60,6 +92,32 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
       duration: const Duration(milliseconds: 220),
       curve: Curves.easeOut,
     );
+  }
+
+  /// True when the user is within [_autoScrollThreshold] px of the
+  /// bottom — used to decide whether a fresh incoming should yank the
+  /// view down or leave them reading older messages in peace.
+  bool _isNearBottom() {
+    if (!_scrollController.hasClients) return true;
+    final pos = _scrollController.position;
+    return (pos.maxScrollExtent - pos.pixels) <= _autoScrollThreshold;
+  }
+
+  /// Called on every messages emission to react appropriately:
+  /// • first emission → hard jump to bottom (initial landing)
+  /// • new incoming while user is near the bottom → smooth scroll
+  /// • new incoming while user is reading older messages → no-op
+  void _handleMessagesUpdated(int newCount) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (!_initialScrollDone) {
+        _initialScrollDone = true;
+        _jumpToBottom();
+      } else if (newCount > _lastMessageCount && _isNearBottom()) {
+        _scrollToBottom();
+      }
+      _lastMessageCount = newCount;
+    });
   }
 
   Future<void> _send(String body) async {
@@ -94,14 +152,13 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
       orElse: () => null,
     );
 
-    // First successful render = mark all peer messages as read.
-    messagesAsync.whenData((_) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          _markReadOnce();
-          _scrollToBottom();
-        }
-      });
+    // Whenever the messages stream emits:
+    //  • mark all incoming peer messages as read (idempotent),
+    //  • land the user on the latest message on first paint, then only
+    //    auto-scroll on new arrivals if they're already near the bottom.
+    messagesAsync.whenData((msgs) {
+      _markReadOnce();
+      _handleMessagesUpdated(msgs.length);
     });
 
     final isFr = Localizations.localeOf(context).languageCode == 'fr';

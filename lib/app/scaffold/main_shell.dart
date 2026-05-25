@@ -1,12 +1,15 @@
 import 'dart:ui';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../features/messaging/presentation/providers/messaging_providers.dart';
 import '../../l10n/app_localizations.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
+import '../theme/app_typography.dart';
 import 'active_tab.dart';
 
 /// Persistent shell hosting the bottom nav. Renders the active tab via
@@ -59,6 +62,11 @@ class MainShell extends ConsumerWidget {
         label: l10n.navMessages,
         icon: Icons.chat_bubble_rounded,
         tint: Colors.white,
+        // Live unread badge. 0 = no badge, 1-9 = number, 10+ = "9+".
+        badge: ref.watch(unreadMessagesCountProvider).maybeWhen(
+              data: (n) => n,
+              orElse: () => 0,
+            ),
       ),
       // Same glyph as the default home _AvatarBadge (Icons.person_rounded)
       // so the tab visually points back to "your profile".
@@ -87,6 +95,7 @@ class _NavItem {
     required this.label,
     required this.icon,
     required this.tint,
+    this.badge = 0,
   });
 
   /// Accessible name — surfaced to screen readers even though the bar
@@ -99,6 +108,10 @@ class _NavItem {
   /// Base tint when the tab is inactive. Active tabs render white for
   /// crisp contrast on the gradient pill.
   final Color tint;
+
+  /// 0 = no badge ; 1-9 rendered literally ; >9 rendered as "9+".
+  /// Currently only used by the Messages tab (unread count).
+  final int badge;
 }
 
 class _GlassNavBar extends StatelessWidget {
@@ -207,16 +220,78 @@ class _NavButton extends StatelessWidget {
               child: AnimatedOpacity(
                 duration: const Duration(milliseconds: 220),
                 opacity: selected ? 1.0 : 0.45,
-                child: Icon(
-                  item.icon,
-                  size: 24,
+                child: _IconWithBadge(
+                  icon: item.icon,
                   color: selected ? Colors.white : item.tint,
+                  badge: item.badge,
                 ),
               ),
             ),
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Pure formatting of the unread-count label rendered in the bottom-nav
+/// badge. Exposed so the rule (≤0 → no badge, 1-9 → digit, 10+ → "9+")
+/// is unit-testable in isolation from the widget tree.
+@visibleForTesting
+String? formatUnreadBadge(int count) {
+  if (count <= 0) return null;
+  if (count > 9) return '9+';
+  return '$count';
+}
+
+/// Icon + optional unread-count badge. Small filled pink circle anchored
+/// to the icon's top-right corner — bottom-nav standard, premium DateNow
+/// tint. 0 → nothing rendered ; 1-9 → digit ; 10+ → "9+".
+class _IconWithBadge extends StatelessWidget {
+  const _IconWithBadge({
+    required this.icon,
+    required this.color,
+    required this.badge,
+  });
+
+  final IconData icon;
+  final Color color;
+  final int badge;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = formatUnreadBadge(badge);
+    return Stack(
+      clipBehavior: Clip.none,
+      alignment: Alignment.center,
+      children: [
+        Icon(icon, size: 24, color: color),
+        if (label != null)
+          Positioned(
+            top: -4,
+            right: -8,
+            child: Container(
+              constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+              decoration: BoxDecoration(
+                color: AppColors.brandPink,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppColors.surface, width: 1.5),
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                label,
+                style: AppTypography.caption.copyWith(
+                  color: Colors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  height: 1,
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }

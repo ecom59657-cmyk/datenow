@@ -11,6 +11,7 @@ import '../../../app/theme/app_typography.dart';
 import '../../../core/utils/extensions.dart';
 import '../../../core/utils/logger.dart';
 import '../../../l10n/app_localizations.dart';
+import '../../../shared/widgets/app_button.dart';
 import '../../../shared/widgets/app_scaffold.dart';
 import '../../../shared/widgets/glass_card.dart';
 import '../../auth/presentation/providers/auth_provider.dart';
@@ -152,6 +153,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     }
     _log.info('Profile complete for ${user.id}');
 
+    // 2.5. Photo guard — the reveal is the product payoff; no photo,
+    //      no point matching. Backed server-side too (claim_match raises
+    //      `photo_required`), so a tampered client can't bypass.
+    if (profile.primaryPhotoUrl == null) {
+      _log.warn('No primary photo → blocking match');
+      if (!context.mounted) return;
+      await _showPhotoRequiredSheet(context);
+      return;
+    }
+
     // 3. Quota — wrapped: a broken quota backend should NOT block the
     //    button. We log and proceed in that case.
     try {
@@ -181,6 +192,87 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       if (!context.mounted) return;
       context.showSnack(l10n.findDateError);
     }
+  }
+
+  /// Premium bottom sheet shown when the user taps "Find a date" without
+  /// a profile photo. Offers a one-tap path to the photos editor.
+  Future<void> _showPhotoRequiredSheet(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.lg,
+            AppSpacing.lg,
+            AppSpacing.lg,
+            AppSpacing.sm,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                width: 80,
+                height: 80,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: AppColors.brandGradient,
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.brandPink.withValues(alpha: 0.4),
+                      blurRadius: 24,
+                      spreadRadius: 2,
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.camera_alt_rounded,
+                  color: Colors.white,
+                  size: 36,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              Text(
+                l10n.findDatePhotoRequiredTitle,
+                textAlign: TextAlign.center,
+                style: AppTypography.h2,
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                l10n.findDatePhotoRequiredBody,
+                textAlign: TextAlign.center,
+                style: AppTypography.body
+                    .copyWith(color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              AppButton(
+                label: l10n.findDatePhotoRequiredCta,
+                icon: Icons.add_a_photo_rounded,
+                size: AppButtonSize.large,
+                onPressed: () {
+                  Navigator.of(sheetContext).pop();
+                  context.pushNamed(AppRoute.editPhotos.name);
+                },
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              AppButton(
+                label: l10n.findDatePhotoRequiredCancel,
+                variant: AppButtonVariant.secondary,
+                onPressed: () => Navigator.of(sheetContext).pop(),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 

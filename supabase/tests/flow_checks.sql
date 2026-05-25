@@ -44,6 +44,16 @@ SELECT 'fn available_date_proposals_today()',
               IS NOT NULL
        THEN 'PASS' ELSE 'FAIL' END
 UNION ALL
+SELECT 'fn unread_messages_count()',
+  CASE WHEN to_regprocedure('public.unread_messages_count()')
+              IS NOT NULL
+       THEN 'PASS' ELSE 'FAIL' END
+UNION ALL
+SELECT 'fn mark_conversation_read(uuid)',
+  CASE WHEN to_regprocedure('public.mark_conversation_read(uuid)')
+              IS NOT NULL
+       THEN 'PASS' ELSE 'FAIL' END
+UNION ALL
 SELECT 'table user_presence',
   CASE WHEN to_regclass('public.user_presence') IS NOT NULL
        THEN 'PASS' ELSE 'FAIL' END
