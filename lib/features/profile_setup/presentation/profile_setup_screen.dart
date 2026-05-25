@@ -97,11 +97,13 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
       await ref.read(onboardingControllerProvider).complete();
 
       if (!mounted) return;
-      _log.info('Redirecting to /home');
-      // Force the navigation explicitly. The router redirect would also
-      // pick this up via profileSetupCompletedProvider, but a direct goNamed
-      // removes any timing race between stream emission and the redirect.
-      context.goNamed(AppRoute.home.name);
+      _log.info('Redirecting to /permissions');
+      // Route through the permissions screen FIRST so iOS gets a chance
+      // to show the native camera/mic prompts before the user ever taps
+      // "match" — without this they reach the call screen with denied
+      // permissions and no path to recover. The permissions screen
+      // forwards to /home once both grants are in (or the user skips).
+      context.goNamed(AppRoute.permissions.name);
     } catch (e, st) {
       _log.error('Submit threw: $e', e, st);
       if (!mounted) return;

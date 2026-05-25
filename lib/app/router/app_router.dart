@@ -21,6 +21,7 @@ import '../../features/profile/presentation/edit/edit_photos_screen.dart';
 import '../../features/profile/presentation/edit/edit_preferences_screen.dart';
 import '../../features/profile/presentation/edit/edit_profile_screen.dart';
 import '../../features/profile/presentation/profile_screen.dart';
+import '../../features/permissions/presentation/permissions_screen.dart';
 import '../../features/profile_setup/presentation/profile_setup_screen.dart';
 import '../../features/settings/presentation/blocked_accounts_screen.dart';
 import '../../features/settings/presentation/debug_datenow_screen.dart';
@@ -90,6 +91,14 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: AppRoute.profileSetup.path,
         name: AppRoute.profileSetup.name,
         builder: (_, _) => const ProfileSetupScreen(),
+      ),
+
+      // Post-onboarding camera/mic permission ask. Reached once, right
+      // after profile completion — never on every launch.
+      GoRoute(
+        path: AppRoute.permissions.path,
+        name: AppRoute.permissions.name,
+        builder: (_, _) => const PermissionsScreen(),
       ),
 
       // Authenticated stack — main shell with bottom nav + full-screen routes.

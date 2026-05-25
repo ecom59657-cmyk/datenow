@@ -8,6 +8,7 @@ enum AppRoute {
   signUp('/auth/sign-up'),
   verifyEmail('/auth/verify-email'),
   profileSetup('/profile-setup'),
+  permissions('/permissions'),
   home('/home'),
   discover('/discover'),
   profile('/profile'),
