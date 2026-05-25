@@ -97,6 +97,10 @@
   "navHome": "Home",
   "navDiscover": "Discover",
   "navMessages": "Messages",
+  "pushPermissionTitle": "Enable DateNow notifications",
+  "pushPermissionBody": "Get a heads-up when a date sends you a message.",
+  "pushPermissionEnable": "Enable",
+  "pushPermissionLater": "Later",
   "navProfile": "Profile",
 
   "discoverTitle": "Discover",

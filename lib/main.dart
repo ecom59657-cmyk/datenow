@@ -7,6 +7,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'app/app.dart';
+import 'core/notifications/push_notifications_service.dart';
 import 'core/services/supabase_service.dart';
 import 'core/utils/logger.dart';
 
@@ -44,6 +45,11 @@ Future<void> main() async {
       }
 
       await SupabaseService.init();
+
+      // Wire Firebase Messaging as the iOS APNs bridge. Wrapped in the
+      // service so a missing GoogleService-Info.plist does not crash
+      // the app — push features just stay dormant.
+      await PushNotificationsService.instance.initialize();
 
       runApp(const ProviderScope(child: DateNowApp()));
     },

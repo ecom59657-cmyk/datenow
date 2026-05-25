@@ -39,12 +39,19 @@ import '../../features/splash/presentation/splash_screen.dart';
 import '../scaffold/main_shell.dart';
 import 'app_routes.dart';
 
+/// Global root navigator key — used by [PushNotificationsService] to
+/// deep-link to a conversation from a notification tap (which happens
+/// outside the widget tree, so we can't use BuildContext).
+final GlobalKey<NavigatorState> rootNavigatorKey =
+    GlobalKey<NavigatorState>(debugLabel: 'datenow-root');
+
 /// Builds the GoRouter for the app and wires it to Riverpod so auth +
 /// onboarding state can drive redirects.
 final routerProvider = Provider<GoRouter>((ref) {
   final notifier = _RouterNotifier(ref);
 
   return GoRouter(
+    navigatorKey: rootNavigatorKey,
     initialLocation: AppRoute.splash.path,
     refreshListenable: notifier,
     redirect: notifier.redirect,

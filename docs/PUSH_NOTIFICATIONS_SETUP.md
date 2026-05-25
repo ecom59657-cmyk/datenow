@@ -12,8 +12,8 @@ This doc lists what's still TODO to flip delivery on.
 | `device_tokens` table + RLS | ✅ migration `20260525160000_push_notifications.sql` (run `supabase db push`) |
 | Edge Function `message-notification` (APNs HTTP/2, JWT-signed) | ✅ `supabase/functions/message-notification/index.ts` (deploy with `supabase functions deploy message-notification`) |
 | In-app snackbar / sound on new message | ❌ **removed** — push is the new path. Unread badge stays. |
-| Token storage client-side | ⏸ TODO — see § "Flutter integration" below |
-| Permission request UX | ⏸ TODO — `permission_handler.Permission.notification.request()` after first match or first Messages tab open |
+| Token storage client-side | ✅ `lib/core/notifications/push_notifications_service.dart` — Firebase Messaging as the APNs bridge, upserts (`user_id`, `token`) into `device_tokens`, deep-links on tap |
+| Permission request UX | ✅ One-shot sheet on first Messages tab visit (`SharedPreferences` flag `push_perm_asked`) |
 | iOS Push Notifications capability + Background Modes | ⏸ TODO — Xcode steps below |
 | APNs key + Supabase secrets | ⏸ TODO — Apple + `supabase secrets set` below |
 
@@ -63,20 +63,50 @@ Then deploy the Edge Function once:
 supabase functions deploy message-notification
 ```
 
-## ⚠ Flutter integration (still to add)
+## ⚠ Firebase Console setup (one-time, manual)
 
-To complete the loop, pick one of:
+The Flutter side uses `firebase_messaging` as the iOS APNs bridge. To
+activate it you must create a free Firebase project and drop the iOS
+config plist into the repo:
 
-- **`firebase_messaging`** (recommended for cross-platform later). Adds a Firebase project + `GoogleService-Info.plist`. FCM-via-APNs receives the device token, which is registered in `device_tokens`. ⚠ adds Firebase dep.
-- **Native plugin (`flutter_apns_only` / custom)**. Direct APNs registration via `UIApplication.registerForRemoteNotifications()` in `AppDelegate.swift`, expose token to Dart via a `MethodChannel`. ⚠ requires custom Swift.
+1. Go to <https://console.firebase.google.com> → **Add project**.
+2. Name: `DateNow` (or `DateNow Prod`). Disable Google Analytics (we
+   don't want it).
+3. In the project → **iOS** icon to add an iOS app.
+4. **Apple bundle ID**: `com.datenow.app`. App nickname: `DateNow iOS`.
+5. **Download `GoogleService-Info.plist`**.
+6. Drop the file into `ios/Runner/` (the same folder as `Info.plist`).
+   This file is git-ignored by default — every dev needs their own
+   download from the Firebase Console.
+7. Upload the APNs auth key (`.p8`) to Firebase Console **Project
+   Settings → Cloud Messaging → Apple app config → APNs Authentication
+   Key → Upload**. Use the same key you already pushed to Supabase
+   secrets (`AuthKey_NA82N9J467.p8`).
+   *Note*: Firebase needs this so its iOS native SDK can register the
+   device with APNs (we still send the actual pushes ourselves via the
+   Edge Function — Firebase here is just a token broker).
 
-Whichever you pick, the Flutter side must:
+That's it for the Firebase side. Re-run `cd ios && pod install` once
+the plist is in place, then re-archive.
 
-1. Request `Permission.notification` from `permission_handler` (already in pubspec).
-2. On grant, register for remote notifications + capture the APNs device token (hex string).
-3. INSERT into `device_tokens` (`user_id`, `platform: 'ios'`, `token`).
-4. On notification tap with payload `{ "route": "/messages/<id>" }`, deep-link via GoRouter (`/messages/:id` already exists).
-5. On sign-out: DELETE the row to stop receiving pushes.
+## ⚠ Flutter integration — what's already wired
+
+- `firebase_core` + `firebase_messaging` added to `pubspec.yaml`.
+- `PushNotificationsService.initialize()` is called from `main.dart`.
+  If `GoogleService-Info.plist` is missing, init is silently skipped
+  (push features become a no-op — app still works).
+- On first Messages tab visit, a one-shot bottom sheet asks the user
+  whether to enable notifications. Tapping *Activer* fires the iOS
+  system prompt, then:
+  - `FirebaseMessaging.requestPermission()` →
+  - `getAPNSToken()` →
+  - upsert into `device_tokens` (`platform: 'ios'`, `user_id`, `token`,
+    `updated_at`).
+- `onTokenRefresh` listens for APNs token rotations (reinstall, restore,
+  prod ↔ debug swap) and re-upserts.
+- `onMessageOpenedApp` + `getInitialMessage` route the tap to
+  `/messages/<conversation_id>` via the global `rootNavigatorKey` (cold
+  start retries each frame until the router is mounted).
 
 ## Privacy
 

@@ -87,6 +87,10 @@
   "navHome": "Accueil",
   "navDiscover": "Découvrir",
   "navMessages": "Messages",
+  "pushPermissionTitle": "Active les notifications DateNow",
+  "pushPermissionBody": "Reçois une notification lorsqu'un date t'envoie un message.",
+  "pushPermissionEnable": "Activer",
+  "pushPermissionLater": "Plus tard",
   "navProfile": "Profil",
 
   "discoverTitle": "Découvrir",
