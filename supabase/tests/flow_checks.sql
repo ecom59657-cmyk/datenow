@@ -74,6 +74,10 @@ SELECT 'table messages',
   CASE WHEN to_regclass('public.messages') IS NOT NULL
        THEN 'PASS' ELSE 'FAIL' END
 UNION ALL
+SELECT 'table device_tokens',
+  CASE WHEN to_regclass('public.device_tokens') IS NOT NULL
+       THEN 'PASS' ELSE 'FAIL' END
+UNION ALL
 SELECT 'col matchmaking_queue.heartbeat_at',
   CASE WHEN EXISTS (SELECT 1 FROM information_schema.columns
         WHERE table_schema='public' AND table_name='matchmaking_queue'
