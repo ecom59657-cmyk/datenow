@@ -120,6 +120,15 @@ final routerProvider = Provider<GoRouter>((ref) {
               builder: (_, _) => const DiscoverScreen(),
             ),
           ]),
+          // Messages tab — root is the inbox; individual conversations
+          // push as a full-screen route outside the shell.
+          StatefulShellBranch(routes: [
+            GoRoute(
+              path: AppRoute.messages.path,
+              name: AppRoute.messages.name,
+              builder: (_, _) => const InboxScreen(),
+            ),
+          ]),
           StatefulShellBranch(routes: [
             GoRoute(
               path: AppRoute.profile.path,
@@ -221,11 +230,8 @@ final routerProvider = Provider<GoRouter>((ref) {
         name: AppRoute.postCall.name,
         builder: (_, _) => const PostCallScreen(),
       ),
-      GoRoute(
-        path: AppRoute.messages.path,
-        name: AppRoute.messages.name,
-        builder: (_, _) => const InboxScreen(),
-      ),
+      // /messages itself is the Messages tab inside the shell (above).
+      // Only the per-conversation full-screen route remains outside.
       GoRoute(
         path: AppRoute.conversation.path,
         name: AppRoute.conversation.name,

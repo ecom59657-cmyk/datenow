@@ -24,7 +24,7 @@ class ProfileScreen extends ConsumerStatefulWidget {
 class _ProfileScreenState extends ConsumerState<ProfileScreen>
     with TabScrollResetMixin {
   @override
-  int get tabIndex => 2; // Home=0, Discover=1, Profile=2
+  int get tabIndex => 3; // Home=0, Discover=1, Messages=2, Profile=3
 
   @override
   Widget build(BuildContext context) {

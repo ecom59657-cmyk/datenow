@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../app/router/app_routes.dart';
+import '../../../app/scaffold/active_tab.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../app/theme/app_typography.dart';
@@ -16,20 +17,33 @@ import 'widgets/conversation_tile.dart';
 /// The Messages inbox. Lists every conversation the current user has —
 /// each one is the result of a confirmed mutual match (no other path
 /// creates a conversation row, see `MessagingRepository.ensureConversation`).
-class InboxScreen extends ConsumerWidget {
+///
+/// Lives as the root of the Messages tab in [StatefulShellRoute] — no
+/// back arrow, scroll auto-resets to the top whenever the user returns.
+class InboxScreen extends ConsumerStatefulWidget {
   const InboxScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<InboxScreen> createState() => _InboxScreenState();
+}
+
+class _InboxScreenState extends ConsumerState<InboxScreen>
+    with TabScrollResetMixin {
+  @override
+  int get tabIndex => 2; // Home=0, Discover=1, Messages=2, Profile=3
+
+  @override
+  Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final inbox = ref.watch(inboxProvider);
 
     return AppScaffold(
       appBar: AppBar(
         title: Text(l10n.messagesTitle),
-        leading: const BackButton(),
+        automaticallyImplyLeading: false,
       ),
       body: ListView(
+        controller: tabScrollController,
         padding: const EdgeInsets.only(top: AppSpacing.md, bottom: 64),
         children: [
           Text(

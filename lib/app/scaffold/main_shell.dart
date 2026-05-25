@@ -53,6 +53,13 @@ class MainShell extends ConsumerWidget {
         icon: Icons.favorite_rounded,
         tint: AppColors.brandPink,
       ),
+      // Messages — reached only after a confirmed mutual match, so we
+      // place it right next to Discover (the pre-match surface).
+      _NavItem(
+        label: l10n.navMessages,
+        icon: Icons.chat_bubble_rounded,
+        tint: Colors.white,
+      ),
       // Same glyph as the default home _AvatarBadge (Icons.person_rounded)
       // so the tab visually points back to "your profile".
       _NavItem(

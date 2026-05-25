@@ -57,6 +57,11 @@ class _PostCallScreenState extends ConsumerState<PostCallScreen> {
   StreamSubscription<List<RevealRow>>? _revealSub;
   bool _matchPersisted = false;
 
+  /// Set once `_persistMatch` resolves with a conversation id — drives
+  /// the "Envoyer un message" CTA on the matched view. Stays null on a
+  /// `RevealOutcome.declined` outcome.
+  String? _matchedConversationId;
+
   @override
   void initState() {
     super.initState();
@@ -238,11 +243,18 @@ class _PostCallScreenState extends ConsumerState<PostCallScreen> {
     }
 
     // Open the private conversation — the only place chat is created.
+    // We capture the id so the matched view can offer a direct
+    // "Envoyer un message" CTA without forcing a detour through Messages.
     try {
-      await ref.read(messagingRepositoryProvider).ensureConversation(
+      final conv = await ref
+          .read(messagingRepositoryProvider)
+          .ensureConversation(
             currentUserId: selfId,
             peer: match.candidate,
           );
+      if (mounted) {
+        setState(() => _matchedConversationId = conv.id);
+      }
     } catch (e, st) {
       _log.error('ensureConversation failed (non-fatal)', e, st);
     }
@@ -305,6 +317,21 @@ class _PostCallScreenState extends ConsumerState<PostCallScreen> {
     context.pushReplacementNamed(AppRoute.matching.name);
   }
 
+  void _openConversation() {
+    final id = _matchedConversationId;
+    if (id == null) return;
+    ref.read(activeMatchProvider.notifier).state = null;
+    _log.info('Opening conversation $id after match');
+    if (!mounted) return;
+    // pushReplacement: the matched post-call should not sit underneath
+    // the chat in the back stack — closing the chat returns the user to
+    // Home / wherever the router redirect lands them.
+    context.pushReplacementNamed(
+      AppRoute.conversation.name,
+      pathParameters: {'id': id},
+    );
+  }
+
   @override
   void dispose() {
     _peerDecisionTimer?.cancel();
@@ -336,11 +363,15 @@ class _PostCallScreenState extends ConsumerState<PostCallScreen> {
           matched: true,
           onBackHome: _backHome,
           onFindAnother: _findAnother,
+          // Surfaced only once the conversation has been ensured server-side.
+          onSendMessage:
+              _matchedConversationId == null ? null : _openConversation,
         ),
       _Stage.noMatch => _ResolvedView(
           matched: false,
           onBackHome: _backHome,
           onFindAnother: _findAnother,
+          onSendMessage: null,
         ),
       _Stage.passed => _PassedView(
           onFindAnother: _findAnother,
@@ -536,11 +567,16 @@ class _ResolvedView extends StatelessWidget {
     required this.matched,
     required this.onBackHome,
     required this.onFindAnother,
+    required this.onSendMessage,
   });
 
   final bool matched;
   final VoidCallback onBackHome;
   final VoidCallback onFindAnother;
+  /// Null until [ensureConversation] has returned. When null the
+  /// "Envoyer un message" CTA is hidden so the user never taps a button
+  /// that would route to a missing chat.
+  final VoidCallback? onSendMessage;
 
   @override
   Widget build(BuildContext context) {
@@ -575,14 +611,26 @@ class _ResolvedView extends StatelessWidget {
           ),
         ),
         const Spacer(),
-        if (matched)
+        if (matched) ...[
+          if (onSendMessage != null) ...[
+            AppButton(
+              label: 'Envoyer un message',
+              icon: Icons.chat_bubble_rounded,
+              size: AppButtonSize.large,
+              onPressed: onSendMessage,
+            ),
+            const SizedBox(height: AppSpacing.sm),
+          ],
           AppButton(
             label: l10n.postCallBackHome,
             icon: Icons.home_rounded,
+            variant: onSendMessage == null
+                ? AppButtonVariant.primary
+                : AppButtonVariant.secondary,
             size: AppButtonSize.large,
             onPressed: onBackHome,
-          )
-        else ...[
+          ),
+        ] else ...[
           AppButton(
             label: l10n.postCallFindAnother,
             icon: Icons.bolt_rounded,
