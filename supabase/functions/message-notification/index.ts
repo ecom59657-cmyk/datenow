@@ -3,8 +3,7 @@
 //
 // Triggered by a Supabase Database Webhook on INSERT into
 // `public.messages`. Looks up the recipient's device_tokens row(s) and
-// sends a silent, content-minimal push to each via Apple's HTTP/2 APNs
-// endpoint.
+// sends a content-minimal push to each via Apple's HTTP/2 APNs endpoint.
 //
 // Privacy: the push body carries ONLY the sender's first name. The
 // message text is never included. The recipient's app fetches the
@@ -23,6 +22,10 @@
 // Until those secrets are present the function returns 503 — Apple
 // never delivers anything and DateNow keeps working (the unread badge
 // is enough). See docs/PUSH_NOTIFICATIONS_SETUP.md.
+//
+// Verbose logging: every step prints a `[push]` prefixed line so the
+// Supabase Functions Logs tab tells the complete story (webhook
+// received → recipient resolved → N tokens → M APNs status codes).
 // =============================================================================
 
 import { create as createJwt, getNumericDate } from "https://deno.land/x/djwt@v3.0.2/mod.ts";
@@ -49,94 +52,219 @@ const CORS = {
     "authorization, x-client-info, apikey, content-type",
 };
 
+function jsonResponse(status: number, body: Record<string, unknown>) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...CORS, "Content-Type": "application/json" },
+  });
+}
+
 Deno.serve(async (req) => {
+  const startedAt = Date.now();
+  console.log(
+    `[push] >>> ${req.method} ${new URL(req.url).pathname} ` +
+      `from ${req.headers.get("x-forwarded-for") ?? "?"}`,
+  );
+
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") {
+    console.warn(`[push] reject — method ${req.method} not allowed`);
     return new Response("method not allowed", { status: 405, headers: CORS });
   }
 
-  // Read required APNs secrets up front — if any is missing we bail out
-  // 503 and the call to the webhook fails fast (Supabase will surface
-  // the error in the dashboard).
+  // ── Secrets ────────────────────────────────────────────────────────────
   const apnsKey = Deno.env.get("APNS_KEY");
   const apnsKeyId = Deno.env.get("APNS_KEY_ID");
   const apnsTeamId = Deno.env.get("APNS_TEAM_ID");
   const apnsBundleId = Deno.env.get("APNS_BUNDLE_ID");
-  const apnsHost =
-    Deno.env.get("APNS_HOST") ?? "api.push.apple.com";
+  const apnsHost = Deno.env.get("APNS_HOST") ?? "api.push.apple.com";
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  console.log(
+    `[push] secrets check — apns_key=${!!apnsKey} key_id=${!!apnsKeyId} ` +
+      `team_id=${!!apnsTeamId} bundle=${!!apnsBundleId} host=${apnsHost} ` +
+      `supa_url=${!!supabaseUrl} service_key=${!!serviceKey}`,
+  );
   if (!apnsKey || !apnsKeyId || !apnsTeamId || !apnsBundleId) {
-    return new Response(
-      JSON.stringify({
-        error: "apns_not_configured",
-        hint: "Set APNS_KEY / APNS_KEY_ID / APNS_TEAM_ID / APNS_BUNDLE_ID secrets.",
-      }),
-      { status: 503, headers: { ...CORS, "Content-Type": "application/json" } },
-    );
+    console.error("[push] abort — apns secrets missing");
+    return jsonResponse(503, {
+      ok: false,
+      error: "apns_not_configured",
+      hint: "Set APNS_KEY / APNS_KEY_ID / APNS_TEAM_ID / APNS_BUNDLE_ID secrets.",
+    });
+  }
+  if (!supabaseUrl || !serviceKey) {
+    console.error("[push] abort — SUPABASE_URL / SERVICE_ROLE_KEY missing");
+    return jsonResponse(500, { ok: false, error: "supabase_env_missing" });
   }
 
-  const payload = (await req.json()) as MessagePayload;
-  if (payload?.table !== "messages" || payload?.type !== "INSERT") {
-    return new Response("ignored", { status: 200, headers: CORS });
+  // ── Parse webhook body ─────────────────────────────────────────────────
+  let raw: string;
+  try {
+    raw = await req.text();
+  } catch (e) {
+    console.error(`[push] abort — could not read body: ${e}`);
+    return jsonResponse(400, { ok: false, error: "no_body" });
   }
-
-  const supa = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+  console.log(
+    `[push] body (${raw.length} bytes): ${raw.slice(0, 1000)}` +
+      (raw.length > 1000 ? "…" : ""),
   );
 
-  // Resolve recipient (the other participant of the conversation) and
-  // the sender's first name. Both queries bypass RLS via service-role.
+  let payload: MessagePayload;
+  try {
+    payload = JSON.parse(raw) as MessagePayload;
+  } catch (e) {
+    console.error(`[push] abort — invalid JSON: ${e}`);
+    return jsonResponse(400, { ok: false, error: "invalid_json" });
+  }
+
+  console.log(
+    `[push] parsed — type=${payload?.type} schema=${payload?.schema} ` +
+      `table=${payload?.table} record_id=${payload?.record?.id} ` +
+      `conv=${payload?.record?.conversation_id} ` +
+      `sender=${payload?.record?.sender_id}`,
+  );
+
+  if (payload?.table !== "messages" || payload?.type !== "INSERT") {
+    console.log("[push] ignored — payload is not messages/INSERT");
+    return jsonResponse(200, {
+      ok: true,
+      ignored: true,
+      reason: "not_messages_insert",
+    });
+  }
+  if (!payload?.record?.conversation_id || !payload?.record?.sender_id) {
+    console.warn("[push] ignored — missing conversation_id or sender_id");
+    return jsonResponse(200, {
+      ok: true,
+      ignored: true,
+      reason: "missing_record_fields",
+    });
+  }
+
+  const supa = createClient(supabaseUrl, serviceKey);
+
+  // ── Resolve recipient ──────────────────────────────────────────────────
   const { data: convo, error: convErr } = await supa
     .from("conversations")
     .select("id, user_a_id, user_b_id")
     .eq("id", payload.record.conversation_id)
     .single();
   if (convErr || !convo) {
-    return new Response("conversation not found", { status: 404, headers: CORS });
+    console.error(
+      `[push] conversation lookup failed: code=${convErr?.code} ` +
+        `message=${convErr?.message} details=${convErr?.details}`,
+    );
+    return jsonResponse(404, {
+      ok: false,
+      error: "conversation_not_found",
+      conversation_id: payload.record.conversation_id,
+    });
   }
   const recipientId =
     convo.user_a_id === payload.record.sender_id
       ? convo.user_b_id
       : convo.user_a_id;
+  console.log(
+    `[push] convo ${convo.id} — user_a=${convo.user_a_id} ` +
+      `user_b=${convo.user_b_id} → recipient=${recipientId}`,
+  );
   if (recipientId === payload.record.sender_id) {
-    return new Response("self-send, no push", { status: 200, headers: CORS });
+    console.warn(
+      "[push] sender == recipient (self-send) — no push",
+    );
+    return jsonResponse(200, { ok: true, ignored: true, reason: "self_send" });
   }
 
-  const { data: sender } = await supa
+  // ── Resolve sender first name ─────────────────────────────────────────
+  const { data: sender, error: senderErr } = await supa
     .from("profiles")
     .select("first_name")
     .eq("id", payload.record.sender_id)
     .single();
-  const firstName = (sender?.first_name as string | undefined)?.trim() || "Quelqu'un";
-
-  // Look up every iOS device token registered for the recipient.
-  const { data: tokens } = await supa
-    .from("device_tokens")
-    .select("token")
-    .eq("user_id", recipientId)
-    .eq("platform", "ios");
-  if (!tokens || tokens.length === 0) {
-    return new Response("no device tokens", { status: 200, headers: CORS });
+  if (senderErr) {
+    console.warn(
+      `[push] sender profile lookup error (continuing): ` +
+        `code=${senderErr.code} message=${senderErr.message}`,
+    );
   }
+  const firstName =
+    ((sender?.first_name as string | undefined) ?? "").trim() || "Quelqu'un";
+  console.log(`[push] sender first_name = "${firstName}"`);
 
-  // Sign an APNs JWT (ES256 over the .p8 key). Apple expects this as
-  // the `authorization: bearer <jwt>` header on the HTTP/2 POST.
-  const keyPem = apnsKey.includes("-----BEGIN")
-    ? apnsKey
-    : `-----BEGIN PRIVATE KEY-----\n${apnsKey}\n-----END PRIVATE KEY-----`;
-  const keyPkcs8 = pemToArrayBuffer(keyPem);
-  const cryptoKey = await crypto.subtle.importKey(
-    "pkcs8",
-    keyPkcs8,
-    { name: "ECDSA", namedCurve: "P-256" },
-    false,
-    ["sign"],
+  // ── Look up device tokens ─────────────────────────────────────────────
+  const { data: tokens, error: tokensErr } = await supa
+    .from("device_tokens")
+    .select("token, platform, updated_at")
+    .eq("user_id", recipientId)
+    .eq("platform", "ios")
+    .not("token", "is", null);
+  if (tokensErr) {
+    console.error(
+      `[push] device_tokens lookup failed: code=${tokensErr.code} ` +
+        `message=${tokensErr.message} details=${tokensErr.details}`,
+    );
+    return jsonResponse(500, {
+      ok: false,
+      error: "device_tokens_lookup_failed",
+      message: tokensErr.message,
+    });
+  }
+  console.log(
+    `[push] device_tokens for ${recipientId}: count=${tokens?.length ?? 0}`,
   );
-  const jwt = await createJwt(
-    { alg: "ES256", typ: "JWT", kid: apnsKeyId },
-    { iss: apnsTeamId, iat: getNumericDate(0) },
-    cryptoKey,
+  if (!tokens || tokens.length === 0) {
+    console.warn(
+      `[push] no iOS tokens for recipient=${recipientId} — nothing to send`,
+    );
+    return jsonResponse(200, {
+      ok: true,
+      pushed: 0,
+      reason: "no_device_tokens",
+      recipient_id: recipientId,
+    });
+  }
+  console.log(
+    `[push] tokens (suffix only): ` +
+      tokens
+        .map((t: { token: string }) =>
+          "…" + t.token.slice(Math.max(0, t.token.length - 6))
+        )
+        .join(", "),
   );
+
+  // ── Sign APNs JWT ─────────────────────────────────────────────────────
+  let jwt: string;
+  try {
+    const keyPem = apnsKey.includes("-----BEGIN")
+      ? apnsKey
+      : `-----BEGIN PRIVATE KEY-----\n${apnsKey}\n-----END PRIVATE KEY-----`;
+    const keyPkcs8 = pemToArrayBuffer(keyPem);
+    const cryptoKey = await crypto.subtle.importKey(
+      "pkcs8",
+      keyPkcs8,
+      { name: "ECDSA", namedCurve: "P-256" },
+      false,
+      ["sign"],
+    );
+    jwt = await createJwt(
+      { alg: "ES256", typ: "JWT", kid: apnsKeyId },
+      { iss: apnsTeamId, iat: getNumericDate(0) },
+      cryptoKey,
+    );
+    console.log(
+      `[push] APNs JWT signed (kid=${apnsKeyId} iss=${apnsTeamId} ` +
+        `len=${jwt.length})`,
+    );
+  } catch (e) {
+    console.error(`[push] APNs JWT signing failed: ${e}`);
+    return jsonResponse(500, {
+      ok: false,
+      error: "jwt_signing_failed",
+      message: `${e}`,
+    });
+  }
 
   const apnsPayload = JSON.stringify({
     aps: {
@@ -148,26 +276,65 @@ Deno.serve(async (req) => {
     route: `/messages/${payload.record.conversation_id}`,
   });
 
-  // Fire one POST per token. Failures don't block the others.
-  await Promise.allSettled(
-    tokens.map(({ token }) =>
-      fetch(`https://${apnsHost}/3/device/${token}`, {
-        method: "POST",
-        headers: {
-          "authorization": `bearer ${jwt}`,
-          "apns-topic": apnsBundleId,
-          "apns-push-type": "alert",
-          "apns-priority": "10",
-          "content-type": "application/json",
-        },
-        body: apnsPayload,
-      }),
-    ),
+  // ── Send one POST per token, capturing every status ──────────────────
+  const results = await Promise.all(
+    tokens.map(async ({ token }: { token: string }) => {
+      const suffix = "…" + token.slice(Math.max(0, token.length - 6));
+      const url = `https://${apnsHost}/3/device/${token}`;
+      try {
+        const r = await fetch(url, {
+          method: "POST",
+          headers: {
+            "authorization": `bearer ${jwt}`,
+            "apns-topic": apnsBundleId,
+            "apns-push-type": "alert",
+            "apns-priority": "10",
+            "content-type": "application/json",
+          },
+          body: apnsPayload,
+        });
+        // APNs returns 200 with empty body on success, or 4xx/5xx with
+        // {"reason": "<ApnsError>"} on failure (BadDeviceToken,
+        // ExpiredProviderToken, TopicDisallowed, …). Log every case.
+        let bodyText = "";
+        try {
+          bodyText = await r.text();
+        } catch (_) {
+          // ignore — apple sometimes drops body
+        }
+        const apnsId = r.headers.get("apns-id");
+        if (r.status === 200) {
+          console.log(
+            `[push] APNs OK token=${suffix} apns-id=${apnsId}`,
+          );
+        } else {
+          console.error(
+            `[push] APNs FAIL token=${suffix} status=${r.status} ` +
+              `apns-id=${apnsId} body=${bodyText}`,
+          );
+        }
+        return { token_suffix: suffix, status: r.status, body: bodyText };
+      } catch (e) {
+        console.error(`[push] APNs network error token=${suffix}: ${e}`);
+        return { token_suffix: suffix, status: 0, error: `${e}` };
+      }
+    }),
   );
 
-  return new Response(JSON.stringify({ pushed: tokens.length }), {
-    status: 200,
-    headers: { ...CORS, "Content-Type": "application/json" },
+  const sent = results.filter((r) => r.status === 200).length;
+  const failed = results.length - sent;
+  const tookMs = Date.now() - startedAt;
+  console.log(
+    `[push] <<< done — pushed=${sent}/${results.length} ` +
+      `failed=${failed} took=${tookMs}ms`,
+  );
+  return jsonResponse(200, {
+    ok: true,
+    tokens_count: results.length,
+    pushes_sent: sent,
+    pushes_failed: failed,
+    took_ms: tookMs,
+    results,
   });
 });
 
