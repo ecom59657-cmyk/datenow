@@ -17,6 +17,7 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -38,23 +39,58 @@ class PushNotificationsService {
   String? _lastInitError;
   FirebaseMessaging? _fm;
 
-  /// The APNs environment of the *signed app* the user is running. Used
-  /// at upsert time so the Edge Function can route each push to the
-  /// matching Apple host (`api.sandbox.push.apple.com` vs
-  /// `api.push.apple.com`) — sending a sandbox token to prod (or
-  /// vice-versa) returns `BadEnvironmentKeyInToken`.
-  ///
-  /// Correlation with build mode (true in practice for this project):
-  ///   * `kReleaseMode == true`  → TestFlight + App Store → `production`
-  ///   * `kReleaseMode == false` → Debug & Profile builds (Xcode Run on
-  ///                                a wired device) → `development`
-  ///
-  /// We rely on `kReleaseMode` rather than reading
-  /// `Runner.entitlements` because Xcode merges that file with the
-  /// active provisioning profile at sign time; the build mode is what
-  /// actually tracks the resulting `aps-environment` value.
-  static const String _apnsEnvironment =
-      kReleaseMode ? 'production' : 'development';
+  /// MethodChannel exposed by `ios/Runner/SceneDelegate.swift`. The
+  /// native side parses `embedded.mobileprovision` to read the actual
+  /// `aps-environment` entitlement baked into the signed app — the only
+  /// authoritative source for the APNs environment Apple will accept
+  /// pushes for. `kReleaseMode` is NOT a reliable proxy: Xcode merges
+  /// `Runner.entitlements` with the active provisioning profile at
+  /// sign time, so a debug-built archive can ship with a production
+  /// entitlement and vice-versa.
+  static const MethodChannel _envChannel = MethodChannel('datenow/push_env');
+
+  /// Resolved APNs environment for this app instance. Cached after the
+  /// first successful native call. Used at upsert time so the Edge
+  /// Function can route each push to the matching Apple host (sandbox
+  /// vs production) — a sandbox token sent to prod (or vice-versa)
+  /// returns `BadEnvironmentKeyInToken`.
+  String? _apnsEnvironment;
+
+  /// Best-effort current value (lazy — null before [initialize]).
+  String? get apnsEnvironment => _apnsEnvironment;
+
+  /// Reads the native `aps-environment` value once, caches it. On any
+  /// failure (Android, missing handler, simulator quirks), falls back
+  /// to `kReleaseMode` and logs a warning so it's visible in the
+  /// console.
+  Future<String> _resolveApnsEnvironment() async {
+    final cached = _apnsEnvironment;
+    if (cached != null) return cached;
+    try {
+      final result =
+          await _envChannel.invokeMethod<String>('apnsEnvironment');
+      if (result == 'development' || result == 'production') {
+        _log.info('native aps-environment = $result');
+        _apnsEnvironment = result;
+        return result!;
+      }
+      _log.warn(
+        'native aps-environment returned unexpected value "$result" — '
+        'falling back to kReleaseMode',
+      );
+    } catch (e) {
+      _log.warn(
+        'native aps-environment call failed ($e) — falling back to '
+        'kReleaseMode (this is expected on Android / non-iOS)',
+      );
+    }
+    const fallback = kReleaseMode ? 'production' : 'development';
+    _log.warn(
+      'aps-environment fallback = $fallback (kReleaseMode=$kReleaseMode)',
+    );
+    _apnsEnvironment = fallback;
+    return fallback;
+  }
 
   /// True once Firebase is up and the iOS APNs bridge is wired. False
   /// when no `GoogleService-Info.plist` was found at startup — in that
@@ -71,11 +107,14 @@ class PushNotificationsService {
   Future<void> initialize() async {
     if (_initialized) return;
     _initialized = true;
+    _log.info('init: starting Firebase + APNs bridge…');
+    // Resolve the real aps-environment from the iOS bridge BEFORE any
+    // token upsert so the first registration writes the correct value.
+    final env = await _resolveApnsEnvironment();
     _log.info(
-      'init: starting Firebase + APNs bridge… '
-      '(apns_environment=$_apnsEnvironment, '
-      'kReleaseMode=$kReleaseMode, kDebugMode=$kDebugMode, '
-      'kProfileMode=$kProfileMode)',
+      'init: build flags (kReleaseMode=$kReleaseMode, '
+      'kDebugMode=$kDebugMode, kProfileMode=$kProfileMode) — '
+      'resolved apns_environment=$env',
     );
     try {
       await Firebase.initializeApp();
@@ -273,13 +312,14 @@ class PushNotificationsService {
         );
         return;
       }
+      final env = await _resolveApnsEnvironment();
       final response = await client
           .from('device_tokens')
           .upsert(
             {
               'user_id': userId,
               'platform': 'ios',
-              'apns_environment': _apnsEnvironment,
+              'apns_environment': env,
               'token': token,
               'updated_at': DateTime.now().toUtc().toIso8601String(),
             },
@@ -288,7 +328,7 @@ class PushNotificationsService {
           .select('id, user_id, apns_environment, updated_at')
           .maybeSingle();
       _log.info(
-        'persistToken upserted user=$userId env=$_apnsEnvironment '
+        'persistToken upserted user=$userId env=$env '
         'suffix=…${token.substring(token.length - 6)} '
         'row=$response',
       );
