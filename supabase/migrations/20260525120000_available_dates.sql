@@ -14,6 +14,35 @@
 -- =============================================================================
 
 -- -----------------------------------------------------------------------------
+-- 0. Defensive: re-create blocked_users if the remote is missing it
+--
+-- The initial schema declared this table, but at least one remote has
+-- 20260513120000 marked applied without the table actually present
+-- (initial file was extended after first apply — same drift we saw for
+-- `reports` and `matches`). The RPC below references it, so guarantee
+-- it exists with IF NOT EXISTS + the original constraints + RLS.
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.blocked_users (
+  user_id          UUID NOT NULL
+                     REFERENCES public.profiles(id) ON DELETE CASCADE,
+  blocked_user_id  UUID NOT NULL
+                     REFERENCES public.profiles(id) ON DELETE CASCADE,
+  blocked_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  reason           TEXT,
+
+  PRIMARY KEY (user_id, blocked_user_id),
+  CONSTRAINT no_self_block CHECK (user_id <> blocked_user_id)
+);
+
+ALTER TABLE public.blocked_users ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "blocked_users_all_owner" ON public.blocked_users;
+CREATE POLICY "blocked_users_all_owner"
+  ON public.blocked_users FOR ALL
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+-- -----------------------------------------------------------------------------
 -- 1. available_date_proposals_today()
 -- -----------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.available_date_proposals_today()
