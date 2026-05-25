@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/config/app_config.dart';
 import '../core/debug/debug_observer.dart';
+import '../core/notifications/notification_service.dart';
 import '../features/presence/presentation/presence_controller.dart';
 import '../l10n/app_localizations.dart';
 import 'locale/locale_resolver.dart';
@@ -22,6 +23,9 @@ class DateNowApp extends ConsumerWidget {
       child: MaterialApp.router(
         title: AppConfig.appName,
         debugShowCheckedModeBanner: false,
+        // Global messenger key so NotificationService can surface an
+        // in-app snackbar from anywhere without a route's BuildContext.
+        scaffoldMessengerKey: rootScaffoldMessengerKey,
         theme: AppTheme.light,
         darkTheme: AppTheme.dark,
         themeMode: ThemeMode.dark,

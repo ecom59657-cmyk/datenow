@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/notifications/notification_scope.dart';
 import '../../features/messaging/presentation/providers/messaging_providers.dart';
 import '../../l10n/app_localizations.dart';
 import '../theme/app_colors.dart';
@@ -80,7 +81,10 @@ class MainShell extends ConsumerWidget {
     return Scaffold(
       backgroundColor: AppColors.background,
       extendBody: true,
-      body: navigationShell,
+      // Listens to inboxProvider — fires sound + haptic + snackbar on
+      // fresh incoming messages while the app is foreground. No-op
+      // until the user is signed in (inboxProvider returns []).
+      body: NotificationScope(child: navigationShell),
       bottomNavigationBar: _GlassNavBar(
         items: tabs,
         currentIndex: navigationShell.currentIndex,

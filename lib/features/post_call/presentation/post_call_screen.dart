@@ -723,10 +723,22 @@ class _PhotoReveal extends StatelessWidget {
   final bool revealed;
   final Uint8List? bytes;
 
+  /// Pre-reveal — still a circular silhouette (the "mystery" stage of
+  /// the product). Size kept reasonable so it doesn't dominate the
+  /// pre-reveal screen.
+  static const double _preRevealSize = 220;
+
+  /// Post-reveal — a large, rounded-rectangle portrait. ~85 % of the
+  /// screen width / capped at 360 dp so it stays inside the safe area
+  /// on every iPhone, and 4:5 aspect (Instagram-style portrait) so the
+  /// face fills the frame. This is the emotional moment of the app;
+  /// the old 220 px circle made it look like a list-tile avatar.
+  static const double _revealMaxWidth = 360;
+  static const double _revealAspect = 4 / 5;
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    const size = 220.0;
 
     if (!revealed || bytes == null) {
       return Column(
@@ -734,12 +746,15 @@ class _PhotoReveal extends StatelessWidget {
           Stack(
             alignment: Alignment.center,
             children: [
-              const BlurredAvatar(size: size),
+              const BlurredAvatar(size: _preRevealSize),
               if (bytes != null)
                 ClipOval(
                   child: BackdropFilter(
                     filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
-                    child: const SizedBox(width: size, height: size),
+                    child: const SizedBox(
+                      width: _preRevealSize,
+                      height: _preRevealSize,
+                    ),
                   ),
                 ),
             ],
@@ -755,34 +770,57 @@ class _PhotoReveal extends StatelessWidget {
       );
     }
 
-    // Reveal animation — the photo "develops" from a heavy blur into
-    // focus, giving the moment a beat of suspense instead of a hard cut.
-    return ClipOval(
-      child: TweenAnimationBuilder<double>(
-        tween: Tween<double>(begin: 26, end: 0),
-        duration: const Duration(milliseconds: 1100),
-        curve: Curves.easeOutCubic,
-        builder: (context, sigma, child) {
-          return ImageFiltered(
-            imageFilter: ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
-            child: child,
-          );
-        },
-        child: Image.memory(
-          bytes!,
-          width: size,
-          height: size,
-          fit: BoxFit.cover,
-        ),
-      ),
-    )
-        .animate()
-        .scale(
-          duration: 520.ms,
-          begin: const Offset(0.9, 0.9),
-          end: const Offset(1, 1),
-          curve: Curves.easeOutBack,
+    // Reveal — large portrait card with a brand-pink glow + a soft
+    // "developing from blur" animation. The image fills the card via
+    // BoxFit.cover so a tall portrait shows the face without letterbox.
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth.clamp(0.0, _revealMaxWidth);
+        final height = width / _revealAspect;
+        return Container(
+          width: width,
+          height: height,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(28),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.brandPink.withValues(alpha: 0.32),
+                blurRadius: 36,
+                spreadRadius: 2,
+                offset: const Offset(0, 12),
+              ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(28),
+            child: TweenAnimationBuilder<double>(
+              tween: Tween<double>(begin: 26, end: 0),
+              duration: const Duration(milliseconds: 1100),
+              curve: Curves.easeOutCubic,
+              builder: (context, sigma, child) {
+                return ImageFiltered(
+                  imageFilter: ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
+                  child: child,
+                );
+              },
+              child: Image.memory(
+                bytes!,
+                width: width,
+                height: height,
+                fit: BoxFit.cover,
+              ),
+            ),
+          ),
         )
-        .fadeIn(duration: 380.ms);
+            .animate()
+            .scale(
+              duration: 520.ms,
+              begin: const Offset(0.92, 0.92),
+              end: const Offset(1, 1),
+              curve: Curves.easeOutBack,
+            )
+            .fadeIn(duration: 380.ms);
+      },
+    );
   }
 }

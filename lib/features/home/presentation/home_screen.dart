@@ -200,12 +200,25 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     final l10n = AppLocalizations.of(context);
     return showModalBottomSheet<void>(
       context: context,
+      // Push onto the ROOT navigator — without this the sheet lives
+      // inside the StatefulShellRoute branch and the bottom nav of
+      // MainShell stays visible *on top* of the CTAs (the bug seen on
+      // iPhone 13). With useRootNavigator the modal covers the whole
+      // screen, nav included.
+      useRootNavigator: true,
+      // Allows the sheet to scroll if its content is taller than the
+      // available space (small screens) and to honour MediaQuery.viewInsets
+      // when the keyboard is up.
+      isScrollControlled: true,
       backgroundColor: AppColors.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (sheetContext) => SafeArea(
         top: false,
+        // Honour the iPhone home indicator inset so the "Plus tard"
+        // button is never glued to the very bottom of the screen.
+        minimum: const EdgeInsets.only(bottom: AppSpacing.sm),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(
             AppSpacing.lg,
