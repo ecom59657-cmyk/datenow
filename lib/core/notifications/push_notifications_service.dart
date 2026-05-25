@@ -73,6 +73,13 @@ class PushNotificationsService {
       // GetInitialMessage returns the payload synchronously.
       final initial = await _fm!.getInitialMessage();
       if (initial != null) _handleTap(initial);
+
+      // TEMP DEBUG — log the current APNs token at app open so you can
+      // grep it from `flutter logs` / Xcode console and verify
+      // device_tokens registration without an extra round-trip. REMOVE
+      // before TestFlight public rollout. Grep marker: [TEMP-APNS-TOKEN]
+      // ignore: discarded_futures
+      _logCurrentTokenWithRetry();
     } catch (e, st) {
       _log.warn(
         'Firebase init skipped — push notifications disabled for this '
@@ -137,9 +144,41 @@ class PushNotificationsService {
       _log.info(
         'persistToken upserted (token suffix=…${token.substring(token.length - 6)})',
       );
+      // TEMP DEBUG — also log the FULL token so it can be copied straight
+      // out of `flutter logs` / Xcode console for end-to-end testing.
+      // REMOVE before TestFlight public rollout. Grep: [TEMP-APNS-TOKEN]
+      _log.warn('[TEMP-APNS-TOKEN] $token');
     } catch (e, st) {
       _log.warn('persistToken failed (will retry on refresh): $e\n$st');
     }
+  }
+
+  /// TEMP DEBUG — fetches and logs the current APNs token at app open.
+  /// iOS may take a couple of seconds to assign the token after
+  /// `registerForRemoteNotifications`, so we retry a few times. Silent
+  /// no-op if the user never granted permission. REMOVE before public
+  /// rollout. Grep marker: [TEMP-APNS-TOKEN]
+  Future<void> _logCurrentTokenWithRetry() async {
+    final fm = _fm;
+    if (!_firebaseReady || fm == null) return;
+    for (var attempt = 0; attempt < 5; attempt++) {
+      try {
+        final token = await fm.getAPNSToken();
+        if (token != null) {
+          _log.warn(
+            '[TEMP-APNS-TOKEN] app-open (attempt ${attempt + 1}): $token',
+          );
+          return;
+        }
+      } catch (_) {
+        // ignore — APNs may not be registered yet
+      }
+      await Future<void>.delayed(const Duration(seconds: 1));
+    }
+    _log.info(
+      '[TEMP-APNS-TOKEN] app-open — token still null after 5 retries '
+      '(permission likely not granted yet)',
+    );
   }
 
   /// Removes this device's token on sign-out so the user stops

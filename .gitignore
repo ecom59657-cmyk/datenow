@@ -67,7 +67,7 @@ android/key.properties
 # DateNow — Firebase iOS config (download from Firebase Console).
 # Not a hard secret (the iOS app key is restricted server-side) but kept
 # out of the repo so a stale / wrong-project plist doesn't ship.
-ios/Runner/GoogleService-Info.plist
+**/GoogleService-Info.plist
 
 # Tooling
 .claude/
