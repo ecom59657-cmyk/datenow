@@ -15,7 +15,13 @@
 //   APNS_KEY_ID         — 10-char key id shown in Apple Developer
 //   APNS_TEAM_ID        — 10-char team id
 //   APNS_BUNDLE_ID      — com.datenow.app
-//   APNS_HOST           — api.push.apple.com (prod) or api.sandbox.push.apple.com
+//   APNS_HOST           — LEGACY fallback only — used when a row has no
+//                         `apns_environment` set (should not happen
+//                         after migration 20260526100000_device_tokens
+//                         _apns_environment.sql). Default behaviour
+//                         routes per-token: development tokens go to
+//                         api.sandbox.push.apple.com, production tokens
+//                         go to api.push.apple.com.
 //   SUPABASE_URL        — auto-injected
 //   SUPABASE_SERVICE_ROLE_KEY — auto-injected
 //
@@ -77,12 +83,13 @@ Deno.serve(async (req) => {
   const apnsKeyId = Deno.env.get("APNS_KEY_ID");
   const apnsTeamId = Deno.env.get("APNS_TEAM_ID");
   const apnsBundleId = Deno.env.get("APNS_BUNDLE_ID");
-  const apnsHost = Deno.env.get("APNS_HOST") ?? "api.push.apple.com";
+  const legacyApnsHost = Deno.env.get("APNS_HOST") ?? "api.push.apple.com";
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   console.log(
     `[push] secrets check — apns_key=${!!apnsKey} key_id=${!!apnsKeyId} ` +
-      `team_id=${!!apnsTeamId} bundle=${!!apnsBundleId} host=${apnsHost} ` +
+      `team_id=${!!apnsTeamId} bundle=${!!apnsBundleId} ` +
+      `legacy_host=${legacyApnsHost} ` +
       `supa_url=${!!supabaseUrl} service_key=${!!serviceKey}`,
   );
   if (!apnsKey || !apnsKeyId || !apnsTeamId || !apnsBundleId) {
@@ -196,7 +203,7 @@ Deno.serve(async (req) => {
   // ── Look up device tokens ─────────────────────────────────────────────
   const { data: tokens, error: tokensErr } = await supa
     .from("device_tokens")
-    .select("token, platform, updated_at")
+    .select("token, platform, apns_environment, updated_at")
     .eq("user_id", recipientId)
     .eq("platform", "ios")
     .not("token", "is", null);
@@ -226,10 +233,11 @@ Deno.serve(async (req) => {
     });
   }
   console.log(
-    `[push] tokens (suffix only): ` +
+    `[push] tokens (suffix · env): ` +
       tokens
-        .map((t: { token: string }) =>
-          "…" + t.token.slice(Math.max(0, t.token.length - 6))
+        .map((t: { token: string; apns_environment: string | null }) =>
+          "…" + t.token.slice(Math.max(0, t.token.length - 6)) +
+            "·" + (t.apns_environment ?? "legacy")
         )
         .join(", "),
   );
@@ -276,11 +284,39 @@ Deno.serve(async (req) => {
     route: `/messages/${payload.record.conversation_id}`,
   });
 
-  // ── Send one POST per token, capturing every status ──────────────────
+  // ── Send one POST per token, routing to the matching APNs host ──────
+  // Each row stores apns_environment ('development' | 'production'). A
+  // sandbox token sent to api.push.apple.com (or vice-versa) returns
+  // BadEnvironmentKeyInToken — so we pick the host per token rather
+  // than relying on the legacy single APNS_HOST secret.
+  const hostFor = (env: string | null | undefined): string => {
+    switch (env) {
+      case "development":
+        return "api.sandbox.push.apple.com";
+      case "production":
+        return "api.push.apple.com";
+      default:
+        // Pre-migration row (column was NULL or unknown value). Fall
+        // back to the legacy APNS_HOST secret so we don't lose those
+        // pushes during the transition.
+        return legacyApnsHost;
+    }
+  };
+
   const results = await Promise.all(
-    tokens.map(async ({ token }: { token: string }) => {
+    tokens.map(async (
+      { token, apns_environment }: {
+        token: string;
+        apns_environment: string | null;
+      },
+    ) => {
       const suffix = "…" + token.slice(Math.max(0, token.length - 6));
-      const url = `https://${apnsHost}/3/device/${token}`;
+      const env = apns_environment ?? "legacy";
+      const host = hostFor(apns_environment);
+      const url = `https://${host}/3/device/${token}`;
+      console.log(
+        `[push] sending token=${suffix} env=${env} host=${host}`,
+      );
       try {
         const r = await fetch(url, {
           method: "POST",
@@ -295,7 +331,8 @@ Deno.serve(async (req) => {
         });
         // APNs returns 200 with empty body on success, or 4xx/5xx with
         // {"reason": "<ApnsError>"} on failure (BadDeviceToken,
-        // ExpiredProviderToken, TopicDisallowed, …). Log every case.
+        // BadEnvironmentKeyInToken, ExpiredProviderToken, …). Log every
+        // case so the wrong-environment failure mode is visible.
         let bodyText = "";
         try {
           bodyText = await r.text();
@@ -305,18 +342,34 @@ Deno.serve(async (req) => {
         const apnsId = r.headers.get("apns-id");
         if (r.status === 200) {
           console.log(
-            `[push] APNs OK token=${suffix} apns-id=${apnsId}`,
+            `[push] APNs OK token=${suffix} env=${env} host=${host} ` +
+              `apns-id=${apnsId}`,
           );
         } else {
           console.error(
-            `[push] APNs FAIL token=${suffix} status=${r.status} ` +
-              `apns-id=${apnsId} body=${bodyText}`,
+            `[push] APNs FAIL token=${suffix} env=${env} host=${host} ` +
+              `status=${r.status} apns-id=${apnsId} body=${bodyText}`,
           );
         }
-        return { token_suffix: suffix, status: r.status, body: bodyText };
+        return {
+          token_suffix: suffix,
+          env,
+          host,
+          status: r.status,
+          body: bodyText,
+        };
       } catch (e) {
-        console.error(`[push] APNs network error token=${suffix}: ${e}`);
-        return { token_suffix: suffix, status: 0, error: `${e}` };
+        console.error(
+          `[push] APNs network error token=${suffix} env=${env} ` +
+            `host=${host}: ${e}`,
+        );
+        return {
+          token_suffix: suffix,
+          env,
+          host,
+          status: 0,
+          error: `${e}`,
+        };
       }
     }),
   );

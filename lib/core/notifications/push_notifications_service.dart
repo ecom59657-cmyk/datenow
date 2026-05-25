@@ -16,6 +16,7 @@
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -37,6 +38,24 @@ class PushNotificationsService {
   String? _lastInitError;
   FirebaseMessaging? _fm;
 
+  /// The APNs environment of the *signed app* the user is running. Used
+  /// at upsert time so the Edge Function can route each push to the
+  /// matching Apple host (`api.sandbox.push.apple.com` vs
+  /// `api.push.apple.com`) — sending a sandbox token to prod (or
+  /// vice-versa) returns `BadEnvironmentKeyInToken`.
+  ///
+  /// Correlation with build mode (true in practice for this project):
+  ///   * `kReleaseMode == true`  → TestFlight + App Store → `production`
+  ///   * `kReleaseMode == false` → Debug & Profile builds (Xcode Run on
+  ///                                a wired device) → `development`
+  ///
+  /// We rely on `kReleaseMode` rather than reading
+  /// `Runner.entitlements` because Xcode merges that file with the
+  /// active provisioning profile at sign time; the build mode is what
+  /// actually tracks the resulting `aps-environment` value.
+  static const String _apnsEnvironment =
+      kReleaseMode ? 'production' : 'development';
+
   /// True once Firebase is up and the iOS APNs bridge is wired. False
   /// when no `GoogleService-Info.plist` was found at startup — in that
   /// case every public method is a no-op.
@@ -52,7 +71,12 @@ class PushNotificationsService {
   Future<void> initialize() async {
     if (_initialized) return;
     _initialized = true;
-    _log.info('init: starting Firebase + APNs bridge…');
+    _log.info(
+      'init: starting Firebase + APNs bridge… '
+      '(apns_environment=$_apnsEnvironment, '
+      'kReleaseMode=$kReleaseMode, kDebugMode=$kDebugMode, '
+      'kProfileMode=$kProfileMode)',
+    );
     try {
       await Firebase.initializeApp();
       _fm = FirebaseMessaging.instance;
@@ -255,15 +279,16 @@ class PushNotificationsService {
             {
               'user_id': userId,
               'platform': 'ios',
+              'apns_environment': _apnsEnvironment,
               'token': token,
               'updated_at': DateTime.now().toUtc().toIso8601String(),
             },
             onConflict: 'user_id,token',
           )
-          .select('id, user_id, updated_at')
+          .select('id, user_id, apns_environment, updated_at')
           .maybeSingle();
       _log.info(
-        'persistToken upserted user=$userId '
+        'persistToken upserted user=$userId env=$_apnsEnvironment '
         'suffix=…${token.substring(token.length - 6)} '
         'row=$response',
       );
