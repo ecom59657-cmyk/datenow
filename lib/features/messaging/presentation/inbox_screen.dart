@@ -7,6 +7,7 @@ import '../../../app/scaffold/active_tab.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../app/theme/app_typography.dart';
+import '../../../core/utils/logger.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../shared/widgets/app_scaffold.dart';
 import '../../../shared/widgets/glass_card.dart';
@@ -57,10 +58,20 @@ class _InboxScreenState extends ConsumerState<InboxScreen>
               padding: EdgeInsets.all(AppSpacing.xl),
               child: LoadingIndicator(),
             ),
-            error: (e, _) => _EmptyCard(
-              icon: Icons.error_outline_rounded,
-              message: '$e',
-            ),
+            // Never surface a raw `PostgrestException(...)` to the user.
+            // The most common cause is the schema cache not yet seeing
+            // `public.conversations` (the PGRST205 incident on TestFlight),
+            // and in every failure mode "no conversations to show" is
+            // the right product behaviour. Log for debug, present the
+            // same premium empty card as the truly-empty path.
+            error: (e, st) {
+              const AppLogger('Inbox').warn('inbox stream error: $e\n$st');
+              return _EmptyCard(
+                icon: Icons.chat_bubble_outline_rounded,
+                title: l10n.messagesEmptyTitle,
+                message: l10n.messagesEmptyBody,
+              );
+            },
             data: (list) {
               if (list.isEmpty) {
                 return _EmptyCard(

@@ -56,6 +56,14 @@ SELECT 'table reveals',
   CASE WHEN to_regclass('public.reveals') IS NOT NULL
        THEN 'PASS' ELSE 'FAIL' END
 UNION ALL
+SELECT 'table conversations',
+  CASE WHEN to_regclass('public.conversations') IS NOT NULL
+       THEN 'PASS' ELSE 'FAIL' END
+UNION ALL
+SELECT 'table messages',
+  CASE WHEN to_regclass('public.messages') IS NOT NULL
+       THEN 'PASS' ELSE 'FAIL' END
+UNION ALL
 SELECT 'col matchmaking_queue.heartbeat_at',
   CASE WHEN EXISTS (SELECT 1 FROM information_schema.columns
         WHERE table_schema='public' AND table_name='matchmaking_queue'

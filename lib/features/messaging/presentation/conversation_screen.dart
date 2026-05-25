@@ -5,6 +5,7 @@ import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../app/theme/app_typography.dart';
 import '../../../core/utils/extensions.dart';
+import '../../../core/utils/logger.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../shared/widgets/app_scaffold.dart';
 import '../../../shared/widgets/loading_indicator.dart';
@@ -151,7 +152,16 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
           Expanded(
             child: messagesAsync.when(
               loading: () => const Center(child: LoadingIndicator()),
-              error: (e, _) => Center(child: Text('$e')),
+              // Never surface a raw PostgrestException to the user.
+              // Treat as "no messages yet" — Realtime will populate the
+              // list as soon as the stream re-establishes.
+              error: (e, st) {
+                const AppLogger('Conv').warn('messages error: $e\n$st');
+                return _MessageList(
+                  messages: const [],
+                  scrollController: _scrollController,
+                );
+              },
               data: (msgs) => _MessageList(
                 messages: msgs,
                 scrollController: _scrollController,
