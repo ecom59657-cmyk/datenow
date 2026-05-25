@@ -203,7 +203,7 @@ Deno.serve(async (req) => {
   // ── Look up device tokens ─────────────────────────────────────────────
   const { data: tokens, error: tokensErr } = await supa
     .from("device_tokens")
-    .select("token, platform, apns_environment, updated_at")
+    .select("id, token, platform, apns_environment, updated_at")
     .eq("user_id", recipientId)
     .eq("platform", "ios")
     .not("token", "is", null);
@@ -289,6 +289,11 @@ Deno.serve(async (req) => {
   // sandbox token sent to api.push.apple.com (or vice-versa) returns
   // BadEnvironmentKeyInToken — so we pick the host per token rather
   // than relying on the legacy single APNS_HOST secret.
+  //
+  // Self-healing: if APNs replies with BadEnvironmentKeyInToken or
+  // BadDeviceToken on the first attempt, we retry once on the *opposite*
+  // host. If that retry succeeds the row in device_tokens is updated
+  // so the next message lands on the right host immediately.
   const hostFor = (env: string | null | undefined): string => {
     switch (env) {
       case "development":
@@ -296,100 +301,208 @@ Deno.serve(async (req) => {
       case "production":
         return "api.push.apple.com";
       default:
-        // Pre-migration row (column was NULL or unknown value). Fall
-        // back to the legacy APNS_HOST secret so we don't lose those
-        // pushes during the transition.
         return legacyApnsHost;
     }
   };
+  const flip = (env: string): { env: string; host: string } => {
+    if (env === "development") {
+      return { env: "production", host: "api.push.apple.com" };
+    }
+    return { env: "development", host: "api.sandbox.push.apple.com" };
+  };
+  const ENV_ERRORS = new Set([
+    "BadEnvironmentKeyInToken",
+    "BadDeviceToken",
+  ]);
+
+  type TokenRow = {
+    id: string;
+    token: string;
+    apns_environment: string | null;
+    updated_at: string;
+  };
+
+  async function postOnce(token: string, host: string) {
+    const url = `https://${host}/3/device/${token}`;
+    const r = await fetch(url, {
+      method: "POST",
+      headers: {
+        "authorization": `bearer ${jwt}`,
+        "apns-topic": apnsBundleId,
+        "apns-push-type": "alert",
+        "apns-priority": "10",
+        "content-type": "application/json",
+      },
+      body: apnsPayload,
+    });
+    let bodyText = "";
+    try {
+      bodyText = await r.text();
+    } catch (_) {
+      // ignore
+    }
+    return {
+      status: r.status,
+      apnsId: r.headers.get("apns-id"),
+      body: bodyText,
+    };
+  }
 
   const results = await Promise.all(
-    tokens.map(async (
-      { token, apns_environment }: {
-        token: string;
-        apns_environment: string | null;
-      },
-    ) => {
-      const suffix = "…" + token.slice(Math.max(0, token.length - 6));
-      const env = apns_environment ?? "legacy";
-      const host = hostFor(apns_environment);
-      const url = `https://${host}/3/device/${token}`;
+    tokens.map(async (row: TokenRow) => {
+      const suffix = "…" + row.token.slice(Math.max(0, row.token.length - 6));
+      const env = row.apns_environment ?? "legacy";
+      const host = hostFor(row.apns_environment);
       console.log(
-        `[push] sending token=${suffix} env=${env} host=${host}`,
+        `[push] using token row=${row.id} recipient=${recipientId} ` +
+          `suffix=${suffix} env=${env} host=${host} updated_at=${row.updated_at}`,
       );
       try {
-        const r = await fetch(url, {
-          method: "POST",
-          headers: {
-            "authorization": `bearer ${jwt}`,
-            "apns-topic": apnsBundleId,
-            "apns-push-type": "alert",
-            "apns-priority": "10",
-            "content-type": "application/json",
-          },
-          body: apnsPayload,
-        });
-        // APNs returns 200 with empty body on success, or 4xx/5xx with
-        // {"reason": "<ApnsError>"} on failure (BadDeviceToken,
-        // BadEnvironmentKeyInToken, ExpiredProviderToken, …). Log every
-        // case so the wrong-environment failure mode is visible.
-        let bodyText = "";
-        try {
-          bodyText = await r.text();
-        } catch (_) {
-          // ignore — apple sometimes drops body
-        }
-        const apnsId = r.headers.get("apns-id");
-        if (r.status === 200) {
+        const first = await postOnce(row.token, host);
+        if (first.status === 200) {
           console.log(
-            `[push] APNs OK token=${suffix} env=${env} host=${host} ` +
-              `apns-id=${apnsId}`,
+            `[push] APNs OK row=${row.id} suffix=${suffix} env=${env} ` +
+              `host=${host} apns-id=${first.apnsId}`,
           );
-        } else {
-          console.error(
-            `[push] APNs FAIL token=${suffix} env=${env} host=${host} ` +
-              `status=${r.status} apns-id=${apnsId} body=${bodyText}`,
-          );
+          return {
+            row_id: row.id,
+            token_suffix: suffix,
+            env,
+            host,
+            status: 200,
+            body: first.body,
+            corrected: false,
+          };
         }
+
+        // Detect an environment / device-token mismatch and retry on
+        // the opposite Apple host. Only attempt the retry when we have
+        // a known env to flip (skip the legacy/null case).
+        const looksLikeEnvErr = ENV_ERRORS.has(
+          tryReadApnsReason(first.body),
+        );
+        const canFlip = row.apns_environment === "development" ||
+          row.apns_environment === "production";
+
+        if (looksLikeEnvErr && canFlip) {
+          const target = flip(row.apns_environment as string);
+          console.warn(
+            `[push] APNs FAIL row=${row.id} suffix=${suffix} env=${env} ` +
+              `host=${host} status=${first.status} body=${first.body} — ` +
+              `retrying on host=${target.host} (env=${target.env})`,
+          );
+          const second = await postOnce(row.token, target.host);
+          if (second.status === 200) {
+            // Patch the row so subsequent pushes go to the right host.
+            const { error: upErr } = await supa
+              .from("device_tokens")
+              .update({
+                apns_environment: target.env,
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", row.id);
+            if (upErr) {
+              console.error(
+                `[push] env-correction db update FAILED row=${row.id} ` +
+                  `code=${upErr.code} message=${upErr.message}`,
+              );
+            } else {
+              console.log(
+                `[push] corrected token env ${env} -> ${target.env} ` +
+                  `after APNs retry OK (row=${row.id} suffix=${suffix})`,
+              );
+            }
+            return {
+              row_id: row.id,
+              token_suffix: suffix,
+              env: target.env,
+              host: target.host,
+              status: 200,
+              body: second.body,
+              corrected: true,
+            };
+          }
+          console.error(
+            `[push] retry on opposite host also FAILED row=${row.id} ` +
+              `suffix=${suffix} status=${second.status} body=${second.body}`,
+          );
+          return {
+            row_id: row.id,
+            token_suffix: suffix,
+            env,
+            host: target.host,
+            status: second.status,
+            body: second.body,
+            corrected: false,
+            first_status: first.status,
+            first_body: first.body,
+          };
+        }
+
+        // Other APNs failure (Unregistered, TopicDisallowed,
+        // InvalidProviderToken, …). Log and surface in the response.
+        console.error(
+          `[push] APNs FAIL row=${row.id} suffix=${suffix} env=${env} ` +
+            `host=${host} status=${first.status} body=${first.body}`,
+        );
         return {
+          row_id: row.id,
           token_suffix: suffix,
           env,
           host,
-          status: r.status,
-          body: bodyText,
+          status: first.status,
+          body: first.body,
+          corrected: false,
         };
       } catch (e) {
         console.error(
-          `[push] APNs network error token=${suffix} env=${env} ` +
-            `host=${host}: ${e}`,
+          `[push] APNs network error row=${row.id} suffix=${suffix} ` +
+            `env=${env} host=${host}: ${e}`,
         );
         return {
+          row_id: row.id,
           token_suffix: suffix,
           env,
           host,
           status: 0,
           error: `${e}`,
+          corrected: false,
         };
       }
     }),
   );
 
   const sent = results.filter((r) => r.status === 200).length;
+  const corrected = results.filter((r) => r.corrected).length;
   const failed = results.length - sent;
   const tookMs = Date.now() - startedAt;
   console.log(
     `[push] <<< done — pushed=${sent}/${results.length} ` +
-      `failed=${failed} took=${tookMs}ms`,
+      `corrected=${corrected} failed=${failed} took=${tookMs}ms`,
   );
   return jsonResponse(200, {
     ok: true,
     tokens_count: results.length,
     pushes_sent: sent,
+    pushes_corrected: corrected,
     pushes_failed: failed,
     took_ms: tookMs,
     results,
   });
 });
+
+// Extracts the "reason" field from Apple's APNs error body without
+// throwing on malformed JSON (Apple occasionally truncates the body
+// under load). Returns "" when the field is missing.
+function tryReadApnsReason(body: string): string {
+  if (!body) return "";
+  try {
+    const obj = JSON.parse(body) as { reason?: unknown };
+    return typeof obj.reason === "string" ? obj.reason : "";
+  } catch (_) {
+    return "";
+  }
+}
 
 // Minimal PEM → ArrayBuffer helper for the .p8 PKCS8 key.
 function pemToArrayBuffer(pem: string): ArrayBuffer {

@@ -153,6 +153,24 @@ class PushNotificationsService {
       // before TestFlight public rollout. Grep marker: [TEMP-APNS-TOKEN]
       // ignore: discarded_futures
       _logCurrentTokenWithRetry();
+
+      // Auto-register the current device on every signed-in event so a
+      // user who already accepted notifications gets a fresh row in
+      // device_tokens without having to open the Messages tab. This is
+      // the cure for "permission authorized but device_tokens empty" —
+      // see `maybeRegisterForSignedInUser` for the no-prompt path.
+      Supabase.instance.client.auth.onAuthStateChange.listen((event) {
+        if (event.event == AuthChangeEvent.signedIn ||
+            event.event == AuthChangeEvent.tokenRefreshed ||
+            event.event == AuthChangeEvent.initialSession) {
+          // ignore: discarded_futures
+          maybeRegisterForSignedInUser();
+        }
+      });
+      // Also fire once now in case the session was already restored
+      // before this listener attached.
+      // ignore: discarded_futures
+      maybeRegisterForSignedInUser();
     } catch (e, st) {
       _lastInitError = '$e';
       _log.warn(
@@ -183,6 +201,45 @@ class PushNotificationsService {
     } catch (e) {
       _log.warn('getNotificationSettings failed: $e');
       return null;
+    }
+  }
+
+  /// Silent registration path: if the signed-in user has already
+  /// granted iOS notification permission (e.g. previous install, or
+  /// granted via the in-app sheet), make sure a fresh row exists in
+  /// `device_tokens` for the current device. No iOS prompt is shown —
+  /// `getNotificationSettings()` is read-only.
+  ///
+  /// Called automatically on every `signedIn` / `tokenRefreshed` /
+  /// `initialSession` auth event, so the user doesn't have to open the
+  /// Messages tab to get registered.
+  Future<void> maybeRegisterForSignedInUser() async {
+    final fm = _fm;
+    if (!_firebaseReady || fm == null) return;
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+    if (userId == null) return;
+    try {
+      final settings = await fm.getNotificationSettings();
+      final granted =
+          settings.authorizationStatus == AuthorizationStatus.authorized ||
+              settings.authorizationStatus == AuthorizationStatus.provisional;
+      if (!granted) {
+        _log.info(
+          'maybeRegister: skipping — iOS status=${settings.authorizationStatus.name}',
+        );
+        return;
+      }
+      final token = await _getAPNSTokenWithRetry();
+      if (token == null) {
+        _log.warn('maybeRegister: getAPNSToken returned null');
+        return;
+      }
+      _log.info(
+        'maybeRegister: user=$userId is authorized → upserting token',
+      );
+      await _persistToken(token);
+    } catch (e) {
+      _log.warn('maybeRegister failed: $e');
     }
   }
 

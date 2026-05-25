@@ -25,15 +25,26 @@ import UIKit
   ///                    embedded.mobileprovision, so we assume prod)
   ///   "development" — iOS simulator (never receives real pushes anyway)
   static func detectApnsEnvironment() -> String {
+    let resolved = computeApnsEnvironment()
+    NSLog("[PushNative] embedded aps-environment = \(resolved)")
+    return resolved
+  }
+
+  private static func computeApnsEnvironment() -> String {
     #if targetEnvironment(simulator)
+    NSLog("[PushNative] running on iOS Simulator — forcing 'development'")
     return "development"
     #else
     guard let url = Bundle.main.url(
             forResource: "embedded", withExtension: "mobileprovision"
-          ),
-          let data = try? Data(contentsOf: url),
-          let raw = String(data: data, encoding: .ascii) else {
+          ) else {
       // App Store builds strip the provisioning profile out of the IPA.
+      NSLog("[PushNative] no embedded.mobileprovision — App Store build → 'production'")
+      return "production"
+    }
+    guard let data = try? Data(contentsOf: url),
+          let raw = String(data: data, encoding: .ascii) else {
+      NSLog("[PushNative] embedded.mobileprovision unreadable — defaulting 'production'")
       return "production"
     }
     // The .mobileprovision is a CMS-signed plist. The relevant excerpt:
@@ -49,9 +60,12 @@ import UIKit
           if value == "development" || value == "production" {
             return value
           }
+          NSLog("[PushNative] unexpected aps-environment value '\(value)' → 'production'")
+          return "production"
         }
       }
     }
+    NSLog("[PushNative] aps-environment key not found in embedded.mobileprovision → 'production'")
     return "production"
     #endif
   }
