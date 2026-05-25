@@ -77,6 +77,14 @@
     }
   },
   "newLikesLabel": "People who liked you back",
+  "availableDatesValueLoading": "…",
+  "availableDatesValueEmpty": "—",
+  "availableDatesLabelLoading": "Date proposals today",
+  "availableDatesLabelEmpty": "No date available right now",
+  "availableDatesLabel": "{count, plural, =1{date proposal today} other{date proposals today}}",
+  "@availableDatesLabel": {
+    "placeholders": { "count": { "type": "int" } }
+  },
   "howItWorks": "How it works",
   "howItWorks1": "We match you instantly with someone online & compatible.",
   "howItWorks2": "A 5-minute audio or video date starts right away.",

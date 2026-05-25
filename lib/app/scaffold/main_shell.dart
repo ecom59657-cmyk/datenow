@@ -1,16 +1,18 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../l10n/app_localizations.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
+import 'active_tab.dart';
 
 /// Persistent shell hosting the bottom nav. Renders the active tab via
 /// [StatefulShellRoute.indexedStack] so each branch keeps its own navigation
 /// state.
-class MainShell extends StatelessWidget {
+class MainShell extends ConsumerWidget {
   const MainShell({super.key, required this.navigationShell});
 
   final StatefulNavigationShell navigationShell;
@@ -24,8 +26,19 @@ class MainShell extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
+
+    // Publish the freshly-shown tab so each tab screen (via
+    // TabScrollResetMixin) can slide its scroll back to the top on
+    // revisit. Deferred to the next frame so we don't mutate provider
+    // state during a build.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final notifier = ref.read(activeTabIndexProvider.notifier);
+      if (notifier.state != navigationShell.currentIndex) {
+        notifier.state = navigationShell.currentIndex;
+      }
+    });
     // Sober, premium Material glyphs — no emoji, so nothing renders as a
     // colored "cartoon" icon. Tinted white to match the home avatar; the
     // Discover heart keeps a rose accent. Accessible names via Semantics.

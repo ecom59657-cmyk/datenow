@@ -24,6 +24,7 @@ Reference docs (don't duplicate, follow when deeper detail needed):
 | Supabase CLI | ✅ installed (2.100.0) |
 | Project linked | ✅ `acastkbndpygowltemzp` (`DateNowProject`) |
 | Migration `20260524120000_app_store_compliance.sql` | ✅ applied (Local = Remote) |
+| Migration `20260525120000_available_dates.sql` | ⚠ **pending — run §1.5** |
 | Edge Function `generate-agora-token` | ✅ ACTIVE (v2) |
 | Edge Function `delete-account` | ✅ ACTIVE (v1, deployed 2026-05-24) |
 | Secret `AGORA_APP_ID` | ✅ present |
@@ -73,6 +74,41 @@ supabase db push
 supabase migration list --linked
 # 20260524120000 should now appear under BOTH "Local" and "Remote".
 ```
+
+---
+
+## 1.5 ⚠ Apply the available-dates migration
+
+**Command:**
+```bash
+supabase db push
+```
+
+**What it does (read first):**
+- Adds RPC `available_date_proposals_today()` — SECURITY DEFINER, STABLE,
+  returns `int`. Counts peers who are reachable RIGHT NOW for the Home
+  "dates proposés aujourd'hui" stat: fresh presence (`user_presence`
+  online/searching, <60 s heartbeat), `profiles.is_banned = false`,
+  `moderation_status = 'active'`, not blocked in either direction
+  (`blocked_users`), not already on another live `calls` row.
+- Re-creates `claim_match(uuid)` with a new `peer_busy` gate: refuses
+  the match if the target peer is on a live call with a third party.
+  Same JSONB shape on success — clients see this as a one-off
+  `PostgrestException` and the matching screen's poll loop retries with
+  the next candidate.
+
+**Verification:**
+```bash
+supabase migration list --linked
+# 20260525120000 should appear under BOTH "Local" and "Remote".
+```
+
+You can also run `supabase/tests/flow_checks.sql` in the SQL editor —
+the `fn available_date_proposals_today()` row must read PASS.
+
+**If you skip this:** the Home tile silently shows "Aucun date
+disponible pour l'instant" (RPC missing → null → empty state). No
+crash, no app store rejection — but the new feature is dormant.
 
 ---
 

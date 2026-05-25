@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../app/router/app_routes.dart';
+import '../../../app/scaffold/active_tab.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../app/theme/app_typography.dart';
@@ -13,23 +14,35 @@ import '../../../l10n/app_localizations.dart';
 import '../../../shared/widgets/app_scaffold.dart';
 import '../../../shared/widgets/glass_card.dart';
 import '../../auth/presentation/providers/auth_provider.dart';
+import '../../presence/data/presence_repository.dart';
 import '../../profile_setup/presentation/providers/profile_provider.dart';
 import '../../quota/data/quota_repository.dart';
 import '../../quota/presentation/widgets/quota_limit_sheet.dart';
+import 'widgets/available_dates_display.dart';
 import 'widgets/home_header.dart';
 import 'widgets/home_hero_card.dart';
 import 'widgets/stat_tile.dart';
 
-class HomeScreen extends ConsumerWidget {
+class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends ConsumerState<HomeScreen>
+    with TabScrollResetMixin {
+  @override
+  int get tabIndex => 0; // Home=0, Discover=1, Profile=2
+
+  @override
+  Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final user = ref.watch(currentUserProvider);
 
     return AppScaffold(
       body: ListView(
+        controller: tabScrollController,
         padding: const EdgeInsets.only(bottom: 120),
         physics: const BouncingScrollPhysics(),
         children: [
@@ -42,7 +55,7 @@ class HomeScreen extends ConsumerWidget {
           ).animate().fadeIn(duration: 350.ms),
           const SizedBox(height: AppSpacing.xl),
           HomeHeroCard(
-            onPressed: () => _onFindDate(context, ref),
+            onPressed: _onFindDate,
           ),
           const SizedBox(height: AppSpacing.xl),
           Text(l10n.tonightOnDatenow, style: AppTypography.h3),
@@ -68,14 +81,21 @@ class HomeScreen extends ConsumerWidget {
             ],
           ),
           const SizedBox(height: AppSpacing.sm),
-          StatTile(
-            icon: Icons.favorite_rounded,
-            value: l10n.newLikesValue(4),
-            label: l10n.newLikesLabel,
-            // Tapping the "new likes" tile switches to the Discover tab via
-            // the existing shell branch.
-            onTap: () => context.goNamed(AppRoute.discover.name),
-          ),
+          Builder(builder: (context) {
+            // "Dates proposés aujourd'hui" — count comes from
+            // available_date_proposals_today() server-side, which filters
+            // out offline / banned / blocked / already-in-call peers.
+            // Display states (loading / count / empty) live in
+            // [formatAvailableDates] so they're unit-testable in isolation.
+            final state = ref.watch(availableDateProposalsCountProvider);
+            final display = formatAvailableDates(l10n, state);
+            return StatTile(
+              icon: Icons.favorite_rounded,
+              value: display.value,
+              label: display.label,
+              onTap: () => context.goNamed(AppRoute.discover.name),
+            );
+          }),
           const SizedBox(height: AppSpacing.xl),
           Text(l10n.howItWorks, style: AppTypography.h3),
           const SizedBox(height: AppSpacing.sm),
@@ -102,7 +122,7 @@ class HomeScreen extends ConsumerWidget {
   ///
   /// Every failure path also surfaces a localized [SnackBar] so the user
   /// gets feedback instead of an apparently dead tap.
-  Future<void> _onFindDate(BuildContext context, WidgetRef ref) async {
+  Future<void> _onFindDate() async {
     _log.info('Find date clicked');
     final l10n = AppLocalizations.of(context);
 

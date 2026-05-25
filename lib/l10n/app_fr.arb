@@ -67,6 +67,14 @@
   "avgMatchTime": "Temps de match moyen",
   "newLikesValue": "{count} nouveau(x)",
   "newLikesLabel": "Personnes qui vous ont liké en retour",
+  "availableDatesValueLoading": "…",
+  "availableDatesValueEmpty": "—",
+  "availableDatesLabelLoading": "Dates proposés aujourd'hui",
+  "availableDatesLabelEmpty": "Aucun date disponible pour l'instant",
+  "availableDatesLabel": "{count, plural, =1{date proposé aujourd'hui} other{dates proposés aujourd'hui}}",
+  "@availableDatesLabel": {
+    "placeholders": { "count": { "type": "int" } }
+  },
   "howItWorks": "Comment ça marche",
   "howItWorks1": "On vous met en relation immédiatement avec une personne en ligne et compatible.",
   "howItWorks2": "Un date audio ou vidéo de 5 minutes démarre aussitôt.",

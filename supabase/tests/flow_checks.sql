@@ -39,6 +39,11 @@ SELECT 'fn active_profiles_count()',
   CASE WHEN to_regprocedure('public.active_profiles_count()') IS NOT NULL
        THEN 'PASS' ELSE 'FAIL' END
 UNION ALL
+SELECT 'fn available_date_proposals_today()',
+  CASE WHEN to_regprocedure('public.available_date_proposals_today()')
+              IS NOT NULL
+       THEN 'PASS' ELSE 'FAIL' END
+UNION ALL
 SELECT 'table user_presence',
   CASE WHEN to_regclass('public.user_presence') IS NOT NULL
        THEN 'PASS' ELSE 'FAIL' END

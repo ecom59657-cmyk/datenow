@@ -1,8 +1,10 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../app/router/app_routes.dart';
+import '../../../app/scaffold/active_tab.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../app/theme/app_typography.dart';
@@ -28,7 +30,11 @@ class DiscoverScreen extends ConsumerStatefulWidget {
   ConsumerState<DiscoverScreen> createState() => _DiscoverScreenState();
 }
 
-class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
+class _DiscoverScreenState extends ConsumerState<DiscoverScreen>
+    with TabScrollResetMixin {
+  @override
+  int get tabIndex => 1; // Home=0, Discover=1, Profile=2
+
   bool _batchEnsured = false;
 
   @override
@@ -52,6 +58,7 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
 
     return AppScaffold(
       body: ListView(
+        controller: tabScrollController,
         padding: const EdgeInsets.only(bottom: 120),
         physics: const BouncingScrollPhysics(),
         children: [
@@ -63,11 +70,16 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
             style:
                 AppTypography.body.copyWith(color: AppColors.textSecondary),
           ),
-          const SizedBox(height: AppSpacing.md),
-          _DiscoverDebugBanner(
-            currentUserId: profile?.userId,
-            suggestionsAsync: suggestionsAsync,
-          ),
+          // Diagnostic banner — ONLY in local debug builds. kDebugMode is a
+          // compile-time false in release / TestFlight / App Store, so the
+          // widget is excluded from the tree entirely.
+          if (kDebugMode) ...[
+            const SizedBox(height: AppSpacing.md),
+            _DiscoverDebugBanner(
+              currentUserId: profile?.userId,
+              suggestionsAsync: suggestionsAsync,
+            ),
+          ],
           const SizedBox(height: AppSpacing.md),
           _SectionHeader(label: l10n.discoverSuggestionsSection),
           const SizedBox(height: AppSpacing.sm),

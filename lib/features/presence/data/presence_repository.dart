@@ -68,6 +68,24 @@ class PresenceRepository {
     }
   }
 
+  /// Count of peers who can be PROPOSED as a date right now — fresh
+  /// presence, not banned, not blocked either way, NOT already in another
+  /// live call. Drives the "dates proposés aujourd'hui" stat on Home.
+  /// All exclusion rules live in the SECURITY DEFINER RPC so a tampered
+  /// client cannot inflate the number. Null = network/RPC error.
+  Future<int?> availableDateProposalsToday() async {
+    try {
+      final res =
+          await _client.rpc<dynamic>('available_date_proposals_today');
+      if (res is int) return res;
+      if (res is num) return res.toInt();
+      return null;
+    } catch (e) {
+      _log.warn('available_date_proposals_today failed: $e');
+      return null;
+    }
+  }
+
   /// One-shot read of a user's presence row (used by Debug).
   Future<PresenceRow?> fetchPresence(String userId) async {
     try {
@@ -99,4 +117,12 @@ class PresenceRepository {
 final presenceRepositoryProvider = Provider<PresenceRepository?>((ref) {
   if (!ref.watch(supabaseAvailableProvider)) return null;
   return PresenceRepository(ref.watch(supabaseClientProvider));
+});
+
+/// Live "dates proposés aujourd'hui" count for the Home card. Returns
+/// null when Supabase isn't configured or the RPC failed.
+final availableDateProposalsCountProvider = FutureProvider<int?>((ref) async {
+  final repo = ref.watch(presenceRepositoryProvider);
+  if (repo == null) return null;
+  return repo.availableDateProposalsToday();
 });
