@@ -69,7 +69,6 @@ class _CallScreenState extends ConsumerState<CallScreen> {
   String? _callId;
   String? _selfUserId;
   String? _channelName;
-  String _supabaseCallStatus = '—';
 
   /// Handle exposed by [AgoraCallView] so we can stop the engine BEFORE
   /// pushing the post-call screen. Without this, the peer's audio kept
@@ -155,10 +154,7 @@ class _CallScreenState extends ConsumerState<CallScreen> {
       // mangling, …) — using the DB value guarantees both peers join
       // exactly the same Agora room.
       final channelName = session.channelName ?? 'dn_${session.id}';
-      setState(() {
-        _channelName = channelName;
-        _supabaseCallStatus = session.status;
-      });
+      setState(() => _channelName = channelName);
       _log.info(
         'Call session ${result.source} — currentUserId=$selfId '
         'targetUserId=${match.candidate.userId} '
@@ -195,7 +191,6 @@ class _CallScreenState extends ConsumerState<CallScreen> {
       _sessionSub = repo.watch(session.id).listen(
         (row) {
           if (!mounted) return;
-          setState(() => _supabaseCallStatus = row.status);
           _log.info(
             'Realtime status — ${row.status} '
             'ready(caller=${row.callerReady} callee=${row.calleeReady})',
@@ -379,8 +374,7 @@ class _CallScreenState extends ConsumerState<CallScreen> {
                     },
                   ),
 
-            // Top HUD — back + timer + EN DIRECT. SafeArea ensures the
-            // header sits below the iPhone notch.
+            // Top HUD — compact row: peer pill · timer · LIVE pill.
             SafeArea(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(
@@ -392,56 +386,38 @@ class _CallScreenState extends ConsumerState<CallScreen> {
                 child: Align(
                   alignment: Alignment.topCenter,
                   child: _Header(
+                    name: name,
+                    age: age,
                     remaining: _remaining,
-                    onBack: () => _endCall(),
                   ),
                 ),
               ),
             ),
 
-            // Bottom HUD — name plate + "Terminer le date" CTA, semi-
-            // transparent so the Jitsi UI behind remains tap-through
-            // wherever this isn't.
+            // Bottom HUD — a single row of 4 compact circular controls
+            // (mic / cam / switch / end). No big translucent panel; the
+            // video gets the full screen. AnimatedBuilder rebuilds only
+            // when the controller's mic/cam state changes.
             Align(
               alignment: Alignment.bottomCenter,
               child: SafeArea(
                 top: false,
-                child: Container(
-                  margin: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.md,
-                  ),
-                  padding: const EdgeInsets.fromLTRB(
-                    AppSpacing.md,
-                    AppSpacing.sm,
-                    AppSpacing.md,
-                    AppSpacing.sm,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.45),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.12),
-                    ),
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _NamePlate(name: name, age: age),
-                      const SizedBox(height: AppSpacing.sm),
-                      AppButton(
-                        label: 'Terminer le date',
-                        icon: Icons.call_end_rounded,
-                        onPressed: () => _endCall(),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Statut Supabase : $_supabaseCallStatus',
-                        style: AppTypography.caption.copyWith(
-                          color: Colors.white.withValues(alpha: 0.55),
-                        ),
-                      ),
-                    ],
-                  ),
+                minimum: const EdgeInsets.only(bottom: AppSpacing.sm),
+                child: AnimatedBuilder(
+                  animation: _agoraController ?? const _NullListenable(),
+                  builder: (context, _) {
+                    final c = _agoraController;
+                    final ready = c?.isReady ?? false;
+                    return _ControlBar(
+                      micMuted: c?.micMuted ?? false,
+                      cameraOff: c?.cameraOff ?? false,
+                      enabled: ready,
+                      onToggleMic: () => c?.toggleMic(),
+                      onToggleCamera: () => c?.toggleCamera(),
+                      onSwitchCamera: () => c?.switchCamera(),
+                      onEnd: () => _endCall(),
+                    );
+                  },
                 ),
               ),
             ),
@@ -452,123 +428,142 @@ class _CallScreenState extends ConsumerState<CallScreen> {
   }
 }
 
+/// A no-op Listenable so [AnimatedBuilder] can mount before the Agora
+/// controller is wired. Once the parent stores the real controller and
+/// rebuilds, AnimatedBuilder swaps to it and starts listening.
+class _NullListenable extends Listenable {
+  const _NullListenable();
+  @override
+  void addListener(VoidCallback listener) {}
+  @override
+  void removeListener(VoidCallback listener) {}
+}
+
 // ---------------------------------------------------------------------------
 // Header — back button + compact timer + LIVE pill
 // ---------------------------------------------------------------------------
 
+/// Compact top HUD row: peer name pill · live timer · "EN DIRECT" badge.
+/// One line, ~44 dp tall — designed to sit under the notch without
+/// fighting with the video.
 class _Header extends StatelessWidget {
-  const _Header({required this.remaining, required this.onBack});
+  const _Header({
+    required this.name,
+    required this.age,
+    required this.remaining,
+  });
 
+  final String name;
+  final int? age;
   final Duration remaining;
-  final VoidCallback onBack;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 44,
-      child: Stack(
-        alignment: Alignment.center,
+    final peerLabel = age != null ? '$name, $age' : name;
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Flexible(child: _peerPill(peerLabel)),
+        const SizedBox(width: AppSpacing.sm),
+        _timerPill(),
+        const SizedBox(width: AppSpacing.sm),
+        _livePill(),
+      ],
+    );
+  }
+
+  Widget _peerPill(String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.45),
+        borderRadius: AppRadius.brPill,
+        border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Material(
-              color: Colors.transparent,
-              shape: const CircleBorder(),
-              child: InkWell(
-                onTap: onBack,
-                customBorder: const CircleBorder(),
-                child: Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.black.withValues(alpha: 0.45),
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.15),
-                    ),
-                  ),
-                  alignment: Alignment.center,
-                  child: const Icon(
-                    Icons.chevron_left_rounded,
-                    color: Colors.white,
-                    size: 22,
-                  ),
-                ),
+          const Icon(Icons.person_rounded, size: 14, color: Colors.white),
+          const SizedBox(width: 5),
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              softWrap: false,
+              style: AppTypography.caption.copyWith(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _timerPill() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.45),
+        borderRadius: AppRadius.brPill,
+        border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
           Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.md,
-              vertical: 8,
-            ),
-            decoration: BoxDecoration(
-              color: Colors.black.withValues(alpha: 0.45),
-              borderRadius: AppRadius.brPill,
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.15),
-              ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 6,
-                  height: 6,
-                  decoration: const BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: AppColors.brandPink,
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  remaining.toMmSs(),
-                  style: AppTypography.body.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                    fontFeatures: const [FontFeature.tabularFigures()],
-                    letterSpacing: 0.5,
-                  ),
-                ),
-              ],
+            width: 6,
+            height: 6,
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              color: AppColors.brandPink,
             ),
           ),
-          Align(
-            alignment: Alignment.centerRight,
-            child: Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.sm + 2,
-                vertical: 7,
-              ),
-              decoration: BoxDecoration(
-                color: AppColors.online.withValues(alpha: 0.22),
-                borderRadius: AppRadius.brPill,
-                border: Border.all(
-                  color: AppColors.online.withValues(alpha: 0.5),
-                ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 6,
-                    height: 6,
-                    decoration: const BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: AppColors.online,
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    'EN DIRECT',
-                    style: AppTypography.caption.copyWith(
-                      color: AppColors.online,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 1,
-                    ),
-                  ),
-                ],
-              ),
+          const SizedBox(width: 6),
+          Text(
+            remaining.toMmSs(),
+            style: AppTypography.caption.copyWith(
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+              fontFeatures: const [FontFeature.tabularFigures()],
+              letterSpacing: 0.5,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _livePill() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: AppColors.online.withValues(alpha: 0.22),
+        borderRadius: AppRadius.brPill,
+        border: Border.all(color: AppColors.online.withValues(alpha: 0.5)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              color: AppColors.online,
+            ),
+          ),
+          const SizedBox(width: 5),
+          Text(
+            'LIVE',
+            style: AppTypography.caption.copyWith(
+              color: AppColors.online,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1,
+              fontSize: 10,
             ),
           ),
         ],
@@ -578,36 +573,134 @@ class _Header extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Name plate
+// Bottom control bar — 4 compact circular buttons (mic / cam / switch / end)
 // ---------------------------------------------------------------------------
 
-class _NamePlate extends StatelessWidget {
-  const _NamePlate({required this.name, required this.age});
+class _ControlBar extends StatelessWidget {
+  const _ControlBar({
+    required this.micMuted,
+    required this.cameraOff,
+    required this.enabled,
+    required this.onToggleMic,
+    required this.onToggleCamera,
+    required this.onSwitchCamera,
+    required this.onEnd,
+  });
 
-  final String name;
-  final int? age;
+  /// `false` until the engine is wired — the row still renders so it
+  /// doesn't pop in mid-call, but mic/cam/switch taps are no-ops.
+  /// "End" is always enabled (it goes through CallScreen, not the engine).
+  final bool enabled;
+  final bool micMuted;
+  final bool cameraOff;
+  final VoidCallback onToggleMic;
+  final VoidCallback onToggleCamera;
+  final VoidCallback onSwitchCamera;
+  final VoidCallback onEnd;
 
   @override
   Widget build(BuildContext context) {
-    final title = age != null ? '$name, $age' : name;
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.md,
-        vertical: AppSpacing.sm,
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          _CircleButton(
+            icon: micMuted ? Icons.mic_off_rounded : Icons.mic_rounded,
+            active: micMuted,
+            onTap: enabled ? onToggleMic : null,
+            label: micMuted ? 'Activer micro' : 'Couper micro',
+          ),
+          _CircleButton(
+            icon: cameraOff
+                ? Icons.videocam_off_rounded
+                : Icons.videocam_rounded,
+            active: cameraOff,
+            onTap: enabled ? onToggleCamera : null,
+            label: cameraOff ? 'Activer caméra' : 'Couper caméra',
+          ),
+          _CircleButton(
+            icon: Icons.cameraswitch_rounded,
+            onTap: enabled ? onSwitchCamera : null,
+            label: 'Changer caméra',
+          ),
+          // End-call: smaller pink/red filled circle, premium accent.
+          _CircleButton(
+            icon: Icons.call_end_rounded,
+            accent: true,
+            onTap: onEnd,
+            label: 'Terminer le date',
+          ),
+        ],
       ),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.08),
-        borderRadius: AppRadius.brPill,
-        border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
-      ),
-      child: Text(
-        title,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        softWrap: false,
-        style: AppTypography.body.copyWith(
-          color: Colors.white,
-          fontWeight: FontWeight.w700,
+    );
+  }
+}
+
+class _CircleButton extends StatelessWidget {
+  const _CircleButton({
+    required this.icon,
+    required this.onTap,
+    required this.label,
+    this.active = false,
+    this.accent = false,
+  });
+
+  final IconData icon;
+  final VoidCallback? onTap;
+  final String label;
+
+  /// Toggle pressed state (mic muted, cam off…) — slight pink wash.
+  final bool active;
+
+  /// Highlight as the primary destructive action (end call) — full pink.
+  final bool accent;
+
+  @override
+  Widget build(BuildContext context) {
+    final disabled = onTap == null;
+    final bg = accent
+        ? AppColors.brandPink
+        : active
+            ? AppColors.brandPink.withValues(alpha: 0.85)
+            : Colors.black.withValues(alpha: 0.55);
+    final border = accent
+        ? AppColors.brandPink
+        : Colors.white.withValues(alpha: active ? 0.0 : 0.2);
+    final iconColor =
+        disabled ? Colors.white.withValues(alpha: 0.45) : Colors.white;
+    return Semantics(
+      label: label,
+      button: true,
+      enabled: !disabled,
+      child: Material(
+        color: Colors.transparent,
+        shape: const CircleBorder(),
+        child: InkWell(
+          onTap: onTap,
+          customBorder: const CircleBorder(),
+          // Big invisible hit area so iPhone fat-finger taps land easily.
+          child: Container(
+            width: 56,
+            height: 56,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: bg,
+              border: Border.all(color: border, width: 1),
+              boxShadow: accent
+                  ? [
+                      BoxShadow(
+                        color: AppColors.brandPink.withValues(alpha: 0.45),
+                        blurRadius: 16,
+                        spreadRadius: 1,
+                        offset: const Offset(0, 4),
+                      ),
+                    ]
+                  : null,
+            ),
+            alignment: Alignment.center,
+            child: Icon(icon, color: iconColor, size: 22),
+          ),
         ),
       ),
     );

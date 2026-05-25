@@ -29,17 +29,125 @@ import '../data/agora_token_repository.dart';
 /// The pipeline is also where future blur / progressive reveal / AI
 /// filters will hook in, by intercepting the engine's video frames
 /// through `agora_rtc_engine` (exposed via `client.engine`).
-/// Public handle returned through [AgoraCallView.onControllerCreated] so
-/// the parent (CallScreen) can hard-stop the engine BEFORE navigating
-/// to the post-call screen. Without this, the platform-side engine
-/// teardown lags the route push and the peer's audio keeps playing on
-/// top of the reveal UI for a second or two.
-abstract class AgoraCallController {
-  /// Mutes local + remote streams, leaves the channel, releases the
-  /// engine. Idempotent: subsequent calls are no-ops, so it is safe to
-  /// invoke from both [CallScreen._endCall] AND from `dispose()` as a
-  /// belt-and-suspenders backup.
-  Future<void> stopEngine();
+/// Handle returned through [AgoraCallView.onControllerCreated] so the
+/// parent (CallScreen) can:
+///   * hard-stop the engine BEFORE navigating to the post-call screen
+///     (without this the peer's audio leaks onto the reveal UI), AND
+///   * drive the call's controls (mute mic, toggle camera, switch
+///     camera, end) from a custom branded button row instead of
+///     `agora_uikit`'s default `AgoraVideoButtons` chrome — which used
+///     to sit *under* our footer and got covered.
+///
+/// Implements [ChangeNotifier] so the UI can rebuild its mic/cam icons
+/// without going through Riverpod.
+class AgoraCallController extends ChangeNotifier {
+  AgoraCallController._internal();
+
+  static const _log = AppLogger('AgoraCtrl');
+
+  AgoraClient? _client;
+  bool _micMuted = false;
+  bool _cameraOff = false;
+  bool _engineStopped = false;
+
+  /// True once the engine has been wired in. The button row hides
+  /// itself until then so taps before init are no-ops.
+  bool get isReady => _client != null;
+  bool get micMuted => _micMuted;
+  bool get cameraOff => _cameraOff;
+
+  /// Wired by [_AgoraCallViewState] once `AgoraClient.initialize()`
+  /// returns. Anything before this is silently ignored.
+  void _attach(AgoraClient client) {
+    if (_client != null) return;
+    _client = client;
+    notifyListeners();
+  }
+
+  Future<void> setMicMuted(bool muted) async {
+    final c = _client;
+    if (c == null || _micMuted == muted) return;
+    try {
+      await c.engine.muteLocalAudioStream(muted);
+    } catch (e) {
+      _log.warn('muteLocalAudioStream($muted) threw: $e');
+      return;
+    }
+    _micMuted = muted;
+    notifyListeners();
+  }
+
+  Future<void> toggleMic() => setMicMuted(!_micMuted);
+
+  Future<void> setCameraOff(bool off) async {
+    final c = _client;
+    if (c == null || _cameraOff == off) return;
+    try {
+      // enableLocalVideo also stops capture (saves battery + cuts the
+      // peer's view of you immediately), unlike muteLocalVideoStream
+      // which just stops sending but keeps the camera running.
+      await c.engine.enableLocalVideo(!off);
+    } catch (e) {
+      _log.warn('enableLocalVideo(${!off}) threw: $e');
+      return;
+    }
+    _cameraOff = off;
+    notifyListeners();
+  }
+
+  Future<void> toggleCamera() => setCameraOff(!_cameraOff);
+
+  Future<void> switchCamera() async {
+    final c = _client;
+    if (c == null) return;
+    try {
+      await c.engine.switchCamera();
+    } catch (e) {
+      _log.warn('switchCamera threw: $e');
+    }
+  }
+
+  /// Hard-stops audio + video, leaves the channel, releases the engine.
+  /// Idempotent — safe to call from both [CallScreen._endCall] and the
+  /// [_AgoraCallViewState.dispose] fallback.
+  Future<void> stopEngine() async {
+    if (_engineStopped) return;
+    _engineStopped = true;
+    final c = _client;
+    if (c == null) return;
+    _log.info('stopEngine — muting + leaving + releasing');
+    final engine = c.engine;
+    try {
+      await engine.muteAllRemoteAudioStreams(true);
+    } catch (e) {
+      _log.warn('muteAllRemoteAudioStreams threw: $e');
+    }
+    try {
+      await engine.muteLocalAudioStream(true);
+    } catch (e) {
+      _log.warn('muteLocalAudioStream threw: $e');
+    }
+    try {
+      await engine.muteLocalVideoStream(true);
+    } catch (e) {
+      _log.warn('muteLocalVideoStream threw: $e');
+    }
+    try {
+      await engine.stopPreview();
+    } catch (e) {
+      _log.warn('stopPreview threw: $e');
+    }
+    try {
+      await engine.leaveChannel();
+    } catch (e) {
+      _log.warn('leaveChannel threw: $e');
+    }
+    try {
+      c.release();
+    } catch (e) {
+      _log.warn('release() threw: $e');
+    }
+  }
 }
 
 class AgoraCallView extends ConsumerStatefulWidget {
@@ -69,12 +177,13 @@ class AgoraCallView extends ConsumerStatefulWidget {
   ConsumerState<AgoraCallView> createState() => _AgoraCallViewState();
 }
 
-class _AgoraCallViewState extends ConsumerState<AgoraCallView>
-    implements AgoraCallController {
+class _AgoraCallViewState extends ConsumerState<AgoraCallView> {
   static const _log = AppLogger('Agora');
 
-  /// Set once stopEngine has run so we don't double-mute / double-leave.
-  bool _engineStopped = false;
+  /// Owns the public-facing controls (mic/cam/switch/stop). Created in
+  /// initState so the parent can immediately receive it, wired to the
+  /// engine once `AgoraClient.initialize()` returns.
+  final AgoraCallController _controller = AgoraCallController._internal();
 
   /// How long the peer can be absent (no remote stream) mid-call before
   /// we end gracefully. Generous enough to ride out a real reconnection,
@@ -108,58 +217,11 @@ class _AgoraCallViewState extends ConsumerState<AgoraCallView>
   @override
   void initState() {
     super.initState();
-    // Hand the parent (CallScreen) the controller so it can hard-stop
-    // the engine BEFORE navigating to the post-call screen.
-    widget.onControllerCreated?.call(this);
+    // Hand the parent (CallScreen) the controller now — it can wire its
+    // button row immediately and the controller will fire notifyListeners
+    // once the engine is actually attached.
+    widget.onControllerCreated?.call(_controller);
     _bootstrap();
-  }
-
-  /// Hard-stops audio + video, leaves the channel, releases the engine.
-  /// Idempotent — multiple calls are safe.
-  @override
-  Future<void> stopEngine() async {
-    if (_engineStopped) return;
-    _engineStopped = true;
-    final c = _client;
-    if (c == null) return;
-    _log.info('stopEngine — muting + leaving + releasing');
-    final engine = c.engine;
-    // 1. Kill remote audio FIRST so the peer's voice cuts the instant
-    //    the user taps "Terminer", even before leaveChannel completes.
-    try {
-      await engine.muteAllRemoteAudioStreams(true);
-    } catch (e) {
-      _log.warn('muteAllRemoteAudioStreams threw: $e');
-    }
-    // 2. Mute + disable our own capture.
-    try {
-      await engine.muteLocalAudioStream(true);
-    } catch (e) {
-      _log.warn('muteLocalAudioStream threw: $e');
-    }
-    try {
-      await engine.muteLocalVideoStream(true);
-    } catch (e) {
-      _log.warn('muteLocalVideoStream threw: $e');
-    }
-    try {
-      await engine.stopPreview();
-    } catch (e) {
-      _log.warn('stopPreview threw: $e');
-    }
-    // 3. Leave the channel — final platform-side teardown of the
-    //    audio/video pipeline.
-    try {
-      await engine.leaveChannel();
-    } catch (e) {
-      _log.warn('leaveChannel threw: $e');
-    }
-    // 4. Release the UIKit client (also disposes event handlers).
-    try {
-      c.release();
-    } catch (e) {
-      _log.warn('release() threw: $e');
-    }
   }
 
   Future<void> _bootstrap() async {
@@ -347,6 +409,9 @@ class _AgoraCallViewState extends ConsumerState<AgoraCallView>
       );
       if (!mounted) return;
       setState(() => _client = client);
+      // Wire the controller to the live engine — its `isReady` flips to
+      // true and the parent's button row stops being a no-op.
+      _controller._attach(client);
       _publishDebug();
     } catch (e, st) {
       _log.error('Engine init failed: $e', e, st);
@@ -398,7 +463,8 @@ class _AgoraCallViewState extends ConsumerState<AgoraCallView>
     // stopEngine() (older code paths, errors, …), still tear the engine
     // down here. Fire-and-forget because dispose() must return
     // synchronously — stopEngine itself is idempotent.
-    unawaited(stopEngine());
+    unawaited(_controller.stopEngine());
+    _controller.dispose();
     super.dispose();
   }
 
@@ -441,17 +507,11 @@ class _AgoraCallViewState extends ConsumerState<AgoraCallView>
           ),
         ),
 
-        AgoraVideoButtons(
-          client: c,
-          disconnectButtonChild: const Icon(
-            Icons.call_end_rounded,
-            color: Colors.white,
-          ),
-          onDisconnect: () async {
-            _log.info('Disconnect button tapped');
-            widget.onLeave();
-          },
-        ),
+        // NOTE: `agora_uikit`'s `AgoraVideoButtons` are intentionally
+        // NOT mounted here. They render a large default chrome at the
+        // bottom-center that fights with CallScreen's own footer and
+        // hides tappable areas on iPhone. CallScreen draws its own
+        // compact button row driven by [AgoraCallController].
 
         // Permanent caption so the blur reads as a deliberate feature,
         // not a broken stream.
