@@ -29,12 +29,26 @@ import '../data/agora_token_repository.dart';
 /// The pipeline is also where future blur / progressive reveal / AI
 /// filters will hook in, by intercepting the engine's video frames
 /// through `agora_rtc_engine` (exposed via `client.engine`).
+/// Public handle returned through [AgoraCallView.onControllerCreated] so
+/// the parent (CallScreen) can hard-stop the engine BEFORE navigating
+/// to the post-call screen. Without this, the platform-side engine
+/// teardown lags the route push and the peer's audio keeps playing on
+/// top of the reveal UI for a second or two.
+abstract class AgoraCallController {
+  /// Mutes local + remote streams, leaves the channel, releases the
+  /// engine. Idempotent: subsequent calls are no-ops, so it is safe to
+  /// invoke from both [CallScreen._endCall] AND from `dispose()` as a
+  /// belt-and-suspenders backup.
+  Future<void> stopEngine();
+}
+
 class AgoraCallView extends ConsumerStatefulWidget {
   const AgoraCallView({
     super.key,
     required this.callId,
     required this.channelName,
     required this.onLeave,
+    this.onControllerCreated,
   });
 
   /// The `calls` row id — used to request a token scoped to this call.
@@ -45,12 +59,22 @@ class AgoraCallView extends ConsumerStatefulWidget {
   /// run end-of-call cleanup (Supabase status flip, navigation).
   final VoidCallback onLeave;
 
+  /// Fires once with the controller as soon as the state mounts. The
+  /// parent stores the reference and calls [AgoraCallController.stopEngine]
+  /// before route changes so the engine has actually stopped capturing
+  /// + playing by the time the next screen builds.
+  final void Function(AgoraCallController controller)? onControllerCreated;
+
   @override
   ConsumerState<AgoraCallView> createState() => _AgoraCallViewState();
 }
 
-class _AgoraCallViewState extends ConsumerState<AgoraCallView> {
+class _AgoraCallViewState extends ConsumerState<AgoraCallView>
+    implements AgoraCallController {
   static const _log = AppLogger('Agora');
+
+  /// Set once stopEngine has run so we don't double-mute / double-leave.
+  bool _engineStopped = false;
 
   /// How long the peer can be absent (no remote stream) mid-call before
   /// we end gracefully. Generous enough to ride out a real reconnection,
@@ -84,7 +108,58 @@ class _AgoraCallViewState extends ConsumerState<AgoraCallView> {
   @override
   void initState() {
     super.initState();
+    // Hand the parent (CallScreen) the controller so it can hard-stop
+    // the engine BEFORE navigating to the post-call screen.
+    widget.onControllerCreated?.call(this);
     _bootstrap();
+  }
+
+  /// Hard-stops audio + video, leaves the channel, releases the engine.
+  /// Idempotent — multiple calls are safe.
+  @override
+  Future<void> stopEngine() async {
+    if (_engineStopped) return;
+    _engineStopped = true;
+    final c = _client;
+    if (c == null) return;
+    _log.info('stopEngine — muting + leaving + releasing');
+    final engine = c.engine;
+    // 1. Kill remote audio FIRST so the peer's voice cuts the instant
+    //    the user taps "Terminer", even before leaveChannel completes.
+    try {
+      await engine.muteAllRemoteAudioStreams(true);
+    } catch (e) {
+      _log.warn('muteAllRemoteAudioStreams threw: $e');
+    }
+    // 2. Mute + disable our own capture.
+    try {
+      await engine.muteLocalAudioStream(true);
+    } catch (e) {
+      _log.warn('muteLocalAudioStream threw: $e');
+    }
+    try {
+      await engine.muteLocalVideoStream(true);
+    } catch (e) {
+      _log.warn('muteLocalVideoStream threw: $e');
+    }
+    try {
+      await engine.stopPreview();
+    } catch (e) {
+      _log.warn('stopPreview threw: $e');
+    }
+    // 3. Leave the channel — final platform-side teardown of the
+    //    audio/video pipeline.
+    try {
+      await engine.leaveChannel();
+    } catch (e) {
+      _log.warn('leaveChannel threw: $e');
+    }
+    // 4. Release the UIKit client (also disposes event handlers).
+    try {
+      c.release();
+    } catch (e) {
+      _log.warn('release() threw: $e');
+    }
   }
 
   Future<void> _bootstrap() async {
@@ -319,13 +394,11 @@ class _AgoraCallViewState extends ConsumerState<AgoraCallView> {
     _peerAbsentTimer?.cancel();
     ref.read(agoraConnectionDebugProvider.notifier).state =
         AgoraConnectionDebug.none;
-    // The package's release() tears down the engine + cancels event
-    // listeners; safe to call even mid-init thanks to internal guards.
-    try {
-      _client?.release();
-    } catch (e) {
-      _log.warn('release() threw: $e');
-    }
+    // Belt-and-suspenders: if the parent navigated without calling
+    // stopEngine() (older code paths, errors, …), still tear the engine
+    // down here. Fire-and-forget because dispose() must return
+    // synchronously — stopEngine itself is idempotent.
+    unawaited(stopEngine());
     super.dispose();
   }
 

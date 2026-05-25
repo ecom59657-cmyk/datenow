@@ -71,6 +71,12 @@ class _CallScreenState extends ConsumerState<CallScreen> {
   String? _channelName;
   String _supabaseCallStatus = '—';
 
+  /// Handle exposed by [AgoraCallView] so we can stop the engine BEFORE
+  /// pushing the post-call screen. Without this, the peer's audio kept
+  /// playing on the reveal UI for a second or two while the platform-
+  /// side teardown raced the route push.
+  AgoraCallController? _agoraController;
+
   _PreCall _precall = _PreCall.opening;
   Timer? _peerReadyTimer;
   Timer? _joiningTimer;
@@ -275,9 +281,24 @@ class _CallScreenState extends ConsumerState<CallScreen> {
     _ending = true;
     if (!mounted) return;
     _log.info(remote ? 'Call ended remotely' : 'Call ended locally');
-    // AgoraCallView's dispose() runs `client.release()` when the parent
-    // widget unmounts via pushReplacementNamed, so there's nothing to
-    // tear down imperatively here.
+
+    // 1. Hard-stop the Agora engine BEFORE we navigate. Without this,
+    //    `release()` runs asynchronously from AgoraCallView's dispose
+    //    and the peer's audio can keep playing on top of the post-call
+    //    screen for a second or two. stopEngine() is idempotent — the
+    //    dispose-time call later is a safe no-op.
+    final agora = _agoraController;
+    if (agora != null) {
+      try {
+        await agora.stopEngine();
+      } catch (e, st) {
+        _log.warn('stopEngine threw (will continue tearing down): $e\n$st');
+      }
+    }
+
+    // 2. Flip the Supabase call row to `ended` so the peer's listener
+    //    fires (and the server-side cleanup proceeds). Skip if WE ended
+    //    in response to the peer doing it — the row is already `ended`.
     if (!remote && _callId != null && _selfUserId != null) {
       final repo = ref.read(callSessionRepositoryProvider);
       if (repo != null) {
@@ -352,6 +373,9 @@ class _CallScreenState extends ConsumerState<CallScreen> {
                     channelName: _channelName!,
                     onLeave: () {
                       if (mounted && !_ending) _endCall();
+                    },
+                    onControllerCreated: (controller) {
+                      _agoraController = controller;
                     },
                   ),
 
