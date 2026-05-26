@@ -57,6 +57,99 @@ enum MatchDecisionOutcome {
   passed,
 }
 
+/// Single source of truth for the post-call screen state, computed
+/// purely from the live `reveals` rows. The post-call screen treats
+/// this enum as authoritative: user taps only write to Supabase,
+/// realtime emits the new rows, and the listener recomputes the
+/// stage via [PostCallStage.fromRows].
+///
+/// Mapping (mine.revealed / theirs.revealed / mine.decision / theirs.decision):
+///   pending           — neither row exists yet (call just ended)
+///   selfDecideReveal  — neither row decided, or only self knows of the call
+///   waitingForPeerReveal — mine.revealed=true, theirs not yet revealed
+///   peerPassedAtReveal — theirs.revealed=false (terminal: noMatch)
+///   selfPassedAtReveal — mine.revealed=false (terminal: passed)
+///   mutual            — both revealed=true, both decision='pending'
+///   awaitingPeerMatch — mine.decision='match', theirs='pending'
+///   peerWantsMatch    — mine='pending', theirs='match'  (functionally
+///                       same UI as mutual, but logged separately)
+///   matched           — both decision='match'
+///   selfPassed        — mine.decision='pass'
+///   peerPassed        — theirs.decision='pass', mine in {pending, match}
+enum PostCallStage {
+  pending,
+  selfDecideReveal,
+  waitingForPeerReveal,
+  selfPassedAtReveal,
+  peerPassedAtReveal,
+  mutual,
+  awaitingPeerMatch,
+  peerWantsMatch,
+  matched,
+  selfPassed,
+  peerPassed;
+
+  /// Pure mapping (self, peer) rows → stage. The caller must already
+  /// know which row belongs to self / peer.
+  static PostCallStage fromRows(
+    List<RevealRow> rows, {
+    required String selfId,
+    required String peerId,
+  }) {
+    RevealRow? mine;
+    RevealRow? theirs;
+    for (final r in rows) {
+      if (r.userId == selfId) mine = r;
+      if (r.userId == peerId) theirs = r;
+    }
+    if (mine == null && theirs == null) return PostCallStage.pending;
+
+    // Photo-reveal phase
+    if (mine == null) {
+      // Peer acted first — we haven't written anything yet.
+      return PostCallStage.selfDecideReveal;
+    }
+    if (mine.revealed == false) {
+      // self pressed Passer at the reveal step
+      return PostCallStage.selfPassedAtReveal;
+    }
+    // mine.revealed == true here
+    if (theirs == null || (theirs.revealed != true && theirs.revealed != false)) {
+      // theirs missing entirely → still waiting on peer to reveal
+      return PostCallStage.waitingForPeerReveal;
+    }
+    if (theirs.revealed == false) {
+      return PostCallStage.peerPassedAtReveal;
+    }
+
+    // Both revealed=true → decision phase
+    final mineDec = mine.decision;
+    final theirsDec = theirs.decision;
+
+    if (mineDec == 'pass') return PostCallStage.selfPassed;
+    if (theirsDec == 'pass') return PostCallStage.peerPassed;
+    if (mineDec == 'match' && theirsDec == 'match') {
+      return PostCallStage.matched;
+    }
+    if (mineDec == 'match') return PostCallStage.awaitingPeerMatch;
+    if (theirsDec == 'match') return PostCallStage.peerWantsMatch;
+    return PostCallStage.mutual; // both pending
+  }
+
+  /// True once the stage represents a final, non-recoverable outcome.
+  /// The listener uses this to stop re-applying transitions and the
+  /// dispatch logic uses it to gate side-effects (create match,
+  /// cancel timeouts…).
+  bool get isTerminal => switch (this) {
+        PostCallStage.matched => true,
+        PostCallStage.selfPassed => true,
+        PostCallStage.peerPassed => true,
+        PostCallStage.selfPassedAtReveal => true,
+        PostCallStage.peerPassedAtReveal => true,
+        _ => false,
+      };
+}
+
 /// Backs the post-call reveal: records each user's photo-reveal decision
 /// and post-reveal match decision in `public.reveals`, and (when both
 /// pick Match) writes the permanent `public.matches` row.

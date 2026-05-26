@@ -326,4 +326,194 @@ void main() {
       expect(outcome, MatchDecisionOutcome.awaitingPeer);
     });
   });
+
+  // =========================================================================
+  // TEST 9 — PostCallStage.fromRows (single source of truth for the UI)
+  //
+  // Realtime delivers the full row set on every change; PostCallStage
+  // .fromRows is the pure mapping that the post-call screen uses to
+  // decide what to render. Both clients running it on the same input
+  // MUST produce the same stage — that is the invariant guaranteeing
+  // they converge.
+  // =========================================================================
+  group('Test 9 — PostCallStage.fromRows', () {
+    const selfId = 'user-A';
+    const peerId = 'user-B';
+
+    RevealRow row(String userId, {
+      required bool revealed,
+      String decision = 'pending',
+    }) {
+      return RevealRow(
+        callId: 'c1',
+        userId: userId,
+        revealed: revealed,
+        decision: decision,
+      );
+    }
+
+    PostCallStage stage(List<RevealRow> rows) =>
+        PostCallStage.fromRows(rows, selfId: selfId, peerId: peerId);
+
+    test('no rows → pending', () {
+      expect(stage(const []), PostCallStage.pending);
+    });
+
+    test('only peer revealed (call init by peer) → selfDecideReveal', () {
+      expect(
+        stage([row(peerId, revealed: true)]),
+        PostCallStage.selfDecideReveal,
+      );
+    });
+
+    test('self revealed, peer missing → waitingForPeerReveal', () {
+      expect(
+        stage([row(selfId, revealed: true)]),
+        PostCallStage.waitingForPeerReveal,
+      );
+    });
+
+    test('self revealed=false → selfPassedAtReveal', () {
+      expect(
+        stage([row(selfId, revealed: false), row(peerId, revealed: true)]),
+        PostCallStage.selfPassedAtReveal,
+      );
+    });
+
+    test('peer revealed=false → peerPassedAtReveal', () {
+      expect(
+        stage([row(selfId, revealed: true), row(peerId, revealed: false)]),
+        PostCallStage.peerPassedAtReveal,
+      );
+    });
+
+    test('both revealed=true, both pending → mutual', () {
+      expect(
+        stage([row(selfId, revealed: true), row(peerId, revealed: true)]),
+        PostCallStage.mutual,
+      );
+    });
+
+    test('mine=match peer=pending → awaitingPeerMatch', () {
+      expect(
+        stage([
+          row(selfId, revealed: true, decision: 'match'),
+          row(peerId, revealed: true),
+        ]),
+        PostCallStage.awaitingPeerMatch,
+      );
+    });
+
+    test('mine=pending peer=match → peerWantsMatch (UI stays mutual)', () {
+      expect(
+        stage([
+          row(selfId, revealed: true),
+          row(peerId, revealed: true, decision: 'match'),
+        ]),
+        PostCallStage.peerWantsMatch,
+      );
+    });
+
+    test('both match → matched (create match + chat)', () {
+      expect(
+        stage([
+          row(selfId, revealed: true, decision: 'match'),
+          row(peerId, revealed: true, decision: 'match'),
+        ]),
+        PostCallStage.matched,
+      );
+    });
+
+    test('mine=pass → selfPassed (terminal)', () {
+      expect(
+        stage([
+          row(selfId, revealed: true, decision: 'pass'),
+          row(peerId, revealed: true, decision: 'match'),
+        ]),
+        PostCallStage.selfPassed,
+      );
+    });
+
+    test('mine=match peer=pass → peerPassed', () {
+      expect(
+        stage([
+          row(selfId, revealed: true, decision: 'match'),
+          row(peerId, revealed: true, decision: 'pass'),
+        ]),
+        PostCallStage.peerPassed,
+      );
+    });
+
+    test('mine=pending peer=pass → peerPassed', () {
+      expect(
+        stage([
+          row(selfId, revealed: true),
+          row(peerId, revealed: true, decision: 'pass'),
+        ]),
+        PostCallStage.peerPassed,
+      );
+    });
+
+    test('both pass → selfPassed wins (self decision evaluated first)', () {
+      // Order in the spec table: pass/pass → noMatch. We map to
+      // selfPassed (terminal self view) which renders the same UX.
+      // The important thing is it's terminal and non-recoverable.
+      expect(
+        stage([
+          row(selfId, revealed: true, decision: 'pass'),
+          row(peerId, revealed: true, decision: 'pass'),
+        ]).isTerminal,
+        isTrue,
+      );
+    });
+
+    group('symmetry — both clients agree on the same row set', () {
+      // Run the same row set from each client's perspective by
+      // swapping which userId is "self". The matched / passed /
+      // noMatch outcomes must collapse to the same terminal class.
+      test('match/match: A computes matched, B computes matched', () {
+        final rows = [
+          row(selfId, revealed: true, decision: 'match'),
+          row(peerId, revealed: true, decision: 'match'),
+        ];
+        expect(
+          PostCallStage.fromRows(rows, selfId: selfId, peerId: peerId),
+          PostCallStage.matched,
+        );
+        expect(
+          PostCallStage.fromRows(rows, selfId: peerId, peerId: selfId),
+          PostCallStage.matched,
+        );
+      });
+
+      test('match/pass: matcher sees peerPassed, passer sees selfPassed '
+          '(both terminal noMatch class)', () {
+        final rows = [
+          row(selfId, revealed: true, decision: 'match'),
+          row(peerId, revealed: true, decision: 'pass'),
+        ];
+        // A perspective (A=match)
+        expect(
+          PostCallStage.fromRows(rows, selfId: selfId, peerId: peerId),
+          PostCallStage.peerPassed,
+        );
+        // B perspective (B=pass)
+        expect(
+          PostCallStage.fromRows(rows, selfId: peerId, peerId: selfId),
+          PostCallStage.selfPassed,
+        );
+        // Both terminal → both leave the screen.
+        expect(
+          PostCallStage.fromRows(rows, selfId: selfId, peerId: peerId)
+              .isTerminal,
+          isTrue,
+        );
+        expect(
+          PostCallStage.fromRows(rows, selfId: peerId, peerId: selfId)
+              .isTerminal,
+          isTrue,
+        );
+      });
+    });
+  });
 }

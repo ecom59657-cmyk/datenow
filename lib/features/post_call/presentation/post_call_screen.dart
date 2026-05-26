@@ -38,18 +38,15 @@ class PostCallScreen extends ConsumerStatefulWidget {
   ConsumerState<PostCallScreen> createState() => _PostCallScreenState();
 }
 
-/// Reveal flow stages:
-///   - decide          : peer photo masked, single "Révéler" button.
-///   - waiting         : self has revealed, waiting for the peer photo
-///                       reveal (photo stays masked).
-///   - mutual          : BOTH peers revealed — photo shown large,
-///                       Match/Pass buttons.
-///   - awaitingPeerMatch: self tapped Match — waiting for the peer's
-///                       Match/Pass decision. No match row exists yet.
-///   - matched         : both peers tapped Match → match row +
-///                       conversation created.
-///   - noMatch         : either peer passed → no match (server-confirmed).
-///   - passed          : self passed (terminal local view).
+/// Local view stages. Computed from [PostCallStage.fromRows] — the
+/// realtime `reveals` stream is the single source of truth. User taps
+/// only write to Supabase; the listener recomputes the stage on every
+/// emit and both clients converge to the same value.
+///
+/// `mutual` covers both "both pending" AND "peer wants match, self still
+/// deciding" — UI is identical (Match/Pass buttons live). Same for
+/// `noMatch` vs `passed`: noMatch = peer pulled out of the match, passed
+/// = self pulled out.
 enum _Stage {
   decide,
   waiting,
@@ -84,8 +81,42 @@ class _PostCallScreenState extends ConsumerState<PostCallScreen> {
   @override
   void initState() {
     super.initState();
-    DebugObserver.instance.setPhase('reveal'); // debug-observer
+    DebugObserver.instance.setPhase('reveal');
     _loadPeerPhoto();
+    // Eager realtime subscription — must run BEFORE the user taps
+    // anything so a hot-restart / screen rebuild / re-entry always
+    // converges from server truth. Deferred one frame so the providers
+    // (activeMatchProvider / activeCallIdProvider) are guaranteed
+    // initialised.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _attachRevealSub());
+  }
+
+  /// Attaches the realtime `reveals` subscription if it isn't already.
+  /// Idempotent: safe to call from initState + from any retry path.
+  void _attachRevealSub() {
+    if (_revealSub != null) return;
+    final callId = ref.read(activeCallIdProvider);
+    final match = ref.read(activeMatchProvider);
+    final self = ref.read(currentProfileProvider).asData?.value;
+    final repo = ref.read(revealRepositoryProvider);
+    if (callId == null || match == null || self == null || repo == null) {
+      _log.info(
+        'attachRevealSub deferred — '
+        'callId=${callId != null}, match=${match != null}, '
+        'self=${self != null}, repo=${repo != null}',
+      );
+      return;
+    }
+    _log.info('attachRevealSub callId=$callId selfId=${self.userId}');
+    _revealSub = repo.watchReveals(callId).listen(
+      (rows) => _onReveals(
+        rows,
+        callId: callId,
+        self: self,
+        match: match,
+      ),
+      onError: (e, st) => _log.error('watchReveals error', e, st),
+    );
   }
 
   /// Loads the *peer's* primary photo (never the current user's).
@@ -124,14 +155,17 @@ class _PostCallScreenState extends ConsumerState<PostCallScreen> {
     if (mounted) setState(() => _peerPhotoBytes = bytes);
   }
 
-  /// Submits the user's reveal=true and moves to the waiting state.
-  /// The photo stays masked here — it only appears once Realtime tells
-  /// us BOTH peers have revealed (handled in [_onReveals]).
+  /// Writes the user's `revealed = true` row. The actual transition to
+  /// the waiting / mutual stage is driven by [_onReveals] once the
+  /// realtime stream re-emits with the new row — same pattern as for
+  /// the match-decision step (single source of truth).
   void _submitReveal() async {
     final match = ref.read(activeMatchProvider);
     final self = ref.read(currentProfileProvider).asData?.value;
     if (match == null || self == null) return;
 
+    // Optimistic UI hint — listener-computed stage will overwrite this
+    // a moment later with the exact same value, so no flicker.
     setState(() => _stage = _Stage.waiting);
 
     final callId = ref.read(activeCallIdProvider);
@@ -144,19 +178,11 @@ class _PostCallScreenState extends ConsumerState<PostCallScreen> {
           userId: self.userId,
           revealed: true,
         );
-        DebugLog.reveal('reveal submitted'); // debug-observer
+        DebugLog.reveal('reveal submitted');
       } catch (e, st) {
         _log.error('submitReveal(true) failed', e, st);
       }
-      _revealSub = revealRepo.watchReveals(callId).listen(
-        (rows) => _onReveals(
-          rows,
-          callId: callId,
-          self: self,
-          match: match,
-        ),
-        onError: (e, st) => _log.error('watchReveals error', e, st),
-      );
+      _attachRevealSub(); // no-op if already attached in initState
       _startRevealTimeout();
       return;
     }
@@ -173,15 +199,17 @@ class _PostCallScreenState extends ConsumerState<PostCallScreen> {
   }
 
   /// Tapped on the mutual-reveal view when the user confirms the match.
-  /// Writes *only* the user's own decision = 'match' to the server and
-  /// flips to the awaiting-peer state. The permanent match row + the
-  /// conversation are created only when [_onReveals] sees the peer's
-  /// row also resolve to decision = 'match'.
+  /// Writes *only* `decision = 'match'` on the user's own row. The
+  /// transition to matched (when the peer also matches) is handled by
+  /// [_onReveals] once the realtime stream re-emits — same single
+  /// source of truth as the photo reveal step.
   void _confirmMatch() async {
     final self = ref.read(currentProfileProvider).asData?.value;
     final callId = ref.read(activeCallIdProvider);
     final revealRepo = ref.read(revealRepositoryProvider);
     if (self == null || callId == null || revealRepo == null) return;
+    // Optimistic hint: the listener will compute exactly the same
+    // stage once the upsert's UPDATE event lands in our stream.
     setState(() => _stage = _Stage.awaitingPeerMatch);
     DebugLog.reveal('match decision: self -> match');
     try {
@@ -195,14 +223,16 @@ class _PostCallScreenState extends ConsumerState<PostCallScreen> {
     }
   }
 
-  /// Tapped on the mutual-reveal view (or the awaiting-peer view) when
-  /// the user passes after seeing the photo. Writes decision = 'pass'
-  /// on the server so the peer's stream resolves to a `passed` outcome
-  /// and they leave the matched view too.
+  /// Tapped on the mutual-reveal (or awaiting-peer-match) view when the
+  /// user passes after seeing the photo. Writes `decision = 'pass'` on
+  /// the user's own row — [_onReveals] handles the transition to
+  /// passed locally AND will broadcast to the peer's listener so they
+  /// see noMatch without any extra round-trip.
   void _passAfterReveal() async {
     final self = ref.read(currentProfileProvider).asData?.value;
     final callId = ref.read(activeCallIdProvider);
     final revealRepo = ref.read(revealRepositoryProvider);
+    setState(() => _stage = _Stage.passed);
     if (self != null && callId != null && revealRepo != null) {
       try {
         await revealRepo.submitDecision(
@@ -216,10 +246,11 @@ class _PostCallScreenState extends ConsumerState<PostCallScreen> {
       }
     }
     if (!mounted) return;
-    _revealSub?.cancel();
     _revealTimeoutTimer?.cancel();
+    // Don't cancel _revealSub here — let the listener observe the
+    // peer's eventual converging state for telemetry / debug logs.
+    // It will short-circuit on `_stage.isTerminal` anyway.
     ref.read(activeMatchProvider.notifier).state = null;
-    setState(() => _stage = _Stage.passed);
   }
 
   /// (Re)arms the reveal-timeout timer. When it fires the waiting view
@@ -242,11 +273,11 @@ class _PostCallScreenState extends ConsumerState<PostCallScreen> {
     _startRevealTimeout();
   }
 
-  /// Drives the local stage from the live reveal rows. Handles BOTH the
-  /// photo-reveal phase (decide → waiting → mutual / noMatch) AND the
-  /// post-reveal match-decision phase (mutual → awaitingPeerMatch →
-  /// matched / noMatch). The permanent match row + conversation are
-  /// only created here, after the peer confirms decision = 'match'.
+  /// Single source of truth for the local UI stage. Computed from the
+  /// live `reveals` rows via [PostCallStage.fromRows], then mapped onto
+  /// the local [_Stage] enum the widget renders against. Idempotent:
+  /// repeated emits with the same outcome are no-ops, terminal stages
+  /// (matched / passed / noMatch) cannot be undone by a later emit.
   Future<void> _onReveals(
     List<RevealRow> rows, {
     required String callId,
@@ -254,66 +285,66 @@ class _PostCallScreenState extends ConsumerState<PostCallScreen> {
     required ActiveMatch match,
   }) async {
     if (!mounted) return;
-    final repo = ref.read(revealRepositoryProvider);
-    if (repo == null) return;
     final selfId = self.userId as String;
     final peerId = match.candidate.userId;
-    final outcome = repo.outcomeFor(rows, selfId: selfId, peerId: peerId);
-    _log.info('Reveal outcome — $outcome (${rows.length} row(s))');
-    // Terminal local stages must not be undone by a later realtime
-    // event (the peer might flip after we navigated away).
-    if (_stage == _Stage.matched || _stage == _Stage.passed) {
+    final outcome =
+        PostCallStage.fromRows(rows, selfId: selfId, peerId: peerId);
+    _log.info(
+      'Reveal recompute — outcome=$outcome rows=${rows.length} '
+      '(local=$_stage)',
+    );
+
+    // Terminal stages are not undone by future emits. (The peer might
+    // still send decision updates after we left the matched view.)
+    if (_stage == _Stage.matched ||
+        _stage == _Stage.passed ||
+        _stage == _Stage.noMatch) {
       return;
     }
-    switch (outcome) {
-      case RevealOutcome.pending:
-        // Still waiting for the peer to reveal their photo — stay on
-        // the waiting view.
-        return;
-      case RevealOutcome.declined:
-        _revealTimeoutTimer?.cancel();
-        DebugLog.reveal('declined');
-        DebugObserver.instance.setRevealOutcome('declined');
-        setState(() => _stage = _Stage.noMatch);
-        return;
-      case RevealOutcome.mutual:
-        _revealTimeoutTimer?.cancel();
-        // Land on the mutual view on first transition so Match/Pass
-        // become tappable. We may also transition further on the same
-        // stream tick if a decision has already been submitted.
-        if (_stage != _Stage.mutual &&
-            _stage != _Stage.awaitingPeerMatch) {
-          DebugLog.reveal('reveal mutual');
-          DebugObserver.instance.setRevealOutcome('mutual');
-          setState(() => _stage = _Stage.mutual);
-          // RLS on photos just opened — refetch the peer photo.
-          unawaited(_loadPeerPhoto());
-        }
+
+    // Map the (mine, theirs) outcome onto the local view stage.
+    final next = switch (outcome) {
+      PostCallStage.pending => _stage, // stay where we are
+      PostCallStage.selfDecideReveal => _Stage.decide,
+      PostCallStage.waitingForPeerReveal => _Stage.waiting,
+      PostCallStage.selfPassedAtReveal => _Stage.passed,
+      PostCallStage.peerPassedAtReveal => _Stage.noMatch,
+      PostCallStage.mutual => _Stage.mutual,
+      PostCallStage.peerWantsMatch => _Stage.mutual,
+      PostCallStage.awaitingPeerMatch => _Stage.awaitingPeerMatch,
+      PostCallStage.matched => _Stage.matched,
+      PostCallStage.selfPassed => _Stage.passed,
+      PostCallStage.peerPassed => _Stage.noMatch,
+    };
+
+    if (next == _stage) return; // idempotent
+
+    // Side effects that run on the *first* transition into a stage.
+    final wasMutualEntry =
+        _stage != _Stage.mutual && _stage != _Stage.awaitingPeerMatch;
+    if (next == _Stage.mutual && wasMutualEntry) {
+      DebugLog.reveal('reveal mutual');
+      DebugObserver.instance.setRevealOutcome('mutual');
+      _revealTimeoutTimer?.cancel();
+      unawaited(_loadPeerPhoto());
+    }
+    if (next == _Stage.noMatch) {
+      DebugLog.reveal('match decision: declined');
+      DebugObserver.instance.setRevealOutcome('declined');
+      _revealTimeoutTimer?.cancel();
+    }
+    if (next == _Stage.passed) {
+      DebugLog.reveal('match decision: self pass observed');
+      _revealTimeoutTimer?.cancel();
     }
 
-    // Mutual reveal reached — now drive the match-decision phase.
-    final decision = repo.decisionOutcomeFor(
-      rows,
-      selfId: selfId,
-      peerId: peerId,
-    );
-    _log.info('Match decision outcome — $decision');
-    switch (decision) {
-      case MatchDecisionOutcome.awaitingPeer:
-        // Either nobody has decided yet (stay on mutual view) or self
-        // already decided 'match' and we're waiting on the peer
-        // (already on awaitingPeerMatch). Nothing to do here.
-        return;
-      case MatchDecisionOutcome.passed:
-        DebugLog.reveal('match decision: peer -> pass');
-        DebugObserver.instance.setRevealOutcome('passed');
-        setState(() => _stage = _Stage.noMatch);
-        return;
-      case MatchDecisionOutcome.mutualMatch:
-        DebugLog.reveal('match decision: both -> match');
-        DebugObserver.instance.setRevealOutcome('matched');
-        setState(() => _stage = _Stage.matched);
-        await _persistMatch(self: self, match: match, callId: callId);
+    setState(() => _stage = next);
+
+    if (next == _Stage.matched) {
+      DebugLog.reveal('match decision: both -> match');
+      DebugObserver.instance.setRevealOutcome('matched');
+      _revealTimeoutTimer?.cancel();
+      await _persistMatch(self: self, match: match, callId: callId);
     }
   }
 

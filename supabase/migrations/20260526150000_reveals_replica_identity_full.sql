@@ -1,0 +1,21 @@
+-- =============================================================================
+-- DateNow — broadcast full `reveals` rows on UPDATE
+--
+-- Without REPLICA IDENTITY FULL, Postgres logical replication only
+-- emits the primary key (+ changed REPLICA IDENTITY keys) on UPDATE
+-- events. Supabase Realtime relays exactly what the WAL sender gives
+-- it, so the `decision` column change made by user A NEVER reaches
+-- user B's `watchReveals` stream — B's cached row keeps
+-- `decision = 'pending'` even after A wrote `decision = 'match'`.
+--
+-- Result: the first user to tap Match/Pass stays stuck on the local
+-- awaiting / mutual stage while the peer's screen never converges to
+-- the matched / noMatch outcome.
+--
+-- Setting REPLICA IDENTITY FULL forces the WAL sender to emit the
+-- whole row (old + new) on UPDATE, so Realtime can broadcast the new
+-- `decision` value. The `messages` and `conversations` tables already
+-- have this for the same reason (see 20260513120400_messaging.sql).
+-- =============================================================================
+
+ALTER TABLE public.reveals REPLICA IDENTITY FULL;
