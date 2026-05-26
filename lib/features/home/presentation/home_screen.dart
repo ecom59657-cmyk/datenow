@@ -20,6 +20,7 @@ import '../../profile_setup/data/profile_repository.dart';
 import '../../profile_setup/presentation/providers/profile_provider.dart';
 import '../../quota/data/quota_repository.dart';
 import '../../quota/presentation/widgets/quota_limit_sheet.dart';
+import '../../subscription/presentation/providers/subscription_provider.dart';
 import 'widgets/available_dates_display.dart';
 import 'widgets/home_header.dart';
 import 'widgets/home_hero_card.dart';
@@ -96,6 +97,26 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
               value: display.value,
               label: display.label,
               onTap: () => context.goNamed(AppRoute.discover.name),
+            );
+          }),
+          // Compact Premium teaser — placed AFTER the "Ce soir sur
+          // DateNow" stats and BEFORE the "Comment ça marche" section
+          // (visible early but never blocks the live-date CTA). Hidden
+          // for users who are already Premium.
+          Builder(builder: (context) {
+            final isPremium = ref
+                    .watch(subscriptionStateProvider)
+                    .asData
+                    ?.value
+                    .isPremium ??
+                false;
+            if (isPremium) return const SizedBox.shrink();
+            return Padding(
+              padding: const EdgeInsets.only(top: AppSpacing.xl),
+              child: _PremiumTeaserCard(
+                onTap: () =>
+                    context.pushNamed(AppRoute.settingsSubscription.name),
+              ),
             );
           }),
           const SizedBox(height: AppSpacing.xl),
@@ -397,6 +418,124 @@ class _HowItWorksCard extends StatelessWidget {
             if (i < steps.length - 1) const SizedBox(height: AppSpacing.md),
           ],
         ],
+      ),
+    );
+  }
+}
+
+/// Compact Premium teaser shown on Home — single tap navigates to the
+/// dedicated Subscription screen. Designed to read as a discreet hint,
+/// not a paywall: brand-pink glow, no scrim, no auto-dismiss, no modal
+/// popup, no animation that grabs attention away from the live-date CTA.
+class _PremiumTeaserCard extends ConsumerWidget {
+  const _PremiumTeaserCard({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
+    return GlassCard(
+      onTap: onTap,
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.md,
+      ),
+      // Soft brand-pink halo so the card glows on the dark home but
+      // stays below the visual weight of the live-date hero card.
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: AppRadius.brSm,
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.brandPink.withValues(alpha: 0.12),
+              blurRadius: 24,
+              spreadRadius: 0,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                gradient: AppColors.brandGradient,
+                borderRadius: AppRadius.brSm,
+              ),
+              child: const Icon(
+                Icons.workspace_premium_rounded,
+                color: Colors.white,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        l10n.subscriptionBrand,
+                        style: AppTypography.bodyStrong,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(width: AppSpacing.xs),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.brandPink.withValues(alpha: 0.16),
+                          borderRadius: AppRadius.brPill,
+                          border: Border.all(
+                            color:
+                                AppColors.brandPink.withValues(alpha: 0.32),
+                          ),
+                        ),
+                        child: Text(
+                          '${l10n.subscriptionPriceAmount}${l10n.subscriptionPricePeriod}',
+                          style: AppTypography.caption.copyWith(
+                            color: AppColors.brandPink,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    l10n.homePremiumTeaserBody,
+                    style: AppTypography.body.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            Text(
+              l10n.homePremiumTeaserCta,
+              style: AppTypography.button.copyWith(
+                color: AppColors.brandPink,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(width: 2),
+            const Icon(
+              Icons.chevron_right_rounded,
+              size: 20,
+              color: AppColors.brandPink,
+            ),
+          ],
+        ),
       ),
     );
   }
