@@ -32,6 +32,8 @@
 	<string>DateNow utilise le micro pendant vos dates vidéo en direct de 5 minutes.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>DateNow accède à vos photos pour que vous puissiez choisir votre photo de profil.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>DateNow utilise ta position pour te proposer des dates proches. Ta localisation exacte n'est jamais partagée — seule une distance approximative apparaît aux autres profils.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

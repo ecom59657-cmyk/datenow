@@ -50,6 +50,12 @@ dependencies:
   permission_handler: ^11.3.1
   url_launcher: ^6.3.0
 
+  # Geolocation — phase 1.1 of the matching refactor. Wraps the
+  # platform geolocator + permission flow. We only fetch a coarse
+  # one-shot position when the user grants consent and push it to
+  # Supabase via the `update_my_location` RPC. No background tracking.
+  geolocator: ^13.0.2
+
   # Push notifications — Firebase Messaging used ONLY as the iOS APNs
   # bridge (device token retrieval, foreground/background callbacks).
   # The actual push payload is signed + sent by our `message-notification`
