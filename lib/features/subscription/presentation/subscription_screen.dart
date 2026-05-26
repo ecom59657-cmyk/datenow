@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_colors.dart';
@@ -11,9 +12,13 @@ import '../../../shared/widgets/app_scaffold.dart';
 import '../../../shared/widgets/glass_card.dart';
 import '../../profile_setup/presentation/providers/profile_provider.dart';
 import '../data/subscription_repository.dart';
-import '../domain/subscription_state.dart';
 import 'providers/subscription_provider.dart';
 
+/// Premium subscription screen. Sells the experience (real dates,
+/// feeling, less superficiality) rather than a feature checklist.
+/// Stripe is intentionally not wired yet — the CTA flips a server-side
+/// mock flag via [SubscriptionRepository.upgradeToPremium] so the rest
+/// of the app (badges, quota gates) behaves like a real upgrade.
 class SubscriptionScreen extends ConsumerStatefulWidget {
   const SubscriptionScreen({super.key});
 
@@ -42,7 +47,35 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final stateAsync = ref.watch(subscriptionStateProvider);
-    final repo = ref.watch(subscriptionRepositoryProvider);
+    final isPremium = stateAsync.asData?.value.isPremium ?? false;
+
+    final benefits = <(IconData, String, String)>[
+      (
+        Icons.all_inclusive_rounded,
+        l10n.subscriptionBenefit1Title,
+        l10n.subscriptionBenefit1Body,
+      ),
+      (
+        Icons.bolt_rounded,
+        l10n.subscriptionBenefit2Title,
+        l10n.subscriptionBenefit2Body,
+      ),
+      (
+        Icons.favorite_rounded,
+        l10n.subscriptionBenefit3Title,
+        l10n.subscriptionBenefit3Body,
+      ),
+      (
+        Icons.history_rounded,
+        l10n.subscriptionBenefit4Title,
+        l10n.subscriptionBenefit4Body,
+      ),
+      (
+        Icons.workspace_premium_rounded,
+        l10n.subscriptionBenefit5Title,
+        l10n.subscriptionBenefit5Body,
+      ),
+    ];
 
     return AppScaffold(
       appBar: AppBar(
@@ -50,164 +83,172 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
         leading: const BackButton(),
       ),
       body: ListView(
-        padding: const EdgeInsets.only(top: AppSpacing.md, bottom: 64),
-        children: [
-          Text(
-            l10n.subscriptionSubtitle,
-            style:
-                AppTypography.body.copyWith(color: AppColors.textSecondary),
-          ),
-          const SizedBox(height: AppSpacing.lg),
-          stateAsync.maybeWhen(
-            data: (state) => _TierHero(state: state),
-            orElse: () => const _TierHeroSkeleton(),
-          ),
-          const SizedBox(height: AppSpacing.lg),
-          _PerksCard(l10n: l10n),
-          const SizedBox(height: AppSpacing.lg),
-          if (!repo.isConfigured)
-            _DemoNotice(message: l10n.subscriptionMockNotice),
-          const SizedBox(height: AppSpacing.lg),
-          stateAsync.maybeWhen(
-            data: (state) => state.isPremium
-                ? AppButton(
-                    label: l10n.subscriptionManageCta,
-                    icon: Icons.workspace_premium_rounded,
-                    size: AppButtonSize.large,
-                    variant: AppButtonVariant.secondary,
-                    onPressed: () {},
-                  )
-                : AppButton(
-                    label: l10n.subscriptionUpgradeCta,
-                    icon: Icons.bolt_rounded,
-                    size: AppButtonSize.large,
-                    isLoading: _upgrading,
-                    onPressed: _upgrading ? null : _upgrade,
-                  ),
-            orElse: () => const SizedBox.shrink(),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _TierHero extends StatelessWidget {
-  const _TierHero({required this.state});
-
-  final SubscriptionState state;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    final isPremium = state.isPremium;
-    return GlassCard(
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.sm,
-              vertical: 6,
-            ),
-            decoration: BoxDecoration(
-              gradient: isPremium ? AppColors.brandGradient : null,
-              color: isPremium ? null : AppColors.surfaceElevated,
-              borderRadius: AppRadius.brPill,
-              border: Border.all(
-                color: isPremium
-                    ? Colors.transparent
-                    : AppColors.hairline,
-              ),
-            ),
-            child: Text(
-              isPremium
-                  ? l10n.subscriptionCurrentPremium
-                  : l10n.subscriptionCurrentFree,
-              style: AppTypography.caption.copyWith(
-                color: isPremium ? Colors.white : AppColors.textSecondary,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.3,
-              ),
-            ),
-          ),
-          const SizedBox(height: AppSpacing.md),
-          Text(
-            isPremium
-                ? l10n.subscriptionPremiumBody
-                : l10n.subscriptionFreeBody,
-            style: AppTypography.body.copyWith(color: AppColors.textSecondary),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _TierHeroSkeleton extends StatelessWidget {
-  const _TierHeroSkeleton();
-
-  @override
-  Widget build(BuildContext context) {
-    return GlassCard(
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      child: const SizedBox(
-        height: 64,
-        child: Center(
-          child: SizedBox(
-            width: 18,
-            height: 18,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              valueColor: AlwaysStoppedAnimation(AppColors.brandPink),
-            ),
-          ),
+        padding: const EdgeInsets.only(
+          top: AppSpacing.lg,
+          bottom: 96,
         ),
+        children: [
+          Center(
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.md,
+                vertical: 7,
+              ),
+              decoration: BoxDecoration(
+                gradient: AppColors.brandGradient,
+                borderRadius: AppRadius.brPill,
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.brandPink.withValues(alpha: 0.35),
+                    blurRadius: 24,
+                    spreadRadius: 1,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: Text(
+                l10n.subscriptionBrand,
+                style: AppTypography.caption.copyWith(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.1,
+                ),
+              ),
+            ),
+          ).animate().fadeIn(duration: 320.ms).scale(
+                begin: const Offset(0.9, 0.9),
+                end: const Offset(1, 1),
+                duration: 360.ms,
+                curve: Curves.easeOutBack,
+              ),
+          const SizedBox(height: AppSpacing.lg),
+          Padding(
+            padding:
+                const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+            child: Text(
+              l10n.subscriptionSubtitle,
+              textAlign: TextAlign.center,
+              style: AppTypography.h3.copyWith(
+                color: AppColors.textSecondary,
+                height: 1.35,
+              ),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.xl),
+          _PriceHero(
+            amount: l10n.subscriptionPriceAmount,
+            period: l10n.subscriptionPricePeriod,
+            footer: l10n.subscriptionPriceFooter,
+            isPremium: isPremium,
+            premiumBody: l10n.subscriptionPremiumBody,
+          ),
+          const SizedBox(height: AppSpacing.xl),
+          for (final (i, b) in benefits.indexed) ...[
+            _BenefitTile(icon: b.$1, title: b.$2, body: b.$3)
+                .animate(delay: (40 * i).ms)
+                .fadeIn(duration: 320.ms)
+                .moveY(begin: 8, end: 0, duration: 320.ms),
+            if (i < benefits.length - 1)
+              const SizedBox(height: AppSpacing.sm),
+          ],
+          const SizedBox(height: AppSpacing.xl),
+          isPremium
+              ? AppButton(
+                  label: l10n.subscriptionManageCta,
+                  icon: Icons.workspace_premium_rounded,
+                  size: AppButtonSize.large,
+                  variant: AppButtonVariant.secondary,
+                  onPressed: () {},
+                )
+              : _PremiumCtaButton(
+                  label: l10n.subscriptionUpgradeCta,
+                  loading: _upgrading,
+                  onPressed: _upgrading ? null : _upgrade,
+                ),
+        ],
       ),
     );
   }
 }
 
-class _PerksCard extends StatelessWidget {
-  const _PerksCard({required this.l10n});
+/// Centered price block — biggest visual weight on the page. Carries
+/// the brand glow so the eye lands here before the benefits list.
+class _PriceHero extends StatelessWidget {
+  const _PriceHero({
+    required this.amount,
+    required this.period,
+    required this.footer,
+    required this.isPremium,
+    required this.premiumBody,
+  });
 
-  final AppLocalizations l10n;
+  final String amount;
+  final String period;
+  final String footer;
+  final bool isPremium;
+  final String premiumBody;
 
   @override
   Widget build(BuildContext context) {
-    final perks = [
-      l10n.subscriptionPerkUnlimited,
-      l10n.subscriptionPerkPriority,
-      l10n.subscriptionPerkBadge,
-      l10n.subscriptionPerkSupport,
-    ];
     return GlassCard(
-      padding: const EdgeInsets.all(AppSpacing.lg),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.lg,
+        vertical: AppSpacing.xl,
+      ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          for (final perk in perks) ...[
+          if (isPremium) ...[
+            const Icon(
+              Icons.workspace_premium_rounded,
+              color: AppColors.brandPink,
+              size: 44,
+            ),
+            const SizedBox(height: AppSpacing.md),
+            Text(
+              premiumBody,
+              textAlign: TextAlign.center,
+              style: AppTypography.bodyLarge.copyWith(
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ] else ...[
             Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Container(
-                  width: 24,
-                  height: 24,
-                  decoration: BoxDecoration(
-                    gradient: AppColors.brandGradient,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(
-                    Icons.check_rounded,
-                    color: Colors.white,
-                    size: 16,
+                ShaderMask(
+                  shaderCallback: (rect) =>
+                      AppColors.brandGradient.createShader(rect),
+                  child: Text(
+                    amount,
+                    style: AppTypography.display.copyWith(
+                      color: Colors.white,
+                      fontSize: 56,
+                      letterSpacing: -1,
+                    ),
                   ),
                 ),
-                const SizedBox(width: AppSpacing.sm),
-                Expanded(child: Text(perk, style: AppTypography.bodyLarge)),
+                const SizedBox(width: 4),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Text(
+                    period,
+                    style: AppTypography.bodyLarge.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ),
               ],
             ),
-            if (perk != perks.last) const SizedBox(height: AppSpacing.sm),
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              footer,
+              textAlign: TextAlign.center,
+              style: AppTypography.caption.copyWith(
+                color: AppColors.textTertiary,
+              ),
+            ),
           ],
         ],
       ),
@@ -215,38 +256,106 @@ class _PerksCard extends StatelessWidget {
   }
 }
 
-class _DemoNotice extends StatelessWidget {
-  const _DemoNotice({required this.message});
+/// One bullet of the benefits section — gradient icon pill on the
+/// left, title in bodyStrong, body in muted textSecondary. Keeps the
+/// list scannable on iPhone SE while staying premium.
+class _BenefitTile extends StatelessWidget {
+  const _BenefitTile({
+    required this.icon,
+    required this.title,
+    required this.body,
+  });
 
-  final String message;
+  final IconData icon;
+  final String title;
+  final String body;
+
+  @override
+  Widget build(BuildContext context) {
+    return GlassCard(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              gradient: AppColors.brandGradient,
+              borderRadius: AppRadius.brSm,
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.brandPink.withValues(alpha: 0.28),
+                  blurRadius: 16,
+                  spreadRadius: 0,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            child: Icon(icon, color: Colors.white, size: 20),
+          ),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: AppTypography.bodyStrong,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  body,
+                  style: AppTypography.body.copyWith(
+                    color: AppColors.textSecondary,
+                    height: 1.35,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Primary CTA — gradient fill + brand-pink glow halo. Heavier
+/// visually than [AppButton.primary] because the whole page funnels
+/// toward this tap.
+class _PremiumCtaButton extends StatelessWidget {
+  const _PremiumCtaButton({
+    required this.label,
+    required this.loading,
+    required this.onPressed,
+  });
+
+  final String label;
+  final bool loading;
+  final VoidCallback? onPressed;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.md,
-        vertical: AppSpacing.sm,
-      ),
       decoration: BoxDecoration(
-        color: AppColors.warning.withValues(alpha: 0.12),
         borderRadius: AppRadius.brSm,
-        border: Border.all(color: AppColors.warning.withValues(alpha: 0.4)),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.info_outline_rounded,
-              color: AppColors.warning, size: 18),
-          const SizedBox(width: AppSpacing.sm),
-          Expanded(
-            child: Text(
-              message,
-              style: AppTypography.caption.copyWith(
-                color: AppColors.warning,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.brandPink.withValues(alpha: 0.45),
+            blurRadius: 30,
+            spreadRadius: 1,
+            offset: const Offset(0, 12),
           ),
         ],
+      ),
+      child: AppButton(
+        label: label,
+        icon: Icons.workspace_premium_rounded,
+        size: AppButtonSize.large,
+        isLoading: loading,
+        onPressed: onPressed,
       ),
     );
   }
