@@ -14,6 +14,8 @@ import '../../../core/config/app_config.dart';
 import '../../../core/debug/debug_observer.dart';
 import '../../../core/utils/extensions.dart';
 import '../../../core/utils/logger.dart';
+import '../../../core/utils/profile_format.dart';
+import '../../../l10n/app_localizations.dart';
 import '../../../shared/widgets/app_button.dart';
 import '../../auth/presentation/providers/auth_provider.dart';
 import '../../matching/presentation/providers/active_match_provider.dart';
@@ -459,7 +461,9 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final peerLabel = age != null ? '$name, $age' : name;
+    final l10n = AppLocalizations.of(context);
+    final peerLabel =
+        formatProfileNameAge(l10n, firstName: name, age: age);
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       crossAxisAlignment: CrossAxisAlignment.center,

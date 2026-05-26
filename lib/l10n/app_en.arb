@@ -300,7 +300,14 @@
   "postCallMatch": "I want to match",
   "postCallPass": "Pass",
   "postCallWaiting": "Waiting for their decision…",
-  "postCallMatchedTitle": "It's a match!",
+  "postCallMatchedTitle": "New match ✨",
+  "profileNameAge": "{name}, {age}",
+  "@profileNameAge": {
+    "placeholders": {
+      "name": { "type": "String" },
+      "age": { "type": "int" }
+    }
+  },
   "postCallMatchedBody": "You both want to keep talking. Profiles unlocked.",
   "postCallNoMatchTitle": "Not this time",
   "postCallNoMatchBody": "Another live date can begin right now.",

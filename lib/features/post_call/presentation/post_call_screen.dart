@@ -14,6 +14,7 @@ import '../../../app/theme/app_spacing.dart';
 import '../../../app/theme/app_typography.dart';
 import '../../../core/debug/debug_observer.dart';
 import '../../../core/utils/logger.dart';
+import '../../../core/utils/profile_format.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../shared/widgets/app_button.dart';
 import '../../../shared/widgets/app_scaffold.dart';
@@ -24,6 +25,7 @@ import '../../matching/domain/active_match.dart';
 import '../../matching/presentation/providers/active_match_provider.dart';
 import '../../matching/presentation/widgets/compatibility_badge.dart';
 import '../../profile_setup/data/profile_repository.dart';
+import '../../profile_setup/domain/user_profile.dart';
 import '../../profile_setup/presentation/providers/profile_provider.dart';
 import '../../profile_setup/presentation/widgets/blurred_avatar.dart';
 import '../../safety/presentation/report_sheet.dart';
@@ -523,6 +525,8 @@ class _PostCallScreenState extends ConsumerState<PostCallScreen> {
         ),
       _Stage.matched => _ResolvedView(
           matched: true,
+          peerCandidate: match?.candidate,
+          peerPhotoBytes: _peerPhotoBytes,
           onBackHome: _backHome,
           onFindAnother: _findAnother,
           // Surfaced only once the conversation has been ensured server-side.
@@ -531,6 +535,8 @@ class _PostCallScreenState extends ConsumerState<PostCallScreen> {
         ),
       _Stage.noMatch => _ResolvedView(
           matched: false,
+          peerCandidate: null,
+          peerPhotoBytes: null,
           onBackHome: _backHome,
           onFindAnother: _findAnother,
           onSendMessage: null,
@@ -605,10 +611,15 @@ class _DecideView extends StatelessWidget {
         const SizedBox(height: AppSpacing.lg),
         if (candidate != null)
           Text(
-            candidate.age != null
-                ? '${candidate.firstName ?? '—'}, ${candidate.age}'
-                : candidate.firstName ?? '—',
+            formatProfileNameAge(
+              l10n,
+              firstName: candidate.firstName,
+              age: candidate.age,
+            ),
             style: AppTypography.h2,
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         const SizedBox(height: 4),
         if (match != null)
@@ -678,10 +689,15 @@ class _MutualRevealView extends StatelessWidget {
         const SizedBox(height: AppSpacing.lg),
         if (candidate != null)
           Text(
-            candidate.age != null
-                ? '${candidate.firstName ?? '—'}, ${candidate.age}'
-                : candidate.firstName ?? '—',
+            formatProfileNameAge(
+              l10n,
+              firstName: candidate.firstName,
+              age: candidate.age,
+            ),
             style: AppTypography.h2,
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         const Spacer(),
         AppButton(
@@ -720,6 +736,7 @@ class _AwaitingPeerMatchView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final candidate = match?.candidate;
     return Column(
       children: [
@@ -749,10 +766,15 @@ class _AwaitingPeerMatchView extends StatelessWidget {
         const SizedBox(height: AppSpacing.lg),
         if (candidate != null)
           Text(
-            candidate.age != null
-                ? '${candidate.firstName ?? '—'}, ${candidate.age}'
-                : candidate.firstName ?? '—',
+            formatProfileNameAge(
+              l10n,
+              firstName: candidate.firstName,
+              age: candidate.age,
+            ),
             style: AppTypography.h2,
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         const SizedBox(height: AppSpacing.md),
         const SizedBox(
@@ -885,12 +907,22 @@ class _WaitingView extends StatelessWidget {
 class _ResolvedView extends StatelessWidget {
   const _ResolvedView({
     required this.matched,
+    required this.peerCandidate,
+    required this.peerPhotoBytes,
     required this.onBackHome,
     required this.onFindAnother,
     required this.onSendMessage,
   });
 
   final bool matched;
+  /// Peer's profile — non-null only on the matched view so the screen
+  /// can render their photo + name + age. Null on the no-match view
+  /// (we don't want to surface the peer who just declined).
+  final UserProfile? peerCandidate;
+  /// Peer photo bytes loaded by [_PostCallScreenState._loadPeerPhoto].
+  /// Null when still in flight or unavailable — falls back to a soft
+  /// gradient circle with the initial.
+  final Uint8List? peerPhotoBytes;
   final VoidCallback onBackHome;
   final VoidCallback onFindAnother;
   /// Null until [ensureConversation] has returned. When null the
@@ -904,22 +936,47 @@ class _ResolvedView extends StatelessWidget {
     return Column(
       children: [
         const Spacer(),
-        Icon(
-          matched ? Icons.favorite_rounded : Icons.waving_hand_rounded,
-          size: 80,
-          color: matched ? AppColors.brandPink : AppColors.textSecondary,
-        ).animate().scale(
-              duration: 500.ms,
-              curve: Curves.easeOutBack,
-              begin: const Offset(0.6, 0.6),
-              end: const Offset(1, 1),
-            ),
-        const SizedBox(height: AppSpacing.lg),
+        if (matched && peerCandidate != null) ...[
+          // Premium reveal portrait — same shape as the post-reveal
+          // photo card, smaller so the title + name + buttons all fit
+          // without a scroll on iPhone SE.
+          _MatchAvatar(
+            bytes: peerPhotoBytes,
+            initial: peerCandidate!.firstName?.characters.first ?? '?',
+          ),
+          const SizedBox(height: AppSpacing.lg),
+        ] else
+          Icon(
+            matched ? Icons.favorite_rounded : Icons.waving_hand_rounded,
+            size: 80,
+            color: matched ? AppColors.brandPink : AppColors.textSecondary,
+          ).animate().scale(
+                duration: 500.ms,
+                curve: Curves.easeOutBack,
+                begin: const Offset(0.6, 0.6),
+                end: const Offset(1, 1),
+              ),
+        if (!matched || peerCandidate == null)
+          const SizedBox(height: AppSpacing.lg),
         Text(
-          matched ? 'C\'est réciproque ✨' : 'Pas cette fois',
+          matched ? l10n.postCallMatchedTitle : 'Pas cette fois',
           style: AppTypography.h1,
           textAlign: TextAlign.center,
         ),
+        if (matched && peerCandidate != null) ...[
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            formatProfileNameAge(
+              l10n,
+              firstName: peerCandidate!.firstName,
+              age: peerCandidate!.age,
+            ),
+            style: AppTypography.h3.copyWith(color: AppColors.textSecondary),
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
         const SizedBox(height: AppSpacing.sm),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
@@ -967,6 +1024,73 @@ class _ResolvedView extends StatelessWidget {
         const SizedBox(height: AppSpacing.lg),
       ],
     );
+  }
+}
+
+/// Premium avatar shown on the matched view — circular, brand-pink glow,
+/// fades the peer's photo in from a blur. Falls back to a brand-gradient
+/// circle with the initial when bytes aren't available yet.
+class _MatchAvatar extends StatelessWidget {
+  const _MatchAvatar({required this.bytes, required this.initial});
+
+  final Uint8List? bytes;
+  final String initial;
+
+  static const double _size = 168;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: _size,
+      height: _size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: AppColors.brandGradient,
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.brandPink.withValues(alpha: 0.42),
+            blurRadius: 40,
+            spreadRadius: 4,
+            offset: const Offset(0, 14),
+          ),
+        ],
+      ),
+      child: ClipOval(
+        child: bytes == null
+            ? Center(
+                child: Text(
+                  initial.toUpperCase(),
+                  style: AppTypography.h1
+                      .copyWith(color: Colors.white, fontSize: 56),
+                ),
+              )
+            : TweenAnimationBuilder<double>(
+                tween: Tween<double>(begin: 18, end: 0),
+                duration: const Duration(milliseconds: 900),
+                curve: Curves.easeOutCubic,
+                builder: (context, sigma, child) {
+                  return ImageFiltered(
+                    imageFilter: ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
+                    child: child,
+                  );
+                },
+                child: Image.memory(
+                  bytes!,
+                  width: _size,
+                  height: _size,
+                  fit: BoxFit.cover,
+                ),
+              ),
+      ),
+    )
+        .animate()
+        .scale(
+          duration: 540.ms,
+          begin: const Offset(0.7, 0.7),
+          end: const Offset(1, 1),
+          curve: Curves.easeOutBack,
+        )
+        .fadeIn(duration: 380.ms);
   }
 }
 

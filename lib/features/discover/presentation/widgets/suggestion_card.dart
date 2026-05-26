@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
+import '../../../../core/utils/profile_format.dart';
 import '../../../../l10n/app_localizations.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/glass_card.dart';
@@ -49,9 +50,11 @@ class SuggestionCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      candidate.age != null
-                          ? '${candidate.firstName ?? '—'}, ${candidate.age}'
-                          : candidate.firstName ?? '—',
+                      formatProfileNameAge(
+                        l10n,
+                        firstName: candidate.firstName,
+                        age: candidate.age,
+                      ),
                       style: AppTypography.h3,
                     ),
                     const SizedBox(height: 2),

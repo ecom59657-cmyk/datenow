@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
+import '../../../../core/utils/profile_format.dart';
 import '../../../../l10n/app_localizations.dart';
 import '../../../../shared/widgets/glass_card.dart';
 import '../../../matching/domain/match_score.dart';
@@ -44,10 +45,14 @@ class MatchCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  candidate.age != null
-                      ? '${candidate.firstName ?? '—'}, ${candidate.age}'
-                      : candidate.firstName ?? '—',
+                  formatProfileNameAge(
+                    l10n,
+                    firstName: candidate.firstName,
+                    age: candidate.age,
+                  ),
                   style: AppTypography.bodyStrong,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 2),
                 _StatusPill(label: match.status.label(l10n)),
