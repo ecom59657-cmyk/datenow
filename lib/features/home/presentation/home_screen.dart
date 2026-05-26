@@ -424,95 +424,114 @@ class _HowItWorksCard extends StatelessWidget {
 }
 
 /// Compact Premium teaser shown on Home — single tap navigates to the
-/// dedicated Subscription screen. Designed to read as a discreet hint,
-/// not a paywall: brand-pink glow, no scrim, no auto-dismiss, no modal
-/// popup, no animation that grabs attention away from the live-date CTA.
+/// dedicated Subscription screen. Quiet luxury vibe: a thin champagne-
+/// gold outline on the card + the icon, dual brand-pink × gold glow,
+/// gradient pill CTA. No price (price lives on the dedicated screen),
+/// no popup, no scrim, no animation that grabs attention away from
+/// the live-date hero card above.
 class _PremiumTeaserCard extends ConsumerWidget {
   const _PremiumTeaserCard({required this.onTap});
 
   final VoidCallback onTap;
 
+  /// Muted champagne gold. Used only as a thin tint over the brand
+  /// pink/violet — never as a fill. Keeps the dark/pink/purple DA
+  /// intact, only signals "this is the premium card" subliminally.
+  static const Color _gold = Color(0xFFE2C68C);
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
-    return GlassCard(
-      onTap: onTap,
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.md,
-        vertical: AppSpacing.md,
+    // Soft halo around the whole card — brand-pink dominant + a tiny
+    // champagne tint underneath. Stays well below the live-date CTA
+    // in visual weight.
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: AppRadius.brLg,
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.brandPink.withValues(alpha: 0.18),
+            blurRadius: 28,
+            spreadRadius: 0,
+            offset: const Offset(0, 10),
+          ),
+          BoxShadow(
+            color: _gold.withValues(alpha: 0.06),
+            blurRadius: 24,
+            spreadRadius: 0,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
-      // Soft brand-pink halo so the card glows on the dark home but
-      // stays below the visual weight of the live-date hero card.
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: AppRadius.brSm,
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.brandPink.withValues(alpha: 0.12),
-              blurRadius: 24,
-              spreadRadius: 0,
-              offset: const Offset(0, 6),
-            ),
-          ],
+      child: GlassCard(
+        onTap: onTap,
+        // Thin champagne-tinted outline. ~40 % alpha so it reads as
+        // a subtle ring on the dark surface, never as a hard line.
+        borderColor: _gold.withValues(alpha: 0.38),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md,
+          vertical: 18,
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
+            // Premium icon — brand gradient fill, gold ring, dual
+            // glow (pink dominant, gold ambient). The gold ring is
+            // 1 dp, deliberately under-saturated.
             Container(
-              width: 38,
-              height: 38,
+              width: 46,
+              height: 46,
               decoration: BoxDecoration(
                 gradient: AppColors.brandGradient,
                 borderRadius: AppRadius.brSm,
+                border: Border.all(
+                  color: _gold.withValues(alpha: 0.55),
+                  width: 1,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.brandPink.withValues(alpha: 0.34),
+                    blurRadius: 18,
+                    spreadRadius: 0,
+                    offset: const Offset(0, 6),
+                  ),
+                  BoxShadow(
+                    color: _gold.withValues(alpha: 0.18),
+                    blurRadius: 14,
+                    spreadRadius: 0,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
               ),
               child: const Icon(
                 Icons.workspace_premium_rounded,
                 color: Colors.white,
-                size: 20,
+                size: 22,
               ),
             ),
-            const SizedBox(width: AppSpacing.md),
+            const SizedBox(width: 14),
+            // Title + body. Title gets a light positive tracking to
+            // give the brand a "set-in-metal" feel without changing
+            // the font.
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      Text(
-                        l10n.subscriptionBrand,
-                        style: AppTypography.bodyStrong,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(width: AppSpacing.xs),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColors.brandPink.withValues(alpha: 0.16),
-                          borderRadius: AppRadius.brPill,
-                          border: Border.all(
-                            color:
-                                AppColors.brandPink.withValues(alpha: 0.32),
-                          ),
-                        ),
-                        child: Text(
-                          '${l10n.subscriptionPriceAmount}${l10n.subscriptionPricePeriod}',
-                          style: AppTypography.caption.copyWith(
-                            color: AppColors.brandPink,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                    ],
+                  Text(
+                    l10n.subscriptionBrand,
+                    style: AppTypography.bodyStrong.copyWith(
+                      letterSpacing: 0.2,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: 2),
+                  const SizedBox(height: 3),
                   Text(
                     l10n.homePremiumTeaserBody,
-                    style: AppTypography.body.copyWith(
+                    style: AppTypography.caption.copyWith(
                       color: AppColors.textSecondary,
+                      height: 1.35,
+                      letterSpacing: 0.1,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -521,18 +540,47 @@ class _PremiumTeaserCard extends ConsumerWidget {
               ),
             ),
             const SizedBox(width: AppSpacing.sm),
-            Text(
-              l10n.homePremiumTeaserCta,
-              style: AppTypography.button.copyWith(
-                color: AppColors.brandPink,
-                fontWeight: FontWeight.w700,
+            // Mini gradient CTA pill. Carries its own brand-pink glow
+            // so it reads as the action target even when scanned at
+            // a glance. Text + chevron sit on one baseline.
+            Container(
+              decoration: BoxDecoration(
+                borderRadius: AppRadius.brPill,
+                gradient: AppColors.brandGradient,
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.brandPink.withValues(alpha: 0.42),
+                    blurRadius: 16,
+                    spreadRadius: 0,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
               ),
-            ),
-            const SizedBox(width: 2),
-            const Icon(
-              Icons.chevron_right_rounded,
-              size: 20,
-              color: AppColors.brandPink,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 8,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      l10n.homePremiumTeaserCta,
+                      style: AppTypography.button.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    const Icon(
+                      Icons.arrow_forward_rounded,
+                      size: 16,
+                      color: Colors.white,
+                    ),
+                  ],
+                ),
+              ),
             ),
           ],
         ),
