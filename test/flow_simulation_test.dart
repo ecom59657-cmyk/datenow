@@ -212,8 +212,13 @@ void main() {
     const self = 'user-A';
     const peer = 'user-B';
 
-    RevealRow reveal(String user, bool revealed) =>
-        RevealRow(callId: 'c1', userId: user, revealed: revealed);
+    RevealRow reveal(String user, bool revealed, [String decision = 'pending']) =>
+        RevealRow(
+          callId: 'c1',
+          userId: user,
+          revealed: revealed,
+          decision: decision,
+        );
 
     test('A reveals alone → pending (no match created)', () {
       final outcome = repo.outcomeFor(
@@ -253,6 +258,72 @@ void main() {
             repo.outcomeFor(rows, selfId: self, peerId: peer);
         expect(outcome, isNot(RevealOutcome.mutual));
       }
+    });
+  });
+
+  // =========================================================================
+  // TEST 8 — Match-decision reciprocity (decisionOutcomeFor)
+  //
+  // Photo reveal already mutualised. Now both peers must independently
+  // choose 'match' before the match row / conversation is created.
+  // =========================================================================
+  group('Test 8 — Match-decision reciprocity', () {
+    final repo = RevealRepository(
+      SupabaseClient('https://example.supabase.co', 'test-anon-key'),
+    );
+    const self = 'user-A';
+    const peer = 'user-B';
+
+    RevealRow row(String user, String decision) => RevealRow(
+          callId: 'c1',
+          userId: user,
+          revealed: true,
+          decision: decision,
+        );
+
+    test('A clicks match alone → awaitingPeer (no match yet)', () {
+      final outcome = repo.decisionOutcomeFor(
+        [row(self, 'match'), row(peer, 'pending')],
+        selfId: self,
+        peerId: peer,
+      );
+      expect(outcome, MatchDecisionOutcome.awaitingPeer);
+    });
+
+    test('A and B both click match → mutualMatch (create match + chat)', () {
+      final outcome = repo.decisionOutcomeFor(
+        [row(self, 'match'), row(peer, 'match')],
+        selfId: self,
+        peerId: peer,
+      );
+      expect(outcome, MatchDecisionOutcome.mutualMatch);
+    });
+
+    test('A clicks match, B passes → passed (no match, no chat)', () {
+      final outcome = repo.decisionOutcomeFor(
+        [row(self, 'match'), row(peer, 'pass')],
+        selfId: self,
+        peerId: peer,
+      );
+      expect(outcome, MatchDecisionOutcome.passed);
+    });
+
+    test('A passes alone → passed', () {
+      final outcome = repo.decisionOutcomeFor(
+        [row(self, 'pass'), row(peer, 'pending')],
+        selfId: self,
+        peerId: peer,
+      );
+      expect(outcome, MatchDecisionOutcome.passed);
+    });
+
+    test('both pending → awaitingPeer', () {
+      final outcome = repo.decisionOutcomeFor(
+        [row(self, 'pending'), row(peer, 'pending')],
+        selfId: self,
+        peerId: peer,
+      );
+      expect(outcome, MatchDecisionOutcome.awaitingPeer);
     });
   });
 }

@@ -59,6 +59,15 @@ abstract class MessagingRepository {
   /// conversations. Drives the bottom-nav Messages badge. Returns 0 on
   /// error so the UI never shows a stale or wrong count.
   Future<int> unreadMessagesCount(String userId);
+
+  /// Soft-deletes the conversation for [userId] only. The peer keeps
+  /// their copy. The conversation reappears in [userId]'s inbox if a
+  /// new message arrives after deletion (resolved at read time by
+  /// comparing deleted_at against last_message_at).
+  Future<void> hideConversation({
+    required String conversationId,
+    required String userId,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -96,8 +105,17 @@ class MockMessagingRepository implements MessagingRepository {
       );
 
   List<Conversation> _inboxFor(String userId) {
+    final hides = _hiddenByUser[userId] ?? const <String, DateTime>{};
     final mine = _conversations.values
         .where((c) => c.userAId == userId || c.userBId == userId)
+        // Soft-delete filter: drop the conversation if the user hid it
+        // AND there hasn't been any message after the hide timestamp.
+        .where((c) {
+          final hiddenAt = hides[c.id];
+          if (hiddenAt == null) return true;
+          final lastActivity = c.lastMessageAt ?? c.createdAt;
+          return lastActivity.isAfter(hiddenAt);
+        })
         .map((c) => c.copyWith(
               unreadCount: (_messages[c.id] ?? const <Message>[])
                   .where((m) => m.senderId != userId && m.readAt == null)
@@ -238,6 +256,21 @@ class MockMessagingRepository implements MessagingRepository {
     }
     return n;
   }
+
+  /// Per-user hides for the mock backend. Keyed by user_id, holds the
+  /// set of conversation ids the user has deleted on their side.
+  final Map<String, Map<String, DateTime>> _hiddenByUser = {};
+
+  @override
+  Future<void> hideConversation({
+    required String conversationId,
+    required String userId,
+  }) async {
+    _log.info('hideConversation conv=$conversationId user=$userId');
+    final mine = _hiddenByUser.putIfAbsent(userId, () => {});
+    mine[conversationId] = DateTime.now();
+    _emitInbox(userId);
+  }
 }
 
 extension on Iterable<Conversation> {
@@ -269,12 +302,40 @@ class SupabaseMessagingRepository implements MessagingRepository {
         .stream(primaryKey: ['id'])
         .order('last_message_at')
         .asyncMap((rows) async {
+      // Fetch the per-user deletion entries (auto-undelete: a row whose
+      // deleted_at < conversations.last_message_at is treated as
+      // resurrected). One query per inbox emit is cheap — the table is
+      // tiny (it grows by at most #conversations per user).
+      Map<String, DateTime> hides = const {};
+      try {
+        final raw = await _client
+            .from('conversation_deletions')
+            .select('conversation_id, deleted_at')
+            .eq('user_id', userId);
+        hides = {
+          for (final r in (raw as List))
+            (r as Map<String, dynamic>)['conversation_id'] as String:
+                DateTime.parse(r['deleted_at'] as String),
+        };
+      } catch (e) {
+        _log.warn('conversation_deletions fetch failed (continuing): $e');
+      }
+
       final mine = rows.where((r) {
         return r['user_a_id'] == userId || r['user_b_id'] == userId;
       }).toList();
 
       final convs = <Conversation>[];
       for (final row in mine) {
+        final id = row['id'] as String;
+        final hiddenAt = hides[id];
+        if (hiddenAt != null) {
+          final lastActivity = _parseDate(row['last_message_at']) ??
+              _parseDate(row['created_at']) ??
+              DateTime.fromMillisecondsSinceEpoch(0);
+          // No new activity since the user hid the conversation → skip.
+          if (!lastActivity.isAfter(hiddenAt)) continue;
+        }
         final conv = await _hydrateConversation(row, currentUserId: userId);
         convs.add(conv);
       }
@@ -375,6 +436,25 @@ class SupabaseMessagingRepository implements MessagingRepository {
     if (raw == null) return null;
     if (raw is DateTime) return raw;
     return DateTime.tryParse(raw.toString());
+  }
+
+  @override
+  Future<void> hideConversation({
+    required String conversationId,
+    required String userId,
+  }) async {
+    _log.info('hideConversation conv=$conversationId user=$userId');
+    // Upsert so a re-hide after the conversation resurfaces simply
+    // bumps deleted_at to "now". RLS keeps each user scoped to their
+    // own row (see 20260526140000_conversation_deletions.sql).
+    await _client.from('conversation_deletions').upsert(
+      {
+        'conversation_id': conversationId,
+        'user_id': userId,
+        'deleted_at': DateTime.now().toUtc().toIso8601String(),
+      },
+      onConflict: 'conversation_id,user_id',
+    );
   }
 
   @override

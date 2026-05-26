@@ -179,6 +179,62 @@ void main() {
     });
   });
 
+  group('MockMessagingRepository.hideConversation', () {
+    test(
+        'hideConversation removes the conversation from the deleting user\'s inbox '
+        'but keeps it on the peer side', () async {
+      final repo = MockMessagingRepository();
+      final conv = await repo.ensureConversation(
+        currentUserId: 'A',
+        peer: _peer(userId: 'B'),
+      );
+      // Sanity: both sides see it.
+      expect((await repo.watchInbox('A').first).map((c) => c.id),
+          contains(conv.id));
+      expect((await repo.watchInbox('B').first).map((c) => c.id),
+          contains(conv.id));
+
+      await repo.hideConversation(conversationId: conv.id, userId: 'A');
+
+      expect(
+        (await repo.watchInbox('A').first).map((c) => c.id),
+        isNot(contains(conv.id)),
+        reason: 'A hid the conversation — must not appear in their inbox',
+      );
+      expect(
+        (await repo.watchInbox('B').first).map((c) => c.id),
+        contains(conv.id),
+        reason: "B did not hide — must still see the conversation",
+      );
+    });
+
+    test(
+        'a new message after hide resurrects the conversation in the inbox',
+        () async {
+      final repo = MockMessagingRepository();
+      final conv = await repo.ensureConversation(
+        currentUserId: 'A',
+        peer: _peer(userId: 'B'),
+      );
+      await repo.hideConversation(conversationId: conv.id, userId: 'A');
+      expect((await repo.watchInbox('A').first).map((c) => c.id),
+          isNot(contains(conv.id)));
+      // Mock sendMessage updates last_message_at to now() — strictly
+      // after the hide timestamp, so the inbox filter resurrects it.
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+      await repo.sendMessage(
+        conversationId: conv.id,
+        senderId: 'B',
+        body: 'Tu m\'as oublié·e ?',
+      );
+      expect(
+        (await repo.watchInbox('A').first).map((c) => c.id),
+        contains(conv.id),
+        reason: 'New message must un-hide for A (product rule)',
+      );
+    });
+  });
+
   group('Message order — oldest top, newest bottom', () {
     test(
         'watchMessages emits the messages in insertion order (chat-app standard)',

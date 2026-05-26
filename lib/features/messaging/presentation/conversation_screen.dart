@@ -50,6 +50,85 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
     super.dispose();
   }
 
+  /// Two-step destructive confirmation for "Supprimer la conversation".
+  /// Both dialogs must be accepted before the hide-row is upserted.
+  /// Each step has an explicit Annuler that aborts without touching
+  /// the backend.
+  Future<void> _confirmDeleteConversation({required bool isFr}) async {
+    final user = ref.read(currentUserProvider);
+    if (user == null) return;
+
+    final firstOk = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(
+          isFr
+              ? 'Supprimer la conversation ?'
+              : 'Delete this conversation?',
+        ),
+        content: Text(
+          isFr
+              ? 'Êtes-vous sûr(e) de vouloir supprimer cette conversation ?'
+              : 'Are you sure you want to delete this conversation?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(isFr ? 'Annuler' : 'Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(isFr ? 'Continuer' : 'Continue'),
+          ),
+        ],
+      ),
+    );
+    if (firstOk != true || !mounted) return;
+
+    final secondOk = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(isFr ? 'Confirmer la suppression' : 'Confirm deletion'),
+        content: Text(
+          isFr
+              ? 'Cette action supprimera la conversation de votre messagerie. '
+                  'Votre date pourra toujours voir l\'historique de son côté. '
+                  'Confirmer ?'
+              : 'This will remove the conversation from your inbox. Your '
+                  "date will still see their copy. Confirm?",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(isFr ? 'Annuler' : 'Cancel'),
+          ),
+          TextButton(
+            style: TextButton.styleFrom(foregroundColor: AppColors.error),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(isFr ? 'Supprimer' : 'Delete'),
+          ),
+        ],
+      ),
+    );
+    if (secondOk != true || !mounted) return;
+
+    try {
+      await ref.read(messagingRepositoryProvider).hideConversation(
+            conversationId: widget.conversationId,
+            userId: user.id,
+          );
+    } catch (e, st) {
+      const AppLogger('Conv').warn('hideConversation failed: $e\n$st');
+      if (!mounted) return;
+      context.showSnack(
+        isFr ? 'Suppression impossible' : 'Could not delete',
+      );
+      return;
+    }
+    if (!mounted) return;
+    Navigator.of(context).maybePop();
+  }
+
   void _markReadOnce() {
     if (_readMarked) return;
     final user = ref.read(currentUserProvider);
@@ -187,6 +266,8 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
                     reportedUserId: peerId,
                     reportedDisplayName: conversation?.peerFirstName,
                   );
+                } else if (value == 'delete') {
+                  _confirmDeleteConversation(isFr: isFr);
                 }
               },
               itemBuilder: (_) => [
@@ -197,6 +278,22 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
                       const Icon(Icons.flag_outlined, size: 18),
                       const SizedBox(width: AppSpacing.sm),
                       Text(isFr ? 'Signaler' : 'Report'),
+                    ],
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'delete',
+                  child: Row(
+                    children: [
+                      const Icon(Icons.delete_outline_rounded,
+                          size: 18, color: AppColors.error),
+                      const SizedBox(width: AppSpacing.sm),
+                      Text(
+                        isFr
+                            ? 'Supprimer la conversation'
+                            : 'Delete conversation',
+                        style: const TextStyle(color: AppColors.error),
+                      ),
                     ],
                   ),
                 ),

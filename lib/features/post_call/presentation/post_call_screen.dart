@@ -39,13 +39,26 @@ class PostCallScreen extends ConsumerStatefulWidget {
 }
 
 /// Reveal flow stages:
-///   - decide   : peer photo masked, single "Révéler" button.
-///   - waiting  : self has revealed, waiting for the peer (photo stays masked).
-///   - mutual   : BOTH peers revealed — photo shown large, Match/Pass buttons.
-///   - matched  : user confirmed Match → match row + conversation created.
-///   - noMatch  : someone passed → no match.
-///   - passed   : user passed (terminal local view).
-enum _Stage { decide, waiting, mutual, matched, noMatch, passed }
+///   - decide          : peer photo masked, single "Révéler" button.
+///   - waiting         : self has revealed, waiting for the peer photo
+///                       reveal (photo stays masked).
+///   - mutual          : BOTH peers revealed — photo shown large,
+///                       Match/Pass buttons.
+///   - awaitingPeerMatch: self tapped Match — waiting for the peer's
+///                       Match/Pass decision. No match row exists yet.
+///   - matched         : both peers tapped Match → match row +
+///                       conversation created.
+///   - noMatch         : either peer passed → no match (server-confirmed).
+///   - passed          : self passed (terminal local view).
+enum _Stage {
+  decide,
+  waiting,
+  mutual,
+  awaitingPeerMatch,
+  matched,
+  noMatch,
+  passed,
+}
 
 class _PostCallScreenState extends ConsumerState<PostCallScreen> {
   static const _log = AppLogger('PostCall');
@@ -159,36 +172,47 @@ class _PostCallScreenState extends ConsumerState<PostCallScreen> {
     });
   }
 
-  /// Tapped on the mutual-reveal view when the user confirms the
-  /// match. Creates the match + conversation row, navigates to the
-  /// matched view.
+  /// Tapped on the mutual-reveal view when the user confirms the match.
+  /// Writes *only* the user's own decision = 'match' to the server and
+  /// flips to the awaiting-peer state. The permanent match row + the
+  /// conversation are created only when [_onReveals] sees the peer's
+  /// row also resolve to decision = 'match'.
   void _confirmMatch() async {
-    final match = ref.read(activeMatchProvider);
     final self = ref.read(currentProfileProvider).asData?.value;
-    if (match == null || self == null) return;
     final callId = ref.read(activeCallIdProvider);
-    setState(() => _stage = _Stage.matched);
-    DebugLog.reveal('match confirmed'); // debug-observer
-    await _persistMatch(self: self, match: match, callId: callId);
+    final revealRepo = ref.read(revealRepositoryProvider);
+    if (self == null || callId == null || revealRepo == null) return;
+    setState(() => _stage = _Stage.awaitingPeerMatch);
+    DebugLog.reveal('match decision: self -> match');
+    try {
+      await revealRepo.submitDecision(
+        callId: callId,
+        userId: self.userId,
+        decision: 'match',
+      );
+    } catch (e, st) {
+      _log.error('submitDecision(match) failed', e, st);
+    }
   }
 
-  /// Tapped on the mutual-reveal view when the user passes after
-  /// seeing the photo. Flips the server reveal back to `false` so the
-  /// peer's stream resolves to declined and they see noMatch too.
+  /// Tapped on the mutual-reveal view (or the awaiting-peer view) when
+  /// the user passes after seeing the photo. Writes decision = 'pass'
+  /// on the server so the peer's stream resolves to a `passed` outcome
+  /// and they leave the matched view too.
   void _passAfterReveal() async {
     final self = ref.read(currentProfileProvider).asData?.value;
     final callId = ref.read(activeCallIdProvider);
     final revealRepo = ref.read(revealRepositoryProvider);
     if (self != null && callId != null && revealRepo != null) {
       try {
-        await revealRepo.submitReveal(
+        await revealRepo.submitDecision(
           callId: callId,
           userId: self.userId,
-          revealed: false,
+          decision: 'pass',
         );
-        DebugLog.reveal('passed after mutual reveal'); // debug-observer
+        DebugLog.reveal('match decision: self -> pass');
       } catch (e, st) {
-        _log.error('submitReveal(false) post-mutual failed', e, st);
+        _log.error('submitDecision(pass) post-mutual failed', e, st);
       }
     }
     if (!mounted) return;
@@ -218,7 +242,11 @@ class _PostCallScreenState extends ConsumerState<PostCallScreen> {
     _startRevealTimeout();
   }
 
-  /// Resolves the mutual reveal outcome from the live reveal rows.
+  /// Drives the local stage from the live reveal rows. Handles BOTH the
+  /// photo-reveal phase (decide → waiting → mutual / noMatch) AND the
+  /// post-reveal match-decision phase (mutual → awaitingPeerMatch →
+  /// matched / noMatch). The permanent match row + conversation are
+  /// only created here, after the peer confirms decision = 'match'.
   Future<void> _onReveals(
     List<RevealRow> rows, {
     required String callId,
@@ -228,40 +256,64 @@ class _PostCallScreenState extends ConsumerState<PostCallScreen> {
     if (!mounted) return;
     final repo = ref.read(revealRepositoryProvider);
     if (repo == null) return;
-    final outcome = repo.outcomeFor(
-      rows,
-      selfId: self.userId as String,
-      peerId: match.candidate.userId,
-    );
+    final selfId = self.userId as String;
+    final peerId = match.candidate.userId;
+    final outcome = repo.outcomeFor(rows, selfId: selfId, peerId: peerId);
     _log.info('Reveal outcome — $outcome (${rows.length} row(s))');
-    // Terminal local stages (the user already confirmed match or pass)
-    // must not be undone by a later realtime event — the peer might
-    // flip later but we've already navigated past the reveal screen.
-    if (_stage == _Stage.matched ||
-        _stage == _Stage.passed) {
+    // Terminal local stages must not be undone by a later realtime
+    // event (the peer might flip after we navigated away).
+    if (_stage == _Stage.matched || _stage == _Stage.passed) {
       return;
     }
     switch (outcome) {
       case RevealOutcome.pending:
-        // Still waiting for the peer — stay on the waiting view.
-        break;
-      case RevealOutcome.mutual:
-        _revealTimeoutTimer?.cancel();
-        DebugLog.reveal('reveal mutual'); // debug-observer
-        DebugObserver.instance.setRevealOutcome('mutual');
-        // NEW: land on the mutual-reveal view (photo shown big +
-        // Match/Pass buttons). The permanent match row is created only
-        // when the user taps Matcher (_confirmMatch), not implicitly.
-        setState(() => _stage = _Stage.mutual);
-        // RLS just opened on user_photos + the profile-photos bucket
-        // (see 20260525150000_reveal_photo_access.sql) — the initial
-        // load at initState was blocked, retry now that we're allowed.
-        unawaited(_loadPeerPhoto());
+        // Still waiting for the peer to reveal their photo — stay on
+        // the waiting view.
+        return;
       case RevealOutcome.declined:
         _revealTimeoutTimer?.cancel();
-        DebugLog.reveal('declined'); // debug-observer
+        DebugLog.reveal('declined');
         DebugObserver.instance.setRevealOutcome('declined');
         setState(() => _stage = _Stage.noMatch);
+        return;
+      case RevealOutcome.mutual:
+        _revealTimeoutTimer?.cancel();
+        // Land on the mutual view on first transition so Match/Pass
+        // become tappable. We may also transition further on the same
+        // stream tick if a decision has already been submitted.
+        if (_stage != _Stage.mutual &&
+            _stage != _Stage.awaitingPeerMatch) {
+          DebugLog.reveal('reveal mutual');
+          DebugObserver.instance.setRevealOutcome('mutual');
+          setState(() => _stage = _Stage.mutual);
+          // RLS on photos just opened — refetch the peer photo.
+          unawaited(_loadPeerPhoto());
+        }
+    }
+
+    // Mutual reveal reached — now drive the match-decision phase.
+    final decision = repo.decisionOutcomeFor(
+      rows,
+      selfId: selfId,
+      peerId: peerId,
+    );
+    _log.info('Match decision outcome — $decision');
+    switch (decision) {
+      case MatchDecisionOutcome.awaitingPeer:
+        // Either nobody has decided yet (stay on mutual view) or self
+        // already decided 'match' and we're waiting on the peer
+        // (already on awaitingPeerMatch). Nothing to do here.
+        return;
+      case MatchDecisionOutcome.passed:
+        DebugLog.reveal('match decision: peer -> pass');
+        DebugObserver.instance.setRevealOutcome('passed');
+        setState(() => _stage = _Stage.noMatch);
+        return;
+      case MatchDecisionOutcome.mutualMatch:
+        DebugLog.reveal('match decision: both -> match');
+        DebugObserver.instance.setRevealOutcome('matched');
+        setState(() => _stage = _Stage.matched);
+        await _persistMatch(self: self, match: match, callId: callId);
     }
   }
 
@@ -430,6 +482,13 @@ class _PostCallScreenState extends ConsumerState<PostCallScreen> {
           peerPhotoBytes: _peerPhotoBytes,
           onMatch: _confirmMatch,
           onPass: _passAfterReveal,
+        ),
+      // User tapped Match — waiting for the peer's decision before any
+      // match/conversation row is written.
+      _Stage.awaitingPeerMatch => _AwaitingPeerMatchView(
+          match: match,
+          peerPhotoBytes: _peerPhotoBytes,
+          onCancel: _passAfterReveal,
         ),
       _Stage.matched => _ResolvedView(
           matched: true,
@@ -606,6 +665,79 @@ class _MutualRevealView extends StatelessWidget {
           variant: AppButtonVariant.secondary,
           size: AppButtonSize.large,
           onPressed: onPass,
+        ),
+        const SizedBox(height: AppSpacing.lg),
+      ],
+    );
+  }
+}
+
+/// Shown after the user tapped "Je veux matcher" but the peer hasn't
+/// confirmed their decision yet. No match row exists yet — the screen
+/// is reactive, the realtime stream will flip it to matched or noMatch
+/// as soon as the peer picks Match or Pass.
+class _AwaitingPeerMatchView extends StatelessWidget {
+  const _AwaitingPeerMatchView({
+    required this.match,
+    required this.peerPhotoBytes,
+    required this.onCancel,
+  });
+
+  final ActiveMatch? match;
+  final Uint8List? peerPhotoBytes;
+  final VoidCallback onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    final candidate = match?.candidate;
+    return Column(
+      children: [
+        const SizedBox(height: AppSpacing.lg),
+        Text(
+          'Match envoyé ✨',
+          textAlign: TextAlign.center,
+          style: AppTypography.h2,
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        Padding(
+          padding:
+              const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+          child: Text(
+            'En attente de la réponse de votre date…',
+            textAlign: TextAlign.center,
+            style:
+                AppTypography.body.copyWith(color: AppColors.textSecondary),
+          ),
+        ),
+        const Spacer(),
+        Center(
+          child: peerPhotoBytes == null
+              ? const _PhotoLoadingSkeleton()
+              : _PhotoReveal(revealed: true, bytes: peerPhotoBytes),
+        ),
+        const SizedBox(height: AppSpacing.lg),
+        if (candidate != null)
+          Text(
+            candidate.age != null
+                ? '${candidate.firstName ?? '—'}, ${candidate.age}'
+                : candidate.firstName ?? '—',
+            style: AppTypography.h2,
+          ),
+        const SizedBox(height: AppSpacing.md),
+        const SizedBox(
+          height: 28,
+          width: 28,
+          child: CircularProgressIndicator(
+            strokeWidth: 2.4,
+            valueColor: AlwaysStoppedAnimation(AppColors.brandPink),
+          ),
+        ),
+        const Spacer(),
+        AppButton(
+          label: 'Annuler',
+          variant: AppButtonVariant.secondary,
+          size: AppButtonSize.large,
+          onPressed: onCancel,
         ),
         const SizedBox(height: AppSpacing.lg),
       ],
