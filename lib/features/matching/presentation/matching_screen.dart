@@ -47,7 +47,6 @@ class _MatchingScreenState extends ConsumerState<MatchingScreen> {
   // belongs to the `found` phase — it must never show while still
   // searching, so it is not part of this rotation.
   static const _stepCount = 2;
-  static const _matchFloor = 75;
 
   Timer? _messageRotator;
   Timer? _navTimer;
@@ -166,46 +165,68 @@ class _MatchingScreenState extends ConsumerState<MatchingScreen> {
     setState(() => _activeCount = count);
   }
 
+  /// Single poll tick. Calls the server-side
+  /// `find_best_live_candidate_v1` RPC (real PostGIS distance + hard
+  /// gates + scoring), claims the best match if any, and logs the
+  /// rejection reason otherwise so a tester can diagnose a "no match"
+  /// from the console alone.
   Future<void> _poll() async {
     if (_resolving || _match != null || !mounted) return;
     _resolving = true;
     try {
       final repo = ref.read(matchmakingRepositoryProvider);
       final profiles = ref.read(profileRepositoryProvider);
-      final service = ref.read(matchingServiceProvider);
       final self = ref.read(currentProfileProvider).asData?.value;
       if (repo == null || self == null) return;
 
-      final queueIds = await repo.fetchQueueUserIds(self.userId);
-      if (queueIds.isEmpty || !mounted || _match != null) return;
+      final result = await repo.findBestLiveCandidateV1(
+        selfId: self.userId,
+        // Threshold tuned for tonight's test — the v3 plan (sub-phase
+        // 1.5) replaces this with the freshness-decay state machine.
+        minScore: 50,
+      );
 
-      final candidates =
-          await profiles.fetchPotentialCandidates(selfUserId: self.userId);
-      final searching =
-          candidates.where((c) => queueIds.contains(c.userId)).toList();
-      _log.info('poll — ${searching.length} searching candidate(s)');
-
-      UserProfile? best;
-      MatchScore? bestScore;
-      for (final c in searching) {
-        final score = service.calculateCompatibility(self, c, distanceKm: 10);
-        if (score == null || score.percentage < _matchFloor) continue;
-        if (bestScore == null || score.percentage > bestScore.percentage) {
-          best = c;
-          bestScore = score;
-        }
+      if (result.candidateId == null) {
+        // The repo already logged the structured reason. Surfacing the
+        // poll-level summary helps spot pattern across ticks (e.g.
+        // "queue_empty x 5 polls in a row").
+        _log.info(
+          'poll — no match — '
+          'reason=${result.rejectionReason} '
+          'queue=${result.queueSize} eligible=${result.candidatesEvaluated}',
+        );
+        return;
       }
-      if (best == null || bestScore == null) {
-        _log.info('poll — no peer ≥$_matchFloor% yet');
+
+      final candidateId = result.candidateId!;
+      final peer = await profiles.getProfile(candidateId);
+      if (peer == null) {
+        _log.warn(
+          'poll — RPC chose $candidateId but profile fetch returned null',
+        );
         return;
       }
 
       _log.info(
-        'poll — claiming ${best.userId} score=${bestScore.percentage}%',
+        'poll — claiming ${peer.userId} score=${result.totalScore}/100 '
+        'dist=${result.distanceM}m',
       );
-      final session = await repo.claimMatch(best.userId);
+      final session = await repo.claimMatch(peer.userId);
       if (!mounted) return;
-      _onMatched(session, best, bestScore);
+      _onMatched(
+        session,
+        peer,
+        MatchScore(
+          percentage: result.totalScore ?? 0,
+          breakdown: <String, int>{
+            'distance': result.scoreDistance ?? 0,
+            'interests': result.scoreInterests ?? 0,
+            'age': result.scoreAge ?? 0,
+            'freshness': result.scoreFreshness ?? 0,
+          },
+        ),
+        distanceKm: ((result.distanceM ?? 0) / 1000).round(),
+      );
     } catch (e, st) {
       _log.warn('poll attempt failed (will retry): $e\n$st');
     } finally {
@@ -227,22 +248,29 @@ class _MatchingScreenState extends ConsumerState<MatchingScreen> {
     );
     final peer = await ref.read(profileRepositoryProvider).getProfile(peerId);
     if (peer == null || !mounted || _match != null) return;
-    final score = ref
-            .read(matchingServiceProvider)
-            .calculateCompatibility(self, peer, distanceKm: 10) ??
-        const MatchScore(percentage: _matchFloor, breakdown: <String, int>{});
+    // Passive side: peer ran claim_match against us, so the match
+    // already exists. We don't have the distance breakdown here (only
+    // the active side does). Show a generic score above the floor so
+    // the UI doesn't render a misleading "0%". Sub-phase 1.5 will
+    // either denormalise distance_m onto the `calls` row or expose a
+    // distance_between_users RPC.
+    const score = MatchScore(
+      percentage: 75,
+      breakdown: <String, int>{},
+    );
     _onMatched(session, peer, score);
   }
 
   void _onMatched(
     CallSessionRow session,
     UserProfile peer,
-    MatchScore score,
-  ) {
+    MatchScore score, {
+    int distanceKm = 0,
+  }) {
     if (_match != null) return;
     _log.info(
       'Matched! peer=${peer.userId} score=${score.percentage}% '
-      'session=${session.id}',
+      'session=${session.id} dist=${distanceKm}km',
     );
     _pollTimer?.cancel();
     _heartbeatTimer?.cancel();
@@ -250,7 +278,7 @@ class _MatchingScreenState extends ConsumerState<MatchingScreen> {
     _callSub?.cancel();
     final match = ActiveMatch(
       candidate: peer,
-      distanceKm: 10,
+      distanceKm: distanceKm,
       score: score,
     );
     setState(() {

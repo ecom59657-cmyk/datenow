@@ -55,6 +55,46 @@ class MatchmakingRepository {
     return ids;
   }
 
+  /// Calls the express server-side matching RPC `find_best_live_candidate_v1`.
+  /// Returns a typed result with either a chosen `candidateId` + score
+  /// breakdown + real PostGIS distance, or a `rejectionReason` when no
+  /// match exists. Replaces the old client-side
+  /// `fetchPotentialCandidates + calculateCompatibility(distanceKm: 10)`
+  /// loop — see migration 20260526170000_find_best_live_candidate_v1.sql.
+  Future<LiveCandidateResult> findBestLiveCandidateV1({
+    required String selfId,
+    int minScore = 50,
+  }) async {
+    final res = await _client.rpc<dynamic>(
+      'find_best_live_candidate_v1',
+      params: {'p_self_id': selfId, 'p_min_score': minScore},
+    );
+    // Postgres functions returning TABLE come back as a List of Maps.
+    if (res is! List || res.isEmpty) {
+      throw StateError(
+        'find_best_live_candidate_v1 returned unexpected payload: $res',
+      );
+    }
+    final row = (res.first as Map).cast<String, dynamic>();
+    final result = LiveCandidateResult.fromJson(row);
+    if (result.candidateId != null) {
+      _log.info(
+        'find_best_live_candidate_v1 → ${result.candidateId} '
+        'score=${result.totalScore}/100 dist=${result.distanceM}m '
+        '(d=${result.scoreDistance} i=${result.scoreInterests} '
+        'a=${result.scoreAge} f=${result.scoreFreshness}) '
+        'eligible=${result.candidatesEvaluated} queue=${result.queueSize}',
+      );
+    } else {
+      _log.info(
+        'find_best_live_candidate_v1 → no match — '
+        'reason=${result.rejectionReason} '
+        'eligible=${result.candidatesEvaluated} queue=${result.queueSize}',
+      );
+    }
+    return result;
+  }
+
   /// Atomically claims [peerId] as a match. The server creates (or reuses)
   /// the shared `calls` row, derives its `channel_name`, and removes both
   /// users from the queue. Returns the session row.
@@ -94,6 +134,53 @@ class MatchmakingRepository {
       }
       yield mine;
     }
+  }
+}
+
+/// Typed result of `find_best_live_candidate_v1`. Either:
+///   * `candidateId != null` → matched candidate with full breakdown,
+///   * `candidateId == null` → `rejectionReason` explains why.
+///
+/// Always carries `candidatesEvaluated` and `queueSize` for debug logs.
+class LiveCandidateResult {
+  const LiveCandidateResult({
+    required this.candidateId,
+    required this.totalScore,
+    required this.scoreDistance,
+    required this.scoreInterests,
+    required this.scoreAge,
+    required this.scoreFreshness,
+    required this.distanceM,
+    required this.rejectionReason,
+    required this.candidatesEvaluated,
+    required this.queueSize,
+  });
+
+  final String? candidateId;
+  final int? totalScore;
+  final int? scoreDistance;
+  final int? scoreInterests;
+  final int? scoreAge;
+  final int? scoreFreshness;
+  final int? distanceM;
+  final String? rejectionReason;
+  final int candidatesEvaluated;
+  final int queueSize;
+
+  factory LiveCandidateResult.fromJson(Map<String, dynamic> json) {
+    int? toInt(Object? v) => v == null ? null : (v as num).toInt();
+    return LiveCandidateResult(
+      candidateId: json['candidate_id'] as String?,
+      totalScore: toInt(json['total_score']),
+      scoreDistance: toInt(json['score_distance']),
+      scoreInterests: toInt(json['score_interests']),
+      scoreAge: toInt(json['score_age']),
+      scoreFreshness: toInt(json['score_freshness']),
+      distanceM: toInt(json['distance_m']),
+      rejectionReason: json['rejection_reason'] as String?,
+      candidatesEvaluated: toInt(json['candidates_evaluated']) ?? 0,
+      queueSize: toInt(json['queue_size']) ?? 0,
+    );
   }
 }
 
