@@ -102,7 +102,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           Text(l10n.howItWorks, style: AppTypography.h3),
           const SizedBox(height: AppSpacing.sm),
           _HowItWorksCard(
-            steps: [l10n.howItWorks1, l10n.howItWorks2, l10n.howItWorks3],
+            steps: [
+              (l10n.howItWorksStep1Title, l10n.howItWorksStep1Body),
+              (l10n.howItWorksStep2Title, l10n.howItWorksStep2Body),
+              (l10n.howItWorksStep3Title, l10n.howItWorksStep3Body),
+              (l10n.howItWorksStep4Title, l10n.howItWorksStep4Body),
+            ],
           ),
         ],
       ),
@@ -332,7 +337,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
 class _HowItWorksCard extends StatelessWidget {
   const _HowItWorksCard({required this.steps});
 
-  final List<String> steps;
+  /// Each step is `(title, body)`. Title is the punchy product
+  /// promise (the part scanned first), body is the explanation.
+  final List<(String, String)> steps;
 
   @override
   Widget build(BuildContext context) {
@@ -365,8 +372,24 @@ class _HowItWorksCard extends StatelessWidget {
                 const SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Text(step, style: AppTypography.bodyLarge),
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          step.$1,
+                          style: AppTypography.bodyStrong,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          step.$2,
+                          style: AppTypography.body.copyWith(
+                            color: AppColors.textSecondary,
+                            height: 1.35,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],
