@@ -44,4 +44,27 @@ class Env {
   /// endpoint must sign the join request.
   static String get agoraAppId => _optional('AGORA_APP_ID');
   static bool get agoraConfigured => agoraAppId.isNotEmpty;
+
+  // OAuth — Google ----------------------------------------------------------
+
+  /// REVERSED_CLIENT_ID of the iOS OAuth client created in Google
+  /// Cloud Console for `com.datenow.app`. Looks like
+  /// `com.googleusercontent.apps.123456789-abc…`. Empty by default —
+  /// the Google Sign In button is hidden from the auth landing until
+  /// this is set AND the matching scheme is present in
+  /// ios/Runner/Info.plist (CFBundleURLTypes). Shipping a placeholder
+  /// scheme triggers Apple upload error 90158 ("Invalid URL Scheme."),
+  /// so we intentionally feature-flag the feature off rather than
+  /// shipping a broken URL scheme.
+  ///
+  /// Full activation procedure: docs/AUTH_EXTERNAL_CONFIG.md.
+  static String get googleReversedClientIdIos =>
+      _optional('GOOGLE_REVERSED_CLIENT_ID_IOS');
+
+  /// True once the iOS reversed client ID has been stored in `.env` AND
+  /// the matching URL scheme has been added to Info.plist. Drives
+  /// whether the "Continue with Google" button renders on AuthLanding +
+  /// the "Lier Google" tile is tappable in Security.
+  static bool get googleSignInConfigured =>
+      googleReversedClientIdIos.isNotEmpty;
 }

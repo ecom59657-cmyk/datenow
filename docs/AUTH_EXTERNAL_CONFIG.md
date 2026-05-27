@@ -77,26 +77,45 @@ Outcome:
 
 ### `ios/Runner/Info.plist`
 
-Find the placeholder block we shipped in sub-phase E:
+The placeholder URL scheme that was shipped in sub-phase E has been
+**removed** so the App Store archive passes Apple's URL-scheme
+validation (the previous placeholder triggered error 90158 "Invalid
+URL Scheme."). The Flutter side is now feature-flagged on
+`Env.googleSignInConfigured`: if the iOS reversed client ID is
+missing, the Google button is **hidden** everywhere it appears
+(landing + Security linking tile).
+
+Once the iOS OAuth client exists in Google Cloud Console, paste the
+following block back into `ios/Runner/Info.plist`, **just below**
+the `NSLocationAlwaysAndWhenInUseUsageDescription` block (a comment
+marker is already in the file pointing to the exact spot):
 
 ```xml
 <key>CFBundleURLTypes</key>
 <array>
   <dict>
+    <key>CFBundleTypeRole</key>
+    <string>Editor</string>
     <key>CFBundleURLSchemes</key>
     <array>
-      <!-- TODO: replace once Google iOS OAuth client is created. -->
-      <string>com.googleusercontent.apps.PLACEHOLDER_REVERSED_CLIENT_ID</string>
+      <string>com.googleusercontent.apps.REAL-DIGITS-HERE</string>
     </array>
   </dict>
 </array>
 ```
 
-Replace `PLACEHOLDER_REVERSED_CLIENT_ID` with the **Reversed Client ID** from step 2. Final shape:
+Then set the matching `GOOGLE_REVERSED_CLIENT_ID_IOS=…` in `.env`
+(same value as the URL scheme, without `.googleusercontent…` —
+the full string actually). Example `.env`:
 
-```xml
-<string>com.googleusercontent.apps.123456789012-abcdefghijklmnop</string>
 ```
+GOOGLE_REVERSED_CLIENT_ID_IOS=com.googleusercontent.apps.123456789012-abcdefghijklmnop
+```
+
+After both edits, the Google button reappears on the landing + the
+"Lier Google" tile reappears in Security. **Do not** ship the
+plist with a placeholder value — Apple's upload validator rejects
+the archive with error 90158.
 
 ### `ios/Runner/GoogleService-Info.plist`
 

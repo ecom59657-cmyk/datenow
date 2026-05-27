@@ -8,6 +8,7 @@ import '../../../../app/router/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
+import '../../../../core/config/env.dart';
 import '../../../../core/errors/failures.dart';
 import '../../../../core/utils/extensions.dart';
 import '../../../../l10n/app_localizations.dart';
@@ -103,12 +104,19 @@ class _AuthLandingScreenState extends ConsumerState<AuthLandingScreen> {
           const SizedBox(height: AppSpacing.sm),
           // Google Sign In — sober premium style, matches the Apple
           // button's height + radius so the two CTAs read as one
-          // vertical group.
-          _GoogleSignInButton(
-            label: l10n.authContinueWithGoogle,
-            onPressed: _busy ? null : _signInWithGoogle,
-          ).animate().fadeIn(delay: 460.ms).slideY(begin: 0.2, end: 0),
-          const SizedBox(height: AppSpacing.md),
+          // vertical group. Feature-flagged off until
+          // GOOGLE_REVERSED_CLIENT_ID_IOS is in .env AND the matching
+          // CFBundleURLTypes entry is in Info.plist (Apple App Store
+          // rejects archives carrying an unresolvable URL scheme,
+          // error 90158). See docs/AUTH_EXTERNAL_CONFIG.md.
+          if (Env.googleSignInConfigured) ...[
+            _GoogleSignInButton(
+              label: l10n.authContinueWithGoogle,
+              onPressed: _busy ? null : _signInWithGoogle,
+            ).animate().fadeIn(delay: 460.ms).slideY(begin: 0.2, end: 0),
+            const SizedBox(height: AppSpacing.md),
+          ] else
+            const SizedBox(height: AppSpacing.sm),
           // Email-OTP path (Create account / Sign in remain accessible).
           AppButton(
             label: l10n.authContinueWithEmail,

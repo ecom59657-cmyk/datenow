@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../app/theme/app_typography.dart';
+import '../../../core/config/env.dart';
 import '../../../core/errors/failures.dart';
 import '../../../core/utils/extensions.dart';
 import '../../../l10n/app_localizations.dart';
@@ -136,14 +137,21 @@ class _SecurityScreenState extends ConsumerState<SecurityScreen> {
                     ? null
                     : () => _link(OAuthProvider.apple),
               ),
-              _LinkedAccountTile(
-                icon: Icons.account_circle_outlined,
-                title: l10n.securityProviderGoogle,
-                linked: hasGoogle,
-                onTap: hasGoogle || _linking
-                    ? null
-                    : () => _link(OAuthProvider.google),
-              ),
+              // Google tile is only surfaced once the iOS OAuth client
+              // is wired (Env.googleSignInConfigured). Without it the
+              // linkIdentity flow would open a redirect to a scheme
+              // the app can't handle. Apple-link is also a no-op if
+              // Apple isn't enabled in Supabase, but Apple is wired
+              // earlier (sub-phase D) so it stays visible by default.
+              if (Env.googleSignInConfigured || hasGoogle)
+                _LinkedAccountTile(
+                  icon: Icons.account_circle_outlined,
+                  title: l10n.securityProviderGoogle,
+                  linked: hasGoogle,
+                  onTap: hasGoogle || _linking
+                      ? null
+                      : () => _link(OAuthProvider.google),
+                ),
             ],
           ),
           const SizedBox(height: AppSpacing.lg),

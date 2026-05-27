@@ -39,24 +39,29 @@
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>DateNow utilise votre position pour vous proposer des dates proches de vous lorsque l'application est utilisée.</string>
 	<!--
-	  Google Sign In — sub-phase E.
-	  The reverse-DNS scheme below MUST match the REVERSED_CLIENT_ID
-	  of the iOS OAuth client created in Google Cloud Console for this
-	  app (com.datenow.app). Update the placeholder once that client
-	  exists in the Firebase / Google Cloud project. The exact value
-	  to paste is the REVERSED_CLIENT_ID key inside the refreshed
-	  GoogleService-Info.plist.
+	  Google Sign In URL scheme — intentionally not present until the
+	  iOS OAuth client exists in Google Cloud Console. Apple App Store
+	  upload rejects any "PLACEHOLDER_*" or otherwise unresolvable URL
+	  scheme with error 90158 ("Invalid URL Scheme."), so we keep this
+	  block out of the plist while the Google button is feature-flagged
+	  off in the Flutter side (Env.googleSignInConfigured). When the
+	  real REVERSED_CLIENT_ID is known, paste this block back with the
+	  real value:
+
+	    <key>CFBundleURLTypes</key>
+	    <array>
+	      <dict>
+	        <key>CFBundleTypeRole</key>
+	        <string>Editor</string>
+	        <key>CFBundleURLSchemes</key>
+	        <array>
+	          <string>com.googleusercontent.apps.REAL-DIGITS-HERE</string>
+	        </array>
+	      </dict>
+	    </array>
+
+	  Full step-by-step in docs/AUTH_EXTERNAL_CONFIG.md.
 	-->
-	<key>CFBundleURLTypes</key>
-	<array>
-		<dict>
-			<key>CFBundleURLSchemes</key>
-			<array>
-				<!-- TODO: replace once Google iOS OAuth client is created. -->
-				<string>com.googleusercontent.apps.PLACEHOLDER_REVERSED_CLIENT_ID</string>
-			</array>
-		</dict>
-	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
