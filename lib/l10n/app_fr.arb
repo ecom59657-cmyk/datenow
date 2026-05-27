@@ -20,8 +20,11 @@
   "authContinueWithApple": "Continuer avec Apple",
   "authContinueWithGoogle": "Continuer avec Google",
   "authContinueWithEmail": "Continuer avec un email",
-  "authAppleFailed": "Connexion Apple impossible.",
-  "authGoogleFailed": "Connexion Google impossible.",
+  "authAppleFailed": "Connexion Apple impossible pour le moment.",
+  "authGoogleFailed": "Connexion Google impossible pour le moment.",
+  "authGoogleAudienceMismatch": "Connexion Google impossible. Réessaie dans quelques instants.",
+  "authDbSignupError": "Impossible de créer le compte. Réessaie dans un instant.",
+  "authGenericRetry": "Quelque chose a coincé. Réessaie dans un instant.",
   "authTerms": "En continuant, vous acceptez nos Conditions et notre Politique de confidentialité.",
 
   "signInTitle": "Bon retour",

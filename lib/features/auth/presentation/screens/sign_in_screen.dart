@@ -6,7 +6,6 @@ import '../../../../app/router/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
-import '../../../../core/errors/failures.dart';
 import '../../../../core/utils/extensions.dart';
 import '../../../../core/utils/validators.dart';
 import '../../../../l10n/app_localizations.dart';
@@ -14,6 +13,7 @@ import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_scaffold.dart';
 import '../../../../shared/widgets/app_text_field.dart';
 import '../providers/auth_provider.dart';
+import '../utils/auth_error_mapper.dart';
 import 'email_otp_screen.dart';
 
 class SignInScreen extends ConsumerStatefulWidget {
@@ -64,19 +64,8 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
     }
   }
 
-  String _humanError(Object? err, AppLocalizations l10n) {
-    if (err is Failure) {
-      switch (err.code) {
-        case 'rate_limited':
-          return l10n.signupRateLimited;
-        case 'user_not_found':
-          return l10n.signInUserNotFound;
-        default:
-          return err.message;
-      }
-    }
-    return l10n.couldNotSignIn;
-  }
+  String _humanError(Object? err, AppLocalizations l10n) =>
+      humaneAuthError(err, l10n, fallback: AuthFallback.signIn);
 
   @override
   Widget build(BuildContext context) {

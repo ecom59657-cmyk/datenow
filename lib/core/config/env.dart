@@ -89,6 +89,18 @@ class Env {
   static bool get googleSignInConfigured =>
       googleReversedClientIdIos.isNotEmpty;
 
+  /// Forward-form Web OAuth client ID — the SAME value Supabase Auth →
+  /// Providers → Google is configured with. Passed to
+  /// `GoogleSignIn(serverClientId: …)` so the issued ID token's `aud`
+  /// claim equals this Web Client ID. If it doesn't match Supabase's
+  /// configured client, the exchange fails with "Unacceptable audience
+  /// in id_token". May be empty in dev — in which case Google falls
+  /// back to using the iOS client as audience, which only works if
+  /// Supabase has been configured to accept the iOS client too
+  /// ("Authorized Client IDs" field). Always set in production.
+  static String get googleWebClientId =>
+      _optional('GOOGLE_WEB_CLIENT_ID');
+
   // --- helpers -------------------------------------------------------------
 
   /// Reads a boolean-ish flag from .env. Matches `true`, `1`, `yes`

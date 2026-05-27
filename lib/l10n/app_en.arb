@@ -20,8 +20,11 @@
   "authContinueWithApple": "Continue with Apple",
   "authContinueWithGoogle": "Continue with Google",
   "authContinueWithEmail": "Continue with email",
-  "authAppleFailed": "Apple sign in failed.",
-  "authGoogleFailed": "Google sign in failed.",
+  "authAppleFailed": "Apple sign in unavailable right now.",
+  "authGoogleFailed": "Google sign in unavailable right now.",
+  "authGoogleAudienceMismatch": "Google sign in unavailable. Please try again in a moment.",
+  "authDbSignupError": "We couldn't create your account. Please try again in a moment.",
+  "authGenericRetry": "Something went wrong. Please try again in a moment.",
   "authTerms": "By continuing, you agree to our Terms & Privacy Policy.",
 
   "signInTitle": "Welcome back",

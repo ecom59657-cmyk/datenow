@@ -7,12 +7,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
-import '../../../../core/errors/failures.dart';
 import '../../../../core/utils/extensions.dart';
 import '../../../../l10n/app_localizations.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_scaffold.dart';
 import '../providers/auth_provider.dart';
+import '../utils/auth_error_mapper.dart';
 
 /// Arguments passed via `context.pushReplacementNamed(emailOtp, extra:
 /// EmailOtpArgs(...))`. Carries the email being verified + whether the
@@ -147,23 +147,8 @@ class _EmailOtpScreenState extends ConsumerState<EmailOtpScreen> {
     }
   }
 
-  String _humanError(Object? err, AppLocalizations l10n) {
-    if (err is Failure) {
-      switch (err.code) {
-        case 'otp_invalid':
-          return l10n.otpInvalidCode;
-        case 'otp_expired':
-          return l10n.otpExpiredCode;
-        case 'rate_limited':
-          return l10n.signupRateLimited;
-        case 'user_not_found':
-          return l10n.signInUserNotFound;
-        default:
-          return err.message;
-      }
-    }
-    return l10n.otpVerifyFailed;
-  }
+  String _humanError(Object? err, AppLocalizations l10n) =>
+      humaneAuthError(err, l10n, fallback: AuthFallback.otpVerify);
 
   @override
   Widget build(BuildContext context) {

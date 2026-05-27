@@ -159,7 +159,7 @@ class SupabaseAuthRepository implements AuthRepository {
         e,
         st,
       );
-      throw _mapOtpFailure(e);
+      throw _mapAuthFailure(e);
     }
   }
 
@@ -177,7 +177,7 @@ class SupabaseAuthRepository implements AuthRepository {
         e,
         st,
       );
-      throw _mapOtpFailure(e);
+      throw _mapAuthFailure(e);
     }
   }
 
@@ -200,6 +200,7 @@ class SupabaseAuthRepository implements AuthRepository {
           code: 'no_user',
         );
       }
+      await _ensureProfileExists();
       _log.info('verifyOtp success — user=${user.id}');
       return user;
     } on sb.AuthException catch (e, st) {
@@ -208,7 +209,22 @@ class SupabaseAuthRepository implements AuthRepository {
         e,
         st,
       );
-      throw _mapOtpFailure(e);
+      throw _mapAuthFailure(e);
+    }
+  }
+
+  /// Calls the `ensure_profile_exists` SECURITY DEFINER RPC. Idempotent
+  /// top-up that re-creates any of profiles / user_preferences /
+  /// user_settings / subscriptions that the `handle_new_user` trigger
+  /// might have silently dropped (see migration
+  /// 20260527130000_handle_new_user_hardening.sql for the why). Never
+  /// throws — a missing row is a UX inconvenience at worst, not an
+  /// auth failure, so we log and move on.
+  Future<void> _ensureProfileExists() async {
+    try {
+      await _client.rpc('ensure_profile_exists');
+    } catch (e, st) {
+      _log.warn('ensure_profile_exists RPC failed (non-fatal): $e\n$st');
     }
   }
 
@@ -272,6 +288,7 @@ class SupabaseAuthRepository implements AuthRepository {
           code: 'no_user',
         );
       }
+      await _ensureProfileExists();
       // Apple sends a `givenName` only on the very first sign-in. If
       // we got it, push it into raw_user_meta_data so the profile-
       // setup flow can pre-fill the field. The trigger has already
@@ -304,14 +321,30 @@ class SupabaseAuthRepository implements AuthRepository {
         e,
         st,
       );
-      throw _mapOtpFailure(e);
+      throw _mapAuthFailure(e, provider: 'apple');
     }
   }
 
   @override
   Future<AuthUser> signInWithGoogle() async {
     _log.info('signInWithGoogle — opening Google sheet');
+    // `serverClientId` MUST be the Web OAuth client ID (the same value
+    // Supabase Auth → Providers → Google is configured with). Without
+    // it, Google issues an id_token whose `aud` claim is the iOS
+    // client and Supabase rejects the exchange with "Unacceptable
+    // audience in id_token". The iOS client is still implicitly used
+    // to identify the app to Google (via GoogleService-Info.plist /
+    // Info.plist URL scheme); only the audience switches.
+    final webClientId = Env.googleWebClientId;
+    if (webClientId.isEmpty) {
+      _log.warn(
+        'GOOGLE_WEB_CLIENT_ID is empty — Google will issue an id_token '
+        'with the iOS client as audience, which Supabase will reject '
+        'unless its "Authorized Client IDs" allow-list includes it.',
+      );
+    }
     final googleSignIn = GoogleSignIn(
+      serverClientId: webClientId.isEmpty ? null : webClientId,
       scopes: const ['email', 'profile'],
     );
     final GoogleSignInAccount? account;
@@ -353,6 +386,7 @@ class SupabaseAuthRepository implements AuthRepository {
           code: 'no_user',
         );
       }
+      await _ensureProfileExists();
       // Google reliably provides displayName / email on every sign-in.
       // Push first_name into metadata so profile-setup pre-fills the
       // form. Only on first signin (the trigger has already created a
@@ -382,7 +416,7 @@ class SupabaseAuthRepository implements AuthRepository {
         e,
         st,
       );
-      throw _mapOtpFailure(e);
+      throw _mapAuthFailure(e, provider: 'google');
     }
   }
 
@@ -413,7 +447,7 @@ class SupabaseAuthRepository implements AuthRepository {
           code: 'identity_already_exists',
         );
       }
-      throw _mapOtpFailure(e);
+      throw _mapAuthFailure(e);
     } catch (e, st) {
       _log.error('linkIdentity unexpected: $e', e, st);
       throw AuthFailure('$e', code: 'link_failed');
@@ -465,38 +499,89 @@ class SupabaseAuthRepository implements AuthRepository {
     await _client.auth.signOut();
   }
 
-  /// Maps Supabase's `AuthException` onto our domain `AuthFailure` with
-  /// a stable `code` the UI can switch on. Rate-limits and unknown
-  /// emails are the only signals we surface specifically — everything
-  /// else falls back to the raw message.
-  AuthFailure _mapOtpFailure(sb.AuthException e) {
+  /// Maps Supabase's `AuthException` onto our domain `AuthFailure`
+  /// with a stable `code` the UI switches on to pick a humane FR
+  /// string. The raw Supabase message stays on the `Failure` instance
+  /// (preserved in `originalMessage`) so debug logs and crash reports
+  /// keep the technical detail; only the user-facing string is
+  /// rewritten by the UI layer.
+  ///
+  /// [provider] is an optional hint — when an OAuth flow fails, an
+  /// "unknown" error falls back to a provider-specific generic
+  /// message ("Connexion Google impossible…") instead of the raw
+  /// Supabase string.
+  AuthFailure _mapAuthFailure(sb.AuthException e, {String? provider}) {
     final code = (e.code ?? '').toLowerCase();
     final msg = e.message.toLowerCase();
+
+    // Rate limit (Supabase "for security purposes" wording).
     if (code.contains('rate_limit') ||
         msg.contains('for security purposes') ||
         msg.contains('only request this after')) {
-      return const AuthFailure('Rate limited', code: 'rate_limited');
+      return AuthFailure('Rate limited',
+          code: 'rate_limited', originalMessage: e.message);
     }
+    // User-not-found on a `shouldCreateUser: false` request.
     if (msg.contains('not found') ||
         msg.contains('no user found') ||
         code == 'otp_disabled') {
-      return const AuthFailure(
+      return AuthFailure(
         'No DateNow account is linked to that email.',
         code: 'user_not_found',
+        originalMessage: e.message,
       );
     }
     if (msg.contains('token has expired') ||
         msg.contains('expired') ||
         code == 'otp_expired') {
-      return const AuthFailure('OTP code expired', code: 'otp_expired');
+      return AuthFailure('OTP code expired',
+          code: 'otp_expired', originalMessage: e.message);
     }
     if (msg.contains('invalid token') ||
         msg.contains('invalid otp') ||
         code == 'otp_invalid' ||
         code == 'invalid_otp') {
-      return const AuthFailure('OTP code invalid', code: 'otp_invalid');
+      return AuthFailure('OTP code invalid',
+          code: 'otp_invalid', originalMessage: e.message);
     }
-    return AuthFailure(e.message, code: e.code);
+    // Google audience mismatch — the id_token's `aud` claim doesn't
+    // match Supabase's configured Google Client ID. Fix is in
+    // Env.googleWebClientId + Supabase Google Provider config (see
+    // Bug 1 of the auth audit). Surface as a stable code so the UI
+    // can show a humane message instead of the raw Supabase string.
+    if (msg.contains('unacceptable audience') ||
+        msg.contains('audience') && msg.contains('id_token')) {
+      return AuthFailure(
+        'Google id_token audience mismatch',
+        code: 'oauth_audience_mismatch',
+        originalMessage: e.message,
+      );
+    }
+    // Generic DB-side trigger failure (handle_new_user). Now mostly
+    // mitigated by the hardened trigger + ensure_profile_exists RPC,
+    // but we still map the code so the UI shows a humane message if
+    // it ever resurfaces (e.g. a brand-new column with NOT NULL).
+    if (code == 'unexpected_failure' ||
+        msg.contains('database error saving new user') ||
+        msg.contains('database error')) {
+      return AuthFailure(
+        'Database error during signup',
+        code: 'db_signup_error',
+        originalMessage: e.message,
+      );
+    }
+    // Provider-specific generic fallback so we never bubble a
+    // technical Supabase string into a snack.
+    if (provider == 'google') {
+      return AuthFailure('Google sign in failed',
+          code: 'google_failed', originalMessage: e.message);
+    }
+    if (provider == 'apple') {
+      return AuthFailure('Apple sign in failed',
+          code: 'apple_failed', originalMessage: e.message);
+    }
+    return AuthFailure(e.message,
+        code: e.code, originalMessage: e.message);
   }
 
   AuthUser? _mapUser(sb.User? user) {

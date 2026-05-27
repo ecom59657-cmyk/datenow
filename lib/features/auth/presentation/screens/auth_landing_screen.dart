@@ -8,7 +8,6 @@ import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/config/env.dart';
-import '../../../../core/errors/failures.dart';
 import '../../../../core/utils/extensions.dart';
 import '../../../../l10n/app_localizations.dart';
 import '../../../../shared/widgets/app_button.dart';
@@ -16,6 +15,7 @@ import '../../../../shared/widgets/app_logo.dart';
 import '../../../../shared/widgets/app_scaffold.dart';
 import '../../data/auth_repository.dart';
 import '../providers/auth_provider.dart';
+import '../utils/auth_error_mapper.dart';
 import '../widgets/oauth_button.dart';
 
 /// Entry point of the auth flow — Apple Sign In, Google Sign In, email
@@ -45,8 +45,9 @@ class _AuthLandingScreenState extends ConsumerState<AuthLandingScreen> {
     final err = ref.read(authControllerProvider).error;
     if (err is OAuthCancelledFailure) return;
     final l10n = AppLocalizations.of(context);
-    final msg = err is Failure ? err.message : l10n.authAppleFailed;
-    context.showSnack(msg);
+    context.showSnack(
+      humaneAuthError(err, l10n, fallback: AuthFallback.oauthApple),
+    );
   }
 
   Future<void> _signInWithGoogle() async {
@@ -60,8 +61,9 @@ class _AuthLandingScreenState extends ConsumerState<AuthLandingScreen> {
     final err = ref.read(authControllerProvider).error;
     if (err is OAuthCancelledFailure) return;
     final l10n = AppLocalizations.of(context);
-    final msg = err is Failure ? err.message : l10n.authGoogleFailed;
-    context.showSnack(msg);
+    context.showSnack(
+      humaneAuthError(err, l10n, fallback: AuthFallback.oauthGoogle),
+    );
   }
 
   @override
