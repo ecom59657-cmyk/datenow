@@ -39,29 +39,24 @@
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>DateNow utilise votre position pour vous proposer des dates proches de vous lorsque l'application est utilisée.</string>
 	<!--
-	  Google Sign In URL scheme — intentionally not present until the
-	  iOS OAuth client exists in Google Cloud Console. Apple App Store
-	  upload rejects any "PLACEHOLDER_*" or otherwise unresolvable URL
-	  scheme with error 90158 ("Invalid URL Scheme."), so we keep this
-	  block out of the plist while the Google button is feature-flagged
-	  off in the Flutter side (Env.googleSignInConfigured). When the
-	  real REVERSED_CLIENT_ID is known, paste this block back with the
-	  real value:
-
-	    <key>CFBundleURLTypes</key>
-	    <array>
-	      <dict>
-	        <key>CFBundleTypeRole</key>
-	        <string>Editor</string>
-	        <key>CFBundleURLSchemes</key>
-	        <array>
-	          <string>com.googleusercontent.apps.REAL-DIGITS-HERE</string>
-	        </array>
-	      </dict>
-	    </array>
-
-	  Full step-by-step in docs/AUTH_EXTERNAL_CONFIG.md.
+	  Google Sign In URL scheme. The REVERSED_CLIENT_ID below MUST stay
+	  in sync with ios/Runner/GoogleService-Info.plist (REVERSED_CLIENT_ID
+	  key) AND with .env (GOOGLE_REVERSED_CLIENT_ID_IOS) — all three are
+	  read from the iOS OAuth client in Google Cloud Console
+	  (project: datenow-914a9, bundle: com.datenow.app).
+	  See docs/AUTH_EXTERNAL_CONFIG.md section 3.
 	-->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.724634838309-ik0vo688eob01obo54uu72ghnn6otcv7</string>
+			</array>
+		</dict>
+	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
