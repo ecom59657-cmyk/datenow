@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/errors/failures.dart';
 import '../../../../core/utils/age.dart';
 import '../../../../core/utils/logger.dart';
 import '../../data/auth_repository.dart';
@@ -12,8 +13,8 @@ final authStateProvider = StreamProvider<AuthUser?>((ref) {
   return ref.watch(authRepositoryProvider).authStateChanges();
 });
 
-/// Synchronously exposes the current user (may be stale by a frame compared
-/// to the stream — fine for routing decisions).
+/// Synchronously exposes the current user (may be stale by a frame
+/// compared to the stream — fine for routing decisions).
 final currentUserProvider = Provider<AuthUser?>((ref) {
   final state = ref.watch(authStateProvider);
   return state.asData?.value;
@@ -23,95 +24,112 @@ final isAuthenticatedProvider = Provider<bool>(
   (ref) => ref.watch(currentUserProvider) != null,
 );
 
-/// Three-valued result of [AuthController.signUp]. Lets the screen decide
-/// where to navigate next without inspecting the controller state.
-enum SignUpOutcome {
-  /// Account created **and** a session is active — the router will redirect
-  /// to the profile-setup flow as soon as `authStateProvider` emits.
-  signedIn,
+/// Result of the OTP request step. Lets the screen decide where to go
+/// next without inspecting the controller state.
+enum OtpRequestOutcome {
+  /// OTP was successfully requested — the screen should navigate to the
+  /// OTP entry screen so the user can type the 6-digit code.
+  sent,
 
-  /// Account created but Supabase requires email confirmation. The UI
-  /// should push the verify-email screen.
-  needsEmailConfirmation,
-
-  /// The call was rejected (validation, network, rate-limit, …). The
-  /// controller's `state.error` carries the [AuthFailure] for display.
+  /// The call was rejected (rate limit, unknown user, validation, …).
+  /// The controller's `state.error` carries the [AuthFailure].
   failed,
 
-  /// A previous sign-up is still in flight; the call was a no-op. Use this
-  /// to short-circuit double-taps without ever triggering a second
-  /// `auth.signUp` round-trip.
+  /// A previous request is still in flight — call dropped.
   alreadyInFlight,
 }
 
-/// Drives the sign-in / sign-up screens. Holds loading + error state so
-/// views stay dumb. Every public method that hits the network guards
-/// against re-entry by checking `state.isLoading` first — that's the
-/// canonical defence against double-tap signup races.
+/// Drives the passwordless auth flow (signup + signin + verify). Holds
+/// loading + error state so views stay dumb. Every public method that
+/// hits the network guards against re-entry by checking
+/// `state.isLoading`.
 class AuthController extends StateNotifier<AsyncValue<void>> {
   AuthController(this._ref) : super(const AsyncValue.data(null));
 
   final Ref _ref;
   static const _log = AppLogger('AuthController');
 
-  Future<bool> signIn({required String email, required String password}) {
-    if (state.isLoading) {
-      _log.warn('signIn ignored — another auth call is in flight.');
-      return Future.value(false);
-    }
-    _log.info('signIn called for $email');
-    return _run(
-      () => _ref.read(authRepositoryProvider).signInWithPassword(
-            email: email,
-            password: password,
-          ),
-    );
-  }
-
-  Future<SignUpOutcome> signUp({
-    required String firstName,
+  /// Step 1 of signup — sends OTP to a new email, carrying first_name
+  /// + birth_date so the `handle_new_user` trigger can hydrate the
+  /// profile + preferences rows.
+  Future<OtpRequestOutcome> requestSignupOtp({
     required String email,
-    required String password,
+    required String firstName,
     required DateTime birthDate,
   }) async {
-    // Re-entrancy guard: refuse a second call while the first hasn't
-    // completed. This is the canonical defence against double-tap signup
-    // races, regardless of how fast the UI rebuild propagates.
     if (state.isLoading) {
-      _log.warn('signUp ignored — another auth call is in flight.');
-      return SignUpOutcome.alreadyInFlight;
+      _log.warn('requestSignupOtp ignored — another call is in flight.');
+      return OtpRequestOutcome.alreadyInFlight;
     }
-
-    _log.info('signUp called for $email');
-
-    // Controller-level age check — fast-fails before the network round-trip
-    // when the form was somehow bypassed. The repository also re-validates.
+    _log.info('requestSignupOtp called for $email');
+    // Controller-level age check — fast-fails before the network
+    // round-trip when the form was somehow bypassed.
     if (!isOfMinimumAge(birthDate)) {
       state = AsyncValue.error(
         const MinorSignUpFailure(),
         StackTrace.current,
       );
-      return SignUpOutcome.failed;
+      return OtpRequestOutcome.failed;
     }
-
     state = const AsyncValue.loading();
     try {
-      final result = await _ref.read(authRepositoryProvider).signUpWithPassword(
-            firstName: firstName,
+      await _ref.read(authRepositoryProvider).requestSignupOtp(
             email: email,
-            password: password,
+            firstName: firstName,
             birthDate: birthDate,
           );
       state = const AsyncValue.data(null);
-      final outcome = result.hasSession
-          ? SignUpOutcome.signedIn
-          : SignUpOutcome.needsEmailConfirmation;
-      _log.info('signUp outcome: $outcome');
-      return outcome;
+      return OtpRequestOutcome.sent;
     } catch (e, st) {
-      _log.error('signUp failed: $e', e, st);
+      _log.error('requestSignupOtp failed: $e', e, st);
       state = AsyncValue.error(e, st);
-      return SignUpOutcome.failed;
+      return OtpRequestOutcome.failed;
+    }
+  }
+
+  /// Step 1 of signin — sends OTP to a known email.
+  Future<OtpRequestOutcome> requestSigninOtp({required String email}) async {
+    if (state.isLoading) {
+      _log.warn('requestSigninOtp ignored — another call is in flight.');
+      return OtpRequestOutcome.alreadyInFlight;
+    }
+    _log.info('requestSigninOtp called for $email');
+    state = const AsyncValue.loading();
+    try {
+      await _ref.read(authRepositoryProvider).requestSigninOtp(email: email);
+      state = const AsyncValue.data(null);
+      return OtpRequestOutcome.sent;
+    } catch (e, st) {
+      _log.error('requestSigninOtp failed: $e', e, st);
+      state = AsyncValue.error(e, st);
+      return OtpRequestOutcome.failed;
+    }
+  }
+
+  /// Step 2 — consumes the 6-digit token. Returns true when the
+  /// session was opened (auth-state stream will then redirect the
+  /// router). False means the controller's `state.error` is set.
+  Future<bool> verifyOtp({
+    required String email,
+    required String token,
+  }) async {
+    if (state.isLoading) {
+      _log.warn('verifyOtp ignored — another call is in flight.');
+      return false;
+    }
+    _log.info('verifyOtp called for $email');
+    state = const AsyncValue.loading();
+    try {
+      await _ref.read(authRepositoryProvider).verifyOtp(
+            email: email,
+            token: token,
+          );
+      state = const AsyncValue.data(null);
+      return true;
+    } catch (e, st) {
+      _log.error('verifyOtp failed: $e', e, st);
+      state = AsyncValue.error(e, st);
+      return false;
     }
   }
 
@@ -121,18 +139,6 @@ class AuthController extends StateNotifier<AsyncValue<void>> {
 
   Future<void> deleteAccount() async {
     await _ref.read(authRepositoryProvider).deleteAccount();
-  }
-
-  Future<bool> _run(Future<void> Function() action) async {
-    state = const AsyncValue.loading();
-    try {
-      await action();
-      state = const AsyncValue.data(null);
-      return true;
-    } catch (e, st) {
-      state = AsyncValue.error(e, st);
-      return false;
-    }
   }
 }
 

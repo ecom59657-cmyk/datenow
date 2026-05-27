@@ -10,56 +10,64 @@ import '../../../core/utils/age.dart';
 import '../../../core/utils/logger.dart';
 import '../domain/auth_user.dart';
 
-/// Abstract auth repository. Speaks the auth language of the rest of the app
-/// while hiding which backend (Supabase, mock, …) is actually serving it.
+/// Abstract auth repository. Speaks the auth language of the rest of the
+/// app while hiding which backend (Supabase, mock, …) is actually serving
+/// it.
+///
+/// DateNow runs a **passwordless** email flow:
+///   1. UI collects email (+ first_name + birth_date on first signup).
+///   2. [requestSignupOtp] / [requestSigninOtp] triggers Supabase to send
+///      a 6-digit OTP code by email.
+///   3. UI shows the OTP screen.
+///   4. [verifyOtp] consumes the code, returning the freshly-created
+///      session (and a [AuthUser]).
+///
+/// For brand-new signups the first_name + birth_date are passed via the
+/// Supabase `data` channel — they land in `auth.users.raw_user_meta_data`
+/// and the `handle_new_user` trigger picks them up to create the
+/// `profiles` / `user_preferences` / `user_settings` / `subscriptions`
+/// rows transactionally.
 abstract class AuthRepository {
   Stream<AuthUser?> authStateChanges();
   AuthUser? currentUser();
 
-  Future<AuthUser> signInWithPassword({
+  /// Sends an OTP code for a new account. Includes the metadata the
+  /// `handle_new_user` trigger needs (display_name, first_name,
+  /// birth_date). Enforces the 18+ floor before any network call.
+  Future<void> requestSignupOtp({
     required String email,
-    required String password,
+    required String firstName,
+    required DateTime birthDate,
   });
 
-  /// Creates a new account. [birthDate] is required and the implementation
-  /// MUST reject anyone under [kMinAgeYears] — the frontend validation is
-  /// not enough on its own (form bypass, deeplinks, etc.).
-  Future<SignUpResult> signUpWithPassword({
-    required String firstName,
+  /// Sends an OTP code for an existing account. `shouldCreateUser:false`
+  /// surfaces an explicit `user_not_found` failure when the email isn't
+  /// registered, so the UI can suggest signing up instead.
+  Future<void> requestSigninOtp({required String email});
+
+  /// Consumes the 6-digit code. Returns the user when the code is valid
+  /// and a session is opened. Throws an [AuthFailure] with a stable
+  /// `code` for the UI to map onto a humane snack.
+  Future<AuthUser> verifyOtp({
     required String email,
-    required String password,
-    required DateTime birthDate,
+    required String token,
   });
 
   Future<void> signOut();
 
-  /// Permanently deletes the current account. Implementations should also
-  /// sign the user out — callers rely on the auth-state stream emitting
-  /// `null` afterwards so the router can redirect to the auth landing.
+  /// Permanently deletes the current account. Implementations should
+  /// also sign the user out — callers rely on the auth-state stream
+  /// emitting `null` afterwards so the router can redirect.
   Future<void> deleteAccount();
 }
 
 /// Failure surfaced from every layer when a minor tries to sign up.
-/// Lives here so the controller + UI + tests can switch on the code.
 class MinorSignUpFailure extends AuthFailure {
   const MinorSignUpFailure()
       : super(
           'DateNow is reserved for people 18 and older.',
           code: 'minor_sign_up',
         );
-}
-
-/// Result of a successful sign-up call.
-///
-/// [hasSession] is `true` when Supabase returned an active session (email
-/// confirmation disabled at the project level, or the email was already
-/// confirmed). When `false` the user must verify their email before they
-/// can sign in — UI navigates to the verify-email screen in that case.
-class SignUpResult {
-  const SignUpResult({required this.user, required this.hasSession});
-
-  final AuthUser user;
-  final bool hasSession;
 }
 
 // ---------------------------------------------------------------------------
@@ -83,95 +91,89 @@ class SupabaseAuthRepository implements AuthRepository {
   AuthUser? currentUser() => _mapUser(_client.auth.currentUser);
 
   @override
-  Future<AuthUser> signInWithPassword({
+  Future<void> requestSignupOtp({
     required String email,
-    required String password,
-  }) async {
-    try {
-      final res = await _client.auth.signInWithPassword(
-        email: email,
-        password: password,
-      );
-      final user = _mapUser(res.user);
-      if (user == null) {
-        throw const AuthFailure('No user returned from sign in.');
-      }
-      return user;
-    } on sb.AuthException catch (e) {
-      _log.warn('signIn failed: ${e.message}');
-      throw AuthFailure(e.message, code: e.code);
-    }
-  }
-
-  @override
-  Future<SignUpResult> signUpWithPassword({
     required String firstName,
-    required String email,
-    required String password,
     required DateTime birthDate,
   }) async {
-    // Layer 2 of the age gate (UI being layer 1; trigger + CHECK in the DB
-    // are layers 3 and 4). Never relies on caller validation alone.
+    // Layer 2 of the age gate (UI being layer 1; trigger + CHECK in the
+    // DB are layers 3 and 4). Never relies on caller validation alone.
     if (!isOfMinimumAge(birthDate)) {
       throw const MinorSignUpFailure();
     }
-
     _log.info(
-      'Signup sent to Supabase Auth — email=$email '
-      'first_name=$firstName birth_date=${_formatDate(birthDate)}',
+      'requestSignupOtp email=$email first_name=$firstName '
+      'birth_date=${_formatDate(birthDate)}',
     );
-
     try {
-      final res = await _client.auth.signUp(
+      await _client.auth.signInWithOtp(
         email: email,
-        password: password,
-        data: {
+        // We DO want to create the user if it doesn't exist — that's the
+        // whole point of signup. The trigger will then pick up the
+        // metadata.
+        shouldCreateUser: true,
+        data: <String, dynamic>{
           'display_name': firstName,
           'first_name': firstName,
           'birth_date': _formatDate(birthDate),
         },
       );
-      final user = _mapUser(res.user);
-      if (user == null) {
-        const msg =
-            'Supabase signUp returned no user — likely a server-side '
-            'trigger rejected the row (check the profiles CHECK + '
-            'handle_new_user RAISE in Supabase logs).';
-        _log.error('Signup error: $msg');
-        throw const AuthFailure('No user returned from sign up.');
-      }
-      // No session means email confirmation is enabled at the project
-      // level and the user must click the link before they can sign in.
-      final hasSession = res.session != null;
-      _log.info(
-        'Signup success user id: ${user.id} '
-        '(session_created=$hasSession)',
-      );
-      return SignUpResult(user: user, hasSession: hasSession);
     } on sb.AuthException catch (e, st) {
       _log.error(
-        'Signup error: code=${e.code} message="${e.message}"',
+        'requestSignupOtp error: code=${e.code} message="${e.message}"',
         e,
         st,
       );
-      // Rate-limit (Supabase's "For security purposes, you can only
-      // request this after N seconds") gets its own code so the UI can
-      // show a friendly localized message instead of leaking the raw
-      // message to the user.
-      final lower = e.message.toLowerCase();
-      final isRateLimit = (e.code ?? '').contains('rate_limit') ||
-          lower.contains('for security purposes') ||
-          lower.contains('only request this after');
-      if (isRateLimit) {
+      throw _mapOtpFailure(e);
+    }
+  }
+
+  @override
+  Future<void> requestSigninOtp({required String email}) async {
+    _log.info('requestSigninOtp email=$email');
+    try {
+      await _client.auth.signInWithOtp(
+        email: email,
+        shouldCreateUser: false,
+      );
+    } on sb.AuthException catch (e, st) {
+      _log.error(
+        'requestSigninOtp error: code=${e.code} message="${e.message}"',
+        e,
+        st,
+      );
+      throw _mapOtpFailure(e);
+    }
+  }
+
+  @override
+  Future<AuthUser> verifyOtp({
+    required String email,
+    required String token,
+  }) async {
+    _log.info('verifyOtp email=$email token_len=${token.length}');
+    try {
+      final res = await _client.auth.verifyOTP(
+        email: email,
+        token: token,
+        type: sb.OtpType.email,
+      );
+      final user = _mapUser(res.user);
+      if (user == null) {
         throw const AuthFailure(
-          'Sign up rate-limited',
-          code: 'rate_limited',
+          'No user returned from OTP verification.',
+          code: 'no_user',
         );
       }
-      throw AuthFailure(e.message, code: e.code);
-    } catch (e, st) {
-      _log.error('Signup error: unexpected $e', e, st);
-      rethrow;
+      _log.info('verifyOtp success — user=${user.id}');
+      return user;
+    } on sb.AuthException catch (e, st) {
+      _log.error(
+        'verifyOtp error: code=${e.code} message="${e.message}"',
+        e,
+        st,
+      );
+      throw _mapOtpFailure(e);
     }
   }
 
@@ -182,8 +184,8 @@ class SupabaseAuthRepository implements AuthRepository {
   Future<void> deleteAccount() async {
     // 1. Wipe data + delete the auth.users row via the `delete-account`
     //    Edge Function (it uses the service role, never shipped to the
-    //    client). If the function errored we still want to sign out
-    //    locally so a stale session can't reach a non-existent profile.
+    //    client). Sign out locally even if the function failed so a
+    //    stale session can't reach a non-existent profile.
     try {
       final res = await _client.functions.invoke('delete-account');
       if (res.status != 200) {
@@ -209,6 +211,40 @@ class SupabaseAuthRepository implements AuthRepository {
     await _client.auth.signOut();
   }
 
+  /// Maps Supabase's `AuthException` onto our domain `AuthFailure` with
+  /// a stable `code` the UI can switch on. Rate-limits and unknown
+  /// emails are the only signals we surface specifically — everything
+  /// else falls back to the raw message.
+  AuthFailure _mapOtpFailure(sb.AuthException e) {
+    final code = (e.code ?? '').toLowerCase();
+    final msg = e.message.toLowerCase();
+    if (code.contains('rate_limit') ||
+        msg.contains('for security purposes') ||
+        msg.contains('only request this after')) {
+      return const AuthFailure('Rate limited', code: 'rate_limited');
+    }
+    if (msg.contains('not found') ||
+        msg.contains('no user found') ||
+        code == 'otp_disabled') {
+      return const AuthFailure(
+        'No DateNow account is linked to that email.',
+        code: 'user_not_found',
+      );
+    }
+    if (msg.contains('token has expired') ||
+        msg.contains('expired') ||
+        code == 'otp_expired') {
+      return const AuthFailure('OTP code expired', code: 'otp_expired');
+    }
+    if (msg.contains('invalid token') ||
+        msg.contains('invalid otp') ||
+        code == 'otp_invalid' ||
+        code == 'invalid_otp') {
+      return const AuthFailure('OTP code invalid', code: 'otp_invalid');
+    }
+    return AuthFailure(e.message, code: e.code);
+  }
+
   AuthUser? _mapUser(sb.User? user) {
     if (user == null) return null;
     final meta = user.userMetadata;
@@ -216,7 +252,8 @@ class SupabaseAuthRepository implements AuthRepository {
     return AuthUser(
       id: user.id,
       email: user.email ?? '',
-      displayName: (meta?['display_name'] ?? meta?['first_name']) as String?,
+      displayName:
+          (meta?['display_name'] ?? meta?['first_name']) as String?,
       birthDate:
           birthDateRaw == null ? null : DateTime.tryParse(birthDateRaw),
       avatarUrl: meta?['avatar_url'] as String?,
@@ -236,9 +273,8 @@ class SupabaseAuthRepository implements AuthRepository {
 // Mock implementation — used in dev when Supabase isn't configured
 // ---------------------------------------------------------------------------
 
-/// In-memory auth implementation so the UI flow stays exercisable when no
-/// `.env` is set. Holds the "current user" in a broadcast stream so the rest
-/// of the app reacts exactly as it would with a real backend.
+/// In-memory passwordless OTP flow. Accepts any 6-digit code. Lets the
+/// auth UI stay exercisable when `.env` is empty.
 class MockAuthRepository implements AuthRepository {
   MockAuthRepository();
 
@@ -247,10 +283,11 @@ class MockAuthRepository implements AuthRepository {
   final StreamController<AuthUser?> _controller =
       StreamController<AuthUser?>.broadcast();
   AuthUser? _current;
+  // email → metadata pending verification
+  final Map<String, _PendingOtp> _pending = {};
 
   @override
   Stream<AuthUser?> authStateChanges() async* {
-    // Replay the current value to new listeners — mirrors Supabase behaviour.
     yield _current;
     yield* _controller.stream;
   }
@@ -259,15 +296,57 @@ class MockAuthRepository implements AuthRepository {
   AuthUser? currentUser() => _current;
 
   @override
-  Future<AuthUser> signInWithPassword({
+  Future<void> requestSignupOtp({
     required String email,
-    required String password,
+    required String firstName,
+    required DateTime birthDate,
   }) async {
-    _log.info('mock signIn for $email');
-    await Future<void>.delayed(const Duration(milliseconds: 400));
+    if (Env.supabaseConfigured) {
+      _log.error(
+        'Mock requestSignupOtp called while Supabase is configured.',
+      );
+      throw const AuthFailure(
+        'Misconfiguration: Supabase env is set but the client never '
+        'initialised. Restart the app or check the bootstrap logs.',
+      );
+    }
+    if (!isOfMinimumAge(birthDate)) {
+      throw const MinorSignUpFailure();
+    }
+    _log.info('mock requestSignupOtp $email — code=123456');
+    _pending[email] = _PendingOtp(
+      firstName: firstName,
+      birthDate: birthDate,
+      isSignup: true,
+    );
+  }
+
+  @override
+  Future<void> requestSigninOtp({required String email}) async {
+    if (Env.supabaseConfigured) {
+      throw const AuthFailure('Mock unavailable when Supabase is configured.');
+    }
+    _log.info('mock requestSigninOtp $email — code=123456');
+    _pending.putIfAbsent(
+      email,
+      () => const _PendingOtp(isSignup: false),
+    );
+  }
+
+  @override
+  Future<AuthUser> verifyOtp({
+    required String email,
+    required String token,
+  }) async {
+    if (token.length != 6) {
+      throw const AuthFailure('OTP code invalid', code: 'otp_invalid');
+    }
+    final pending = _pending.remove(email);
     final user = AuthUser(
       id: 'mock-${email.hashCode.abs()}',
       email: email,
+      displayName: pending?.firstName,
+      birthDate: pending?.birthDate,
       createdAt: DateTime.now(),
     );
     _current = user;
@@ -276,69 +355,34 @@ class MockAuthRepository implements AuthRepository {
   }
 
   @override
-  Future<SignUpResult> signUpWithPassword({
-    required String firstName,
-    required String email,
-    required String password,
-    required DateTime birthDate,
-  }) async {
-    // Defence in depth: if .env actually contains Supabase credentials, the
-    // app should never reach the mock for a write operation — that would
-    // silently swallow a real signup. We refuse loudly instead of mocking.
-    if (Env.supabaseConfigured) {
-      _log.error(
-        'Mock signUp called while Supabase is configured — refusing. '
-        'Check that SupabaseService.init() succeeded at bootstrap.',
-      );
-      throw const AuthFailure(
-        'Misconfiguration: Supabase env is set but the client never '
-        'initialised. Restart the app or check the bootstrap logs.',
-      );
-    }
-
-    // The mock enforces the 18+ rule too — never bypass.
-    if (!isOfMinimumAge(birthDate)) {
-      _log.warn('mock signUp rejected for $email — under 18');
-      throw const MinorSignUpFailure();
-    }
-    _log.info(
-      'mock signUp for $email ($firstName) — '
-      'NO Supabase user is being created.',
-    );
-    await Future<void>.delayed(const Duration(milliseconds: 600));
-    final user = AuthUser(
-      id: 'mock-${email.hashCode.abs()}',
-      email: email,
-      displayName: firstName,
-      birthDate: birthDate,
-      createdAt: DateTime.now(),
-    );
-    _current = user;
-    _controller.add(user);
-    return SignUpResult(user: user, hasSession: true);
-  }
-
-  @override
   Future<void> signOut() async {
-    _log.info('mock signOut');
     _current = null;
     _controller.add(null);
   }
 
   @override
   Future<void> deleteAccount() async {
-    _log.info('mock deleteAccount for ${_current?.id}');
     _current = null;
     _controller.add(null);
   }
+}
+
+class _PendingOtp {
+  const _PendingOtp({
+    this.firstName,
+    this.birthDate,
+    required this.isSignup,
+  });
+
+  final String? firstName;
+  final DateTime? birthDate;
+  final bool isSignup;
 }
 
 // ---------------------------------------------------------------------------
 // Providers
 // ---------------------------------------------------------------------------
 
-/// Picks the right repo at runtime: real Supabase when configured, mock
-/// otherwise. Either way, callers depend on the abstract [AuthRepository].
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
   final available = ref.watch(supabaseAvailableProvider);
   if (available) {

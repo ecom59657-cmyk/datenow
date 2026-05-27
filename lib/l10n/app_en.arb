@@ -20,37 +20,40 @@
   "authTerms": "By continuing, you agree to our Terms & Privacy Policy.",
 
   "signInTitle": "Welcome back",
-  "signInSubtitle": "Sign in to find your next live date.",
+  "signInSubtitleOtp": "Enter your email, we'll send a one-time code to sign you in.",
+  "signInSendCode": "Send me a code",
+  "signInUserNotFound": "No DateNow account is linked to this email.",
   "emailLabel": "Email",
   "emailHint": "you@datenow.app",
-  "passwordLabel": "Password",
-  "passwordHintCurrent": "Your password",
-  "passwordHintNew": "At least 8 characters",
-  "forgotPassword": "Forgot password?",
-  "signInButton": "Sign in",
   "couldNotSignIn": "Could not sign you in.",
 
   "signUpTitle": "Create your account",
   "signUpSubtitle": "Join DateNow and start meeting people in real time.",
   "firstNameLabel": "First name",
   "firstNameHint": "Your first name",
-  "confirmPasswordLabel": "Confirm password",
-  "confirmPasswordHint": "Re-enter your password",
-  "signUpButton": "Create my account",
+  "signUpButton": "Continue",
+
+  "otpTitle": "Check your email",
+  "otpSubtitlePrefix": "We sent a code to",
+  "otpSubtitleSuffix": ". Enter it below to continue.",
+  "otpHelper": "The code arrives within a minute.",
+  "otpValidate": "Verify",
+  "otpResend": "Resend code",
+  "otpResendIn": "Resend in {seconds}s",
+  "@otpResendIn": {
+    "placeholders": {
+      "seconds": {"type": "int"}
+    }
+  },
+  "otpResentSnack": "New code sent",
+  "otpInvalidCode": "Invalid code",
+  "otpExpiredCode": "Code expired — tap Resend",
+  "otpVerifyFailed": "Could not verify the code",
   "signUpAgeNotice": "By creating an account, you confirm you are 18 or older.",
   "signUpAlreadyHaveAccount": "Already have an account?",
   "signUpSignInLink": "Sign in",
   "couldNotSignUp": "Could not create your account.",
   "signupRateLimited": "Request already sent. Wait a few seconds before retrying.",
-  "verifyEmailTitle": "Verify your email",
-  "verifyEmailBody": "We sent a confirmation link to {email}. Click it to activate your account.",
-  "@verifyEmailBody": {
-    "placeholders": {
-      "email": {"type": "String"}
-    }
-  },
-  "verifyEmailHint": "Once confirmed, sign in to finish setting up your profile.",
-  "verifyEmailDoneCta": "I've confirmed, sign me in",
   "demoModeBanner": "Demo mode — Supabase isn't configured, so accounts won't persist.",
 
   "homeGreetingMorning": "Good morning",

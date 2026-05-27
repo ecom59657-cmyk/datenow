@@ -14,6 +14,7 @@ import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_scaffold.dart';
 import '../../../../shared/widgets/app_text_field.dart';
 import '../providers/auth_provider.dart';
+import 'email_otp_screen.dart';
 
 class SignInScreen extends ConsumerStatefulWidget {
   const SignInScreen({super.key});
@@ -25,35 +26,63 @@ class SignInScreen extends ConsumerStatefulWidget {
 class _SignInScreenState extends ConsumerState<SignInScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailCtrl = TextEditingController();
-  final _passwordCtrl = TextEditingController();
+  bool _submitting = false;
 
   @override
   void dispose() {
     _emailCtrl.dispose();
-    _passwordCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _submit() async {
+    if (_submitting) return;
     if (!(_formKey.currentState?.validate() ?? false)) return;
+    setState(() => _submitting = true);
     context.hideKeyboard();
-    final l10n = AppLocalizations.of(context);
-    final ok = await ref.read(authControllerProvider.notifier).signIn(
-          email: _emailCtrl.text.trim(),
-          password: _passwordCtrl.text,
-        );
-    if (!ok && mounted) {
-      final err = ref.read(authControllerProvider).error;
-      final msg = err is Failure ? err.message : l10n.couldNotSignIn;
-      context.showSnack(msg);
+    try {
+      final email = _emailCtrl.text.trim();
+      final outcome =
+          await ref.read(authControllerProvider.notifier).requestSigninOtp(
+                email: email,
+              );
+      if (!mounted) return;
+      final l10n = AppLocalizations.of(context);
+      switch (outcome) {
+        case OtpRequestOutcome.sent:
+          context.pushReplacementNamed(
+            AppRoute.emailOtp.name,
+            extra: EmailOtpArgs(email: email, isSignup: false),
+          );
+        case OtpRequestOutcome.failed:
+          final err = ref.read(authControllerProvider).error;
+          context.showSnack(_humanError(err, l10n));
+        case OtpRequestOutcome.alreadyInFlight:
+          break;
+      }
+    } finally {
+      if (mounted) setState(() => _submitting = false);
     }
+  }
+
+  String _humanError(Object? err, AppLocalizations l10n) {
+    if (err is Failure) {
+      switch (err.code) {
+        case 'rate_limited':
+          return l10n.signupRateLimited;
+        case 'user_not_found':
+          return l10n.signInUserNotFound;
+        default:
+          return err.message;
+      }
+    }
+    return l10n.couldNotSignIn;
   }
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final auth = ref.watch(authControllerProvider);
-    final isLoading = auth.isLoading;
+    final busy = auth.isLoading || _submitting;
 
     return AppScaffold(
       appBar: AppBar(leading: const BackButton()),
@@ -67,7 +96,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
             Text(l10n.signInTitle, style: AppTypography.h1),
             const SizedBox(height: AppSpacing.xs),
             Text(
-              l10n.signInSubtitle,
+              l10n.signInSubtitleOtp,
               style: AppTypography.body.copyWith(
                 color: AppColors.textSecondary,
               ),
@@ -79,41 +108,22 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
               hint: l10n.emailHint,
               prefixIcon: Icons.mail_outline_rounded,
               keyboardType: TextInputType.emailAddress,
-              textInputAction: TextInputAction.next,
+              textInputAction: TextInputAction.done,
               autofillHints: const [AutofillHints.email],
               validator: (v) => Validators.email(v, l10n),
-            ),
-            const SizedBox(height: AppSpacing.md),
-            AppTextField(
-              controller: _passwordCtrl,
-              label: l10n.passwordLabel,
-              hint: l10n.passwordHintCurrent,
-              prefixIcon: Icons.lock_outline_rounded,
-              obscureText: true,
-              textInputAction: TextInputAction.done,
-              autofillHints: const [AutofillHints.password],
-              validator: (v) => Validators.password(v, l10n),
               onSubmitted: (_) => _submit(),
             ),
-            const SizedBox(height: AppSpacing.sm),
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton(
-                onPressed: isLoading ? null : () {},
-                child: Text(l10n.forgotPassword),
-              ),
-            ),
-            const SizedBox(height: AppSpacing.lg),
+            const SizedBox(height: AppSpacing.xl),
             AppButton(
-              label: l10n.signInButton,
+              label: l10n.signInSendCode,
               size: AppButtonSize.large,
-              isLoading: isLoading,
-              onPressed: isLoading ? null : _submit,
+              isLoading: busy,
+              onPressed: busy ? null : _submit,
             ),
             const SizedBox(height: AppSpacing.md),
             Center(
               child: TextButton(
-                onPressed: isLoading
+                onPressed: busy
                     ? null
                     : () =>
                         context.pushReplacementNamed(AppRoute.signUp.name),
@@ -126,7 +136,3 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
     );
   }
 }
-
-// The legacy "demo mode" banner has been removed — whether the app is
-// running against a real Supabase project is a developer-only concern
-// surfaced via console logs.

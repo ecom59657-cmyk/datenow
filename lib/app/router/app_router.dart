@@ -7,7 +7,7 @@ import '../../features/auth/presentation/providers/auth_provider.dart';
 import '../../features/auth/presentation/screens/auth_landing_screen.dart';
 import '../../features/auth/presentation/screens/sign_in_screen.dart';
 import '../../features/auth/presentation/screens/sign_up_screen.dart';
-import '../../features/auth/presentation/screens/verify_email_screen.dart';
+import '../../features/auth/presentation/screens/email_otp_screen.dart';
 import '../../features/call/presentation/call_screen.dart';
 import '../../features/discover/presentation/discover_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
@@ -82,12 +82,15 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (_, _) => const SignUpScreen(),
           ),
           GoRoute(
-            path: 'verify-email',
-            name: AppRoute.verifyEmail.name,
+            path: 'otp',
+            name: AppRoute.emailOtp.name,
             builder: (_, state) {
-              // Email is passed via `pushReplacementNamed(extra: email)`.
-              final email = state.extra is String ? state.extra as String : '';
-              return VerifyEmailScreen(email: email);
+              // EmailOtpArgs is passed via
+              // `pushReplacementNamed(extra: EmailOtpArgs(...))`.
+              final args = state.extra is EmailOtpArgs
+                  ? state.extra as EmailOtpArgs
+                  : const EmailOtpArgs(email: '', isSignup: false);
+              return EmailOtpScreen(args: args);
             },
           ),
         ],

@@ -15,6 +15,7 @@ import '../../../../shared/widgets/app_scaffold.dart';
 import '../../../../shared/widgets/app_text_field.dart';
 import '../../../../shared/widgets/cupertino_birth_date_picker.dart';
 import '../providers/auth_provider.dart';
+import 'email_otp_screen.dart';
 
 class SignUpScreen extends ConsumerStatefulWidget {
   const SignUpScreen({super.key});
@@ -27,22 +28,13 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
   final _formKey = GlobalKey<FormState>();
   final _firstNameCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
-  final _passwordCtrl = TextEditingController();
-  final _confirmCtrl = TextEditingController();
   DateTime? _birthDate;
-
-  /// Screen-level re-entrance guard. Flipped to `true` synchronously at
-  /// the start of [_submit], so even if the user double-taps the button
-  /// before Riverpod's `state.isLoading` has propagated to the rebuild,
-  /// the second tap is dropped without ever calling `signUp` twice.
   bool _submitting = false;
 
   @override
   void dispose() {
     _firstNameCtrl.dispose();
     _emailCtrl.dispose();
-    _passwordCtrl.dispose();
-    _confirmCtrl.dispose();
     super.dispose();
   }
 
@@ -50,52 +42,54 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
     if (_submitting) return;
     if (!(_formKey.currentState?.validate() ?? false)) return;
     if (_birthDate == null) return;
-
     setState(() => _submitting = true);
     context.hideKeyboard();
-
     try {
-      final outcome = await ref.read(authControllerProvider.notifier).signUp(
-            firstName: _firstNameCtrl.text.trim(),
-            email: _emailCtrl.text.trim(),
-            password: _passwordCtrl.text,
-            birthDate: _birthDate!,
-          );
-
+      final email = _emailCtrl.text.trim();
+      final firstName = _firstNameCtrl.text.trim();
+      final outcome =
+          await ref.read(authControllerProvider.notifier).requestSignupOtp(
+                email: email,
+                firstName: firstName,
+                birthDate: _birthDate!,
+              );
       if (!mounted) return;
       final l10n = AppLocalizations.of(context);
-
       switch (outcome) {
-        case SignUpOutcome.signedIn:
-          // Router automatically pushes /profile-setup once
-          // authStateProvider emits the new user.
-          break;
-        case SignUpOutcome.needsEmailConfirmation:
+        case OtpRequestOutcome.sent:
           context.pushReplacementNamed(
-            AppRoute.verifyEmail.name,
-            extra: _emailCtrl.text.trim(),
+            AppRoute.emailOtp.name,
+            extra: EmailOtpArgs(
+              email: email,
+              isSignup: true,
+              firstName: firstName,
+              birthDate: _birthDate,
+            ),
           );
-          break;
-        case SignUpOutcome.failed:
+        case OtpRequestOutcome.failed:
           final err = ref.read(authControllerProvider).error;
-          String msg;
-          if (err is Failure && err.code == 'rate_limited') {
-            msg = l10n.signupRateLimited;
-          } else if (err is Failure) {
-            msg = err.message;
-          } else {
-            msg = l10n.couldNotSignUp;
-          }
-          context.showSnack(msg);
-          break;
-        case SignUpOutcome.alreadyInFlight:
-          // Should never reach here from the UI thanks to `_submitting`,
-          // but if it ever does, silently ignore.
+          context.showSnack(_humanError(err, l10n));
+        case OtpRequestOutcome.alreadyInFlight:
+          // double-tap guard
           break;
       }
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
+  }
+
+  String _humanError(Object? err, AppLocalizations l10n) {
+    if (err is Failure) {
+      switch (err.code) {
+        case 'rate_limited':
+          return l10n.signupRateLimited;
+        case 'minor_sign_up':
+          return l10n.validatorBirthDateMinor;
+        default:
+          return err.message;
+      }
+    }
+    return l10n.couldNotSignUp;
   }
 
   @override
@@ -145,32 +139,9 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
               hint: l10n.emailHint,
               prefixIcon: Icons.mail_outline_rounded,
               keyboardType: TextInputType.emailAddress,
-              textInputAction: TextInputAction.next,
+              textInputAction: TextInputAction.done,
               autofillHints: const [AutofillHints.email],
               validator: (v) => Validators.email(v, l10n),
-            ),
-            const SizedBox(height: AppSpacing.md),
-            AppTextField(
-              controller: _passwordCtrl,
-              label: l10n.passwordLabel,
-              hint: l10n.passwordHintNew,
-              prefixIcon: Icons.lock_outline_rounded,
-              obscureText: true,
-              textInputAction: TextInputAction.next,
-              autofillHints: const [AutofillHints.newPassword],
-              validator: (v) => Validators.password(v, l10n),
-            ),
-            const SizedBox(height: AppSpacing.md),
-            AppTextField(
-              controller: _confirmCtrl,
-              label: l10n.confirmPasswordLabel,
-              hint: l10n.confirmPasswordHint,
-              prefixIcon: Icons.lock_outline_rounded,
-              obscureText: true,
-              textInputAction: TextInputAction.done,
-              autofillHints: const [AutofillHints.newPassword],
-              validator: (v) =>
-                  Validators.confirmPassword(v, _passwordCtrl.text, l10n),
               onSubmitted: (_) => _submit(),
             ),
             const SizedBox(height: AppSpacing.xl),
@@ -237,8 +208,3 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
     );
   }
 }
-
-// The legacy "demo mode" banner has been removed: whether the app is
-// running against a real Supabase project is a developer-only concern
-// surfaced via console logs in main.dart and the auth repository — never
-// inline in the sign-up UI.

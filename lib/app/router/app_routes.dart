@@ -6,7 +6,7 @@ enum AppRoute {
   authLanding('/auth'),
   signIn('/auth/sign-in'),
   signUp('/auth/sign-up'),
-  verifyEmail('/auth/verify-email'),
+  emailOtp('/auth/otp'),
   profileSetup('/profile-setup'),
   permissions('/permissions'),
   home('/home'),
