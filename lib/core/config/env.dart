@@ -45,6 +45,27 @@ class Env {
   static String get agoraAppId => _optional('AGORA_APP_ID');
   static bool get agoraConfigured => agoraAppId.isNotEmpty;
 
+  // OAuth — Apple -----------------------------------------------------------
+
+  /// Set to `true` ONLY once you've completed the manual external
+  /// config for Apple Sign In:
+  ///   1. Apple Developer Console: Sign in with Apple capability on
+  ///      the App ID, Services ID, and `.p8` key created.
+  ///   2. Supabase Dashboard → Auth → Providers → Apple enabled with
+  ///      the Services ID + Team ID + Key ID + `.p8` secret pasted.
+  /// Full procedure: docs/AUTH_EXTERNAL_CONFIG.md sections 1 + 4.
+  ///
+  /// When `false` (default), the "Continue with Apple" button is
+  /// hidden from AuthLanding and the "Lier Apple" tile in Security is
+  /// hidden (unless the user already has Apple linked, in which case
+  /// the read-only "Linked" pill stays visible). This guarantees no
+  /// dead non-functional OAuth button reaches App Store Review.
+  ///
+  /// Reads `APPLE_SIGN_IN_ENABLED=true|false` from `.env`. Accepts
+  /// the strings `true` / `1` / `yes` (case-insensitive) as truthy.
+  static bool get appleSignInConfigured =>
+      _truthy('APPLE_SIGN_IN_ENABLED');
+
   // OAuth — Google ----------------------------------------------------------
 
   /// REVERSED_CLIENT_ID of the iOS OAuth client created in Google
@@ -67,4 +88,13 @@ class Env {
   /// the "Lier Google" tile is tappable in Security.
   static bool get googleSignInConfigured =>
       googleReversedClientIdIos.isNotEmpty;
+
+  // --- helpers -------------------------------------------------------------
+
+  /// Reads a boolean-ish flag from .env. Matches `true`, `1`, `yes`
+  /// (case-insensitive). Anything else is `false`.
+  static bool _truthy(String key) {
+    final raw = (dotenv.env[key] ?? '').trim().toLowerCase();
+    return raw == 'true' || raw == '1' || raw == 'yes';
+  }
 }

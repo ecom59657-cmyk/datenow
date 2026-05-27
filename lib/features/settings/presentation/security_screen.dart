@@ -129,14 +129,21 @@ class _SecurityScreenState extends ConsumerState<SecurityScreen> {
                 linked: hasEmail,
                 onTap: null, // email is linked at signup, no manual flow
               ),
-              _LinkedAccountTile(
-                icon: Icons.apple_rounded,
-                title: l10n.securityProviderApple,
-                linked: hasApple,
-                onTap: hasApple || _linking
-                    ? null
-                    : () => _link(OAuthProvider.apple),
-              ),
+              // Apple tile follows the same rule as Google: only
+              // surfaced once the provider is fully configured
+              // (Apple Dev Console + Supabase Apple Provider →
+              // APPLE_SIGN_IN_ENABLED=true in .env), OR when the
+              // user already has Apple linked (so the read-only
+              // "Linked" pill stays visible).
+              if (Env.appleSignInConfigured || hasApple)
+                _LinkedAccountTile(
+                  icon: Icons.apple_rounded,
+                  title: l10n.securityProviderApple,
+                  linked: hasApple,
+                  onTap: hasApple || _linking
+                      ? null
+                      : () => _link(OAuthProvider.apple),
+                ),
               // Google tile is only surfaced once the iOS OAuth client
               // is wired (Env.googleSignInConfigured). Without it the
               // linkIdentity flow would open a redirect to a scheme

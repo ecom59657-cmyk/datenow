@@ -85,23 +85,27 @@ class _AuthLandingScreenState extends ConsumerState<AuthLandingScreen> {
             ),
           ).animate().fadeIn(delay: 200.ms, duration: 600.ms),
           const Spacer(flex: 3),
-          // Apple Sign In — official button widget from the
-          // sign_in_with_apple package. Style: white on dark surface
-          // (Apple HIG recommends white for dark backgrounds).
-          SizedBox(
-            height: 54,
-            child: Opacity(
-              opacity: _busy ? 0.6 : 1,
-              child: SignInWithAppleButton(
-                onPressed: _busy ? () {} : _signInWithApple,
-                style: SignInWithAppleButtonStyle.white,
-                text: l10n.authContinueWithApple,
-                height: 54,
-                borderRadius: const BorderRadius.all(Radius.circular(12)),
+          // Apple Sign In — feature-flagged off until
+          // APPLE_SIGN_IN_ENABLED=true is in .env AND the Supabase
+          // Apple provider + Apple Dev Console setup are complete.
+          // Same logic as Google: never ship a button that opens a
+          // broken OAuth flow to App Store Review.
+          if (Env.appleSignInConfigured) ...[
+            SizedBox(
+              height: 54,
+              child: Opacity(
+                opacity: _busy ? 0.6 : 1,
+                child: SignInWithAppleButton(
+                  onPressed: _busy ? () {} : _signInWithApple,
+                  style: SignInWithAppleButtonStyle.white,
+                  text: l10n.authContinueWithApple,
+                  height: 54,
+                  borderRadius: const BorderRadius.all(Radius.circular(12)),
+                ),
               ),
-            ),
-          ).animate().fadeIn(delay: 380.ms).slideY(begin: 0.2, end: 0),
-          const SizedBox(height: AppSpacing.sm),
+            ).animate().fadeIn(delay: 380.ms).slideY(begin: 0.2, end: 0),
+            const SizedBox(height: AppSpacing.sm),
+          ],
           // Google Sign In — sober premium style, matches the Apple
           // button's height + radius so the two CTAs read as one
           // vertical group. Feature-flagged off until
