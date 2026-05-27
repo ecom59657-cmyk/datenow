@@ -4,6 +4,7 @@ import 'dart:math';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 
@@ -63,6 +64,21 @@ abstract class AuthRepository {
   /// provides the user's name on the FIRST sign-in — the app forces
   /// missing fields via the profile-setup flow.
   Future<AuthUser> signInWithApple();
+
+  /// Opens the native iOS Google sign-in sheet and exchanges the
+  /// returned ID token with Supabase. Same partial-profile semantics
+  /// as [signInWithApple] — Google provides email + name (always) but
+  /// no birth_date, so the profile-setup flow collects DOB after.
+  Future<AuthUser> signInWithGoogle();
+
+  /// Voluntarily links a third-party identity to the CURRENT user.
+  /// Supabase opens the OAuth flow in a webview / system browser; on
+  /// success the new identity is attached to the same `auth.users`
+  /// row (no second profile created). Throws an [AuthFailure] with
+  /// code `identity_already_exists` when the target email is already
+  /// taken by another DateNow account — the UI surfaces a humane
+  /// sheet in that case.
+  Future<void> linkIdentity(sb.OAuthProvider provider);
 
   Future<void> signOut();
 
@@ -292,6 +308,118 @@ class SupabaseAuthRepository implements AuthRepository {
     }
   }
 
+  @override
+  Future<AuthUser> signInWithGoogle() async {
+    _log.info('signInWithGoogle — opening Google sheet');
+    final googleSignIn = GoogleSignIn(
+      scopes: const ['email', 'profile'],
+    );
+    final GoogleSignInAccount? account;
+    try {
+      account = await googleSignIn.signIn();
+    } catch (e, st) {
+      _log.warn('Google signIn() threw: $e\n$st');
+      throw AuthFailure('Google sign in failed: $e', code: 'google_failed');
+    }
+    if (account == null) {
+      _log.info('Google sheet cancelled by user');
+      throw const OAuthCancelledFailure();
+    }
+    final auth = await account.authentication;
+    final idToken = auth.idToken;
+    final accessToken = auth.accessToken;
+    if (idToken == null) {
+      _log.error('Google credential returned without idToken');
+      throw const AuthFailure(
+        'Google did not return an identity token.',
+        code: 'google_no_id_token',
+      );
+    }
+    _log.info(
+      'Google credential — email=${account.email} '
+      'has_displayName=${account.displayName != null} '
+      'has_access=${accessToken != null}',
+    );
+    try {
+      final res = await _client.auth.signInWithIdToken(
+        provider: sb.OAuthProvider.google,
+        idToken: idToken,
+        accessToken: accessToken,
+      );
+      final user = _mapUser(res.user);
+      if (user == null) {
+        throw const AuthFailure(
+          'No user returned from Google sign in.',
+          code: 'no_user',
+        );
+      }
+      // Google reliably provides displayName / email on every sign-in.
+      // Push first_name into metadata so profile-setup pre-fills the
+      // form. Only on first signin (the trigger has already created a
+      // partial profile by now if it's new).
+      final name = account.displayName?.trim();
+      if (name != null && name.isNotEmpty) {
+        try {
+          await _client.auth.updateUser(
+            sb.UserAttributes(
+              data: <String, dynamic>{
+                'first_name': name.split(' ').first,
+                'display_name': name,
+              },
+            ),
+          );
+          _log.info('Google displayName "$name" pushed to user metadata');
+        } catch (e) {
+          _log.warn('updateUser(displayName) failed (non-fatal): $e');
+        }
+      }
+      _log.info('signInWithGoogle success — user=${user.id}');
+      return user;
+    } on sb.AuthException catch (e, st) {
+      _log.error(
+        'signInWithGoogle Supabase error: code=${e.code} '
+        'message="${e.message}"',
+        e,
+        st,
+      );
+      throw _mapOtpFailure(e);
+    }
+  }
+
+  @override
+  Future<void> linkIdentity(sb.OAuthProvider provider) async {
+    _log.info('linkIdentity provider=$provider');
+    try {
+      // Supabase opens the OAuth flow in an in-app webview (iOS) and
+      // returns once the redirect callback fires. The new identity is
+      // attached to the current session's user — no new auth.users row
+      // unless the OAuth email collides with another account, in
+      // which case Supabase returns `identity_already_exists`.
+      await _client.auth.linkIdentity(provider);
+      _log.info('linkIdentity returned successfully');
+    } on sb.AuthException catch (e, st) {
+      _log.error(
+        'linkIdentity error: code=${e.code} message="${e.message}"',
+        e,
+        st,
+      );
+      final code = (e.code ?? '').toLowerCase();
+      final msg = e.message.toLowerCase();
+      if (code.contains('identity_already_exists') ||
+          msg.contains('already exists') ||
+          msg.contains('already linked')) {
+        throw const AuthFailure(
+          'This account is already linked to another DateNow profile.',
+          code: 'identity_already_exists',
+        );
+      }
+      throw _mapOtpFailure(e);
+    } catch (e, st) {
+      _log.error('linkIdentity unexpected: $e', e, st);
+      throw AuthFailure('$e', code: 'link_failed');
+    }
+  }
+
   /// 32-byte URL-safe random nonce, base64-encoded.
   String _generateRawNonce({int length = 32}) {
     final random = Random.secure();
@@ -495,6 +623,31 @@ class MockAuthRepository implements AuthRepository {
     _current = user;
     _controller.add(user);
     return user;
+  }
+
+  @override
+  Future<AuthUser> signInWithGoogle() async {
+    if (Env.supabaseConfigured) {
+      throw const AuthFailure('Mock unavailable when Supabase is configured.');
+    }
+    _log.info('mock signInWithGoogle — auto-completing');
+    final user = AuthUser(
+      id: 'mock-google-${DateTime.now().millisecondsSinceEpoch}',
+      email: 'google-user@gmail.com',
+      displayName: 'Google User',
+      createdAt: DateTime.now(),
+    );
+    _current = user;
+    _controller.add(user);
+    return user;
+  }
+
+  @override
+  Future<void> linkIdentity(sb.OAuthProvider provider) async {
+    if (Env.supabaseConfigured) {
+      throw const AuthFailure('Mock unavailable when Supabase is configured.');
+    }
+    _log.info('mock linkIdentity provider=$provider — no-op');
   }
 
   @override

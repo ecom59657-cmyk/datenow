@@ -65,6 +65,15 @@ dependencies:
   sign_in_with_apple: ^6.1.4
   crypto: ^3.0.6
 
+  # Google Sign In — auth sub-phase E. Reads CLIENT_ID +
+  # REVERSED_CLIENT_ID from ios/Runner/GoogleService-Info.plist and
+  # surfaces the iOS native Google sign-in sheet (no web view, no
+  # browser hop). Returns an ID token we hand to Supabase via
+  # `signInWithIdToken(provider: google, …)`. The reverse-DNS URL
+  # scheme must also be present in Info.plist for the iOS callback to
+  # reach the app — see ios/Runner/Info.plist.
+  google_sign_in: ^6.2.1
+
   # Push notifications — Firebase Messaging used ONLY as the iOS APNs
   # bridge (device token retrieval, foreground/background callbacks).
   # The actual push payload is signed + sent by our `message-notification`

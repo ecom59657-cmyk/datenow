@@ -38,6 +38,25 @@
 	<string>DateNow utilise ta position pour te proposer des dates proches. Ta localisation exacte n'est jamais partagée — seule une distance approximative apparaît aux autres profils.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>DateNow utilise votre position pour vous proposer des dates proches de vous lorsque l'application est utilisée.</string>
+	<!--
+	  Google Sign In — sub-phase E.
+	  The reverse-DNS scheme below MUST match the REVERSED_CLIENT_ID
+	  of the iOS OAuth client created in Google Cloud Console for this
+	  app (com.datenow.app). Update the placeholder once that client
+	  exists in the Firebase / Google Cloud project. The exact value
+	  to paste is the REVERSED_CLIENT_ID key inside the refreshed
+	  GoogleService-Info.plist.
+	-->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<!-- TODO: replace once Google iOS OAuth client is created. -->
+				<string>com.googleusercontent.apps.PLACEHOLDER_REVERSED_CLIENT_ID</string>
+			</array>
+		</dict>
+	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

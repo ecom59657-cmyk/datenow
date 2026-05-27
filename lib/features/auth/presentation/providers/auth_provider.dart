@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show OAuthProvider;
 
 import '../../../../core/errors/failures.dart';
 import '../../../../core/utils/age.dart';
@@ -153,6 +154,48 @@ class AuthController extends StateNotifier<AsyncValue<void>> {
       return true;
     } catch (e, st) {
       _log.error('signInWithApple failed: $e', e, st);
+      state = AsyncValue.error(e, st);
+      return false;
+    }
+  }
+
+  /// Same pattern as [signInWithApple] for Google. Returns true on
+  /// success; false on user cancel (silent) or any other failure.
+  Future<bool> signInWithGoogle() async {
+    if (state.isLoading) {
+      _log.warn('signInWithGoogle ignored — another call is in flight.');
+      return false;
+    }
+    _log.info('signInWithGoogle called');
+    state = const AsyncValue.loading();
+    try {
+      await _ref.read(authRepositoryProvider).signInWithGoogle();
+      state = const AsyncValue.data(null);
+      return true;
+    } catch (e, st) {
+      _log.error('signInWithGoogle failed: $e', e, st);
+      state = AsyncValue.error(e, st);
+      return false;
+    }
+  }
+
+  /// Voluntarily attaches a third-party identity (Apple / Google) to
+  /// the current account. Returns true on success. Failures are
+  /// surfaced via `state.error` so the UI can show a specific sheet
+  /// for `identity_already_exists` and a generic snack for the rest.
+  Future<bool> linkIdentity(OAuthProvider provider) async {
+    if (state.isLoading) {
+      _log.warn('linkIdentity ignored — another call is in flight.');
+      return false;
+    }
+    _log.info('linkIdentity provider=$provider');
+    state = const AsyncValue.loading();
+    try {
+      await _ref.read(authRepositoryProvider).linkIdentity(provider);
+      state = const AsyncValue.data(null);
+      return true;
+    } catch (e, st) {
+      _log.error('linkIdentity failed: $e', e, st);
       state = AsyncValue.error(e, st);
       return false;
     }

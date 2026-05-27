@@ -30,25 +30,34 @@ class AuthLandingScreen extends ConsumerStatefulWidget {
 }
 
 class _AuthLandingScreenState extends ConsumerState<AuthLandingScreen> {
-  bool _appleBusy = false;
+  bool _busy = false;
 
   Future<void> _signInWithApple() async {
-    if (_appleBusy) return;
-    setState(() => _appleBusy = true);
+    if (_busy) return;
+    setState(() => _busy = true);
     final ok = await ref.read(authControllerProvider.notifier).signInWithApple();
     if (!mounted) return;
-    setState(() => _appleBusy = false);
-    if (ok) {
-      // Auth-state stream will emit; router redirect handles the next
-      // screen (profile-setup if Apple user lacks first_name/birth_date,
-      // home otherwise).
-      return;
-    }
+    setState(() => _busy = false);
+    if (ok) return;
     final err = ref.read(authControllerProvider).error;
-    // Silent on cancel — that's a user choice, not a failure.
     if (err is OAuthCancelledFailure) return;
     final l10n = AppLocalizations.of(context);
     final msg = err is Failure ? err.message : l10n.authAppleFailed;
+    context.showSnack(msg);
+  }
+
+  Future<void> _signInWithGoogle() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    final ok =
+        await ref.read(authControllerProvider.notifier).signInWithGoogle();
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (ok) return;
+    final err = ref.read(authControllerProvider).error;
+    if (err is OAuthCancelledFailure) return;
+    final l10n = AppLocalizations.of(context);
+    final msg = err is Failure ? err.message : l10n.authGoogleFailed;
     context.showSnack(msg);
   }
 
@@ -77,14 +86,13 @@ class _AuthLandingScreenState extends ConsumerState<AuthLandingScreen> {
           const Spacer(flex: 3),
           // Apple Sign In — official button widget from the
           // sign_in_with_apple package. Style: white on dark surface
-          // (Apple HIG recommends white for dark backgrounds). Height
-          // matches AppButton.large for visual parity.
+          // (Apple HIG recommends white for dark backgrounds).
           SizedBox(
             height: 54,
             child: Opacity(
-              opacity: _appleBusy ? 0.6 : 1,
+              opacity: _busy ? 0.6 : 1,
               child: SignInWithAppleButton(
-                onPressed: _appleBusy ? () {} : _signInWithApple,
+                onPressed: _busy ? () {} : _signInWithApple,
                 style: SignInWithAppleButtonStyle.white,
                 text: l10n.authContinueWithApple,
                 height: 54,
@@ -93,24 +101,32 @@ class _AuthLandingScreenState extends ConsumerState<AuthLandingScreen> {
             ),
           ).animate().fadeIn(delay: 380.ms).slideY(begin: 0.2, end: 0),
           const SizedBox(height: AppSpacing.sm),
+          // Google Sign In — sober premium style, matches the Apple
+          // button's height + radius so the two CTAs read as one
+          // vertical group.
+          _GoogleSignInButton(
+            label: l10n.authContinueWithGoogle,
+            onPressed: _busy ? null : _signInWithGoogle,
+          ).animate().fadeIn(delay: 460.ms).slideY(begin: 0.2, end: 0),
+          const SizedBox(height: AppSpacing.md),
           // Email-OTP path (Create account / Sign in remain accessible).
           AppButton(
             label: l10n.authContinueWithEmail,
             size: AppButtonSize.large,
             variant: AppButtonVariant.secondary,
-            onPressed: _appleBusy
+            onPressed: _busy
                 ? null
                 : () => context.pushNamed(AppRoute.signUp.name),
-          ).animate().fadeIn(delay: 460.ms).slideY(begin: 0.2, end: 0),
+          ).animate().fadeIn(delay: 540.ms).slideY(begin: 0.2, end: 0),
           const SizedBox(height: AppSpacing.sm),
           Center(
             child: TextButton(
-              onPressed: _appleBusy
+              onPressed: _busy
                   ? null
                   : () => context.pushNamed(AppRoute.signIn.name),
               child: Text(l10n.authHaveAccount),
             ),
-          ).animate().fadeIn(delay: 540.ms),
+          ).animate().fadeIn(delay: 620.ms),
           const SizedBox(height: AppSpacing.lg),
           // Apple expects easy access to Terms + Privacy from any
           // pre-auth surface. Keep the legal sentence above the two
@@ -139,6 +155,92 @@ class _AuthLandingScreenState extends ConsumerState<AuthLandingScreen> {
           ),
           const SizedBox(height: AppSpacing.md),
         ],
+      ),
+    );
+  }
+}
+
+/// Sober, premium-looking Google Sign In button. Matches the height +
+/// radius of [SignInWithAppleButton] so Apple and Google read as one
+/// vertical CTA group. Dark surface with a thin hairline border + the
+/// classic multi-coloured "G" mark.
+class _GoogleSignInButton extends StatelessWidget {
+  const _GoogleSignInButton({
+    required this.label,
+    required this.onPressed,
+  });
+
+  final String label;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 54,
+      child: Material(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.hairline),
+            ),
+            padding:
+                const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const _GoogleGMark(size: 20),
+                const SizedBox(width: 10),
+                Text(
+                  label,
+                  style: const TextStyle(
+                    color: Color(0xFF1F1F1F),
+                    fontSize: 17,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: -0.2,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Tiny, dependency-free Google "G" mark — flat-coloured glyph drawn
+/// with a [Stack] of [Container]s. Lighter than embedding the official
+/// SVG asset for what's effectively decoration on a single button.
+class _GoogleGMark extends StatelessWidget {
+  const _GoogleGMark({required this.size});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    // Use a unicode-ish letter "G" rendered in the Google brand blue.
+    // This is intentionally minimalist — the official Google brand
+    // guidelines allow a flat letter "G" in #4285F4 on a white surface
+    // as a recognisable mark.
+    return SizedBox(
+      width: size,
+      height: size,
+      child: Center(
+        child: Text(
+          'G',
+          style: TextStyle(
+            color: const Color(0xFF4285F4),
+            fontWeight: FontWeight.w700,
+            fontSize: size,
+            height: 1,
+            letterSpacing: -1,
+          ),
+        ),
       ),
     );
   }

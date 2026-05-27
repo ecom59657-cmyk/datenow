@@ -1,29 +1,34 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../app/theme/app_typography.dart';
+import '../../../core/errors/failures.dart';
 import '../../../core/utils/extensions.dart';
-import '../../../core/utils/validators.dart';
 import '../../../l10n/app_localizations.dart';
-import '../../../shared/widgets/app_button.dart';
 import '../../../shared/widgets/app_scaffold.dart';
-import '../../../shared/widgets/app_text_field.dart';
+import '../../auth/data/auth_repository.dart';
+import '../../auth/presentation/providers/auth_provider.dart';
 import '../../profile_setup/presentation/providers/profile_provider.dart';
 import '../data/settings_repository.dart';
 import '../domain/settings_models.dart';
 import 'providers/settings_providers.dart';
 import 'widgets/setting_widgets.dart';
 
-class SecurityScreen extends ConsumerWidget {
+class SecurityScreen extends ConsumerStatefulWidget {
   const SecurityScreen({super.key});
 
-  Future<void> _toggleTwoFactor(
-    WidgetRef ref,
-    BuildContext context,
-    bool value,
-  ) async {
+  @override
+  ConsumerState<SecurityScreen> createState() => _SecurityScreenState();
+}
+
+class _SecurityScreenState extends ConsumerState<SecurityScreen> {
+  bool _linking = false;
+
+  Future<void> _toggleTwoFactor(bool value) async {
     final profile = ref.read(currentProfileProvider).asData?.value;
     if (profile == null) return;
     final repo = ref.read(settingsRepositoryProvider);
@@ -33,28 +38,72 @@ class SecurityScreen extends ConsumerWidget {
       profile.userId,
       current.copyWith(twoFactorEnabled: value),
     );
-    if (!context.mounted) return;
+    if (!mounted) return;
     context.showSnack(AppLocalizations.of(context).savedSnack);
   }
 
+  /// Triggers Supabase's voluntary identity-linking flow for [provider].
+  /// On `identity_already_exists`, surfaces a humane sheet pointing
+  /// the user to the right sign-in method instead of leaking the raw
+  /// error.
+  Future<void> _link(OAuthProvider provider) async {
+    if (_linking) return;
+    setState(() => _linking = true);
+    final ok = await ref
+        .read(authControllerProvider.notifier)
+        .linkIdentity(provider);
+    if (!mounted) return;
+    setState(() => _linking = false);
+    final l10n = AppLocalizations.of(context);
+    if (ok) {
+      context.showSnack(l10n.securityLinkSuccess);
+      return;
+    }
+    final err = ref.read(authControllerProvider).error;
+    if (err is OAuthCancelledFailure) return;
+    if (err is Failure && err.code == 'identity_already_exists') {
+      await _showEmailAlreadyUsedSheet();
+      return;
+    }
+    final msg = err is Failure ? err.message : l10n.securityLinkFailed;
+    context.showSnack(msg);
+  }
+
+  /// "Un compte existe déjà avec cette adresse." sheet — the only
+  /// non-OK linking outcome that gets a dedicated UX (vs a snack).
+  /// Points the user at the alternative sign-in methods instead of
+  /// leaking the raw Supabase string.
+  Future<void> _showEmailAlreadyUsedSheet() async {
+    final l10n = AppLocalizations.of(context);
+    await showCupertinoModalPopup<void>(
+      context: context,
+      builder: (ctx) => CupertinoActionSheet(
+        title: Text(l10n.securityEmailInUseTitle),
+        message: Text(l10n.securityEmailInUseBody),
+        actions: [
+          CupertinoActionSheetAction(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(l10n.commonDone),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final prefs =
         ref.watch(privacyPrefsProvider).asData?.value ?? const PrivacyPrefs();
-
-    final thisDeviceLabel = l10n.securitySignInEntry(
-      l10n.securityThisDevice,
-      _humanWhen(DateTime.now()),
-    );
-    final history = <String>[
-      l10n.securitySignInEntry('Paris, FR', _humanWhen(DateTime.now()
-          .subtract(const Duration(hours: 4)))),
-      l10n.securitySignInEntry('Lyon, FR', _humanWhen(DateTime.now()
-          .subtract(const Duration(days: 2)))),
-      l10n.securitySignInEntry('Brussels, BE',
-          _humanWhen(DateTime.now().subtract(const Duration(days: 6)))),
-    ];
+    final identities =
+        Supabase.instance.client.auth.currentUser?.identities ?? const [];
+    final providers = identities
+        .map((i) => i.provider.toLowerCase())
+        .whereType<String>()
+        .toSet();
+    final hasApple = providers.contains('apple');
+    final hasGoogle = providers.contains('google');
+    final hasEmail = providers.contains('email');
 
     return AppScaffold(
       appBar: AppBar(
@@ -71,20 +120,42 @@ class SecurityScreen extends ConsumerWidget {
           ),
           const SizedBox(height: AppSpacing.lg),
           SettingSection(
+            title: l10n.securityLinkedAccounts,
+            children: [
+              _LinkedAccountTile(
+                icon: Icons.mail_outline_rounded,
+                title: l10n.securityProviderEmail,
+                linked: hasEmail,
+                onTap: null, // email is linked at signup, no manual flow
+              ),
+              _LinkedAccountTile(
+                icon: Icons.apple_rounded,
+                title: l10n.securityProviderApple,
+                linked: hasApple,
+                onTap: hasApple || _linking
+                    ? null
+                    : () => _link(OAuthProvider.apple),
+              ),
+              _LinkedAccountTile(
+                icon: Icons.account_circle_outlined,
+                title: l10n.securityProviderGoogle,
+                linked: hasGoogle,
+                onTap: hasGoogle || _linking
+                    ? null
+                    : () => _link(OAuthProvider.google),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          SettingSection(
             title: l10n.securityTitle,
             children: [
-              SettingTile(
-                icon: Icons.password_rounded,
-                title: l10n.securityChangePassword,
-                subtitle: l10n.securityChangePasswordSubtitle,
-                onTap: () => _openChangePasswordSheet(context),
-              ),
               SettingSwitchTile(
                 icon: Icons.shield_outlined,
                 title: l10n.securityTwoFactor,
                 subtitle: l10n.securityTwoFactorBody,
                 value: prefs.twoFactorEnabled,
-                onChanged: (v) => _toggleTwoFactor(ref, context, v),
+                onChanged: _toggleTwoFactor,
               ),
             ],
           ),
@@ -95,19 +166,11 @@ class SecurityScreen extends ConsumerWidget {
               SettingTile(
                 icon: Icons.devices_rounded,
                 title: l10n.securityThisDevice,
-                subtitle: thisDeviceLabel,
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.lg),
-          SettingSection(
-            title: l10n.securityHistory,
-            children: [
-              for (final entry in history)
-                SettingTile(
-                  icon: Icons.history_rounded,
-                  title: entry,
+                subtitle: l10n.securitySignInEntry(
+                  l10n.securityThisDevice,
+                  _humanWhen(DateTime.now()),
                 ),
+              ),
             ],
           ),
         ],
@@ -124,108 +187,42 @@ class SecurityScreen extends ConsumerWidget {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Change-password bottom sheet — mock save
-// ---------------------------------------------------------------------------
+/// One row of the "Linked accounts" section. Shows a "Linked"
+/// confirmation pill on the right when the provider is attached,
+/// otherwise lets the user tap to start the link flow.
+class _LinkedAccountTile extends StatelessWidget {
+  const _LinkedAccountTile({
+    required this.icon,
+    required this.title,
+    required this.linked,
+    required this.onTap,
+  });
 
-Future<void> _openChangePasswordSheet(BuildContext context) {
-  return showModalBottomSheet<void>(
-    context: context,
-    backgroundColor: AppColors.surfaceElevated,
-    isScrollControlled: true,
-    builder: (_) => const _ChangePasswordSheet(),
-  );
-}
-
-class _ChangePasswordSheet extends ConsumerStatefulWidget {
-  const _ChangePasswordSheet();
-
-  @override
-  ConsumerState<_ChangePasswordSheet> createState() =>
-      _ChangePasswordSheetState();
-}
-
-class _ChangePasswordSheetState extends ConsumerState<_ChangePasswordSheet> {
-  final _form = GlobalKey<FormState>();
-  final _current = TextEditingController();
-  final _new = TextEditingController();
-  final _confirm = TextEditingController();
-  bool _saving = false;
-
-  @override
-  void dispose() {
-    _current.dispose();
-    _new.dispose();
-    _confirm.dispose();
-    super.dispose();
-  }
-
-  Future<void> _submit() async {
-    if (!(_form.currentState?.validate() ?? false)) return;
-    setState(() => _saving = true);
-    // Mock save — real Supabase mode will call `auth.updateUser(password: …)`.
-    await Future<void>.delayed(const Duration(milliseconds: 500));
-    if (!mounted) return;
-    setState(() => _saving = false);
-    final l10n = AppLocalizations.of(context);
-    Navigator.of(context).pop();
-    context.showSnack(l10n.changePasswordSuccess);
-  }
+  final IconData icon;
+  final String title;
+  final bool linked;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final inset = MediaQuery.viewInsetsOf(context).bottom;
-    return Padding(
-      padding: EdgeInsets.fromLTRB(
-        AppSpacing.lg,
-        AppSpacing.lg,
-        AppSpacing.lg,
-        AppSpacing.lg + inset,
-      ),
-      child: Form(
-        key: _form,
-        autovalidateMode: AutovalidateMode.onUserInteraction,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(l10n.changePasswordTitle, style: AppTypography.h3),
-            const SizedBox(height: AppSpacing.lg),
-            AppTextField(
-              controller: _current,
-              label: l10n.changePasswordCurrent,
-              prefixIcon: Icons.lock_outline_rounded,
-              obscureText: true,
-              validator: (v) => Validators.password(v, l10n),
-            ),
-            const SizedBox(height: AppSpacing.md),
-            AppTextField(
-              controller: _new,
-              label: l10n.changePasswordNew,
-              prefixIcon: Icons.lock_outline_rounded,
-              obscureText: true,
-              validator: (v) => Validators.password(v, l10n),
-            ),
-            const SizedBox(height: AppSpacing.md),
-            AppTextField(
-              controller: _confirm,
-              label: l10n.changePasswordConfirm,
-              prefixIcon: Icons.lock_outline_rounded,
-              obscureText: true,
-              validator: (v) =>
-                  Validators.confirmPassword(v, _new.text, l10n),
-            ),
-            const SizedBox(height: AppSpacing.lg),
-            AppButton(
-              label: l10n.changePasswordSubmit,
-              size: AppButtonSize.large,
-              isLoading: _saving,
-              onPressed: _saving ? null : _submit,
-            ),
-          ],
-        ),
-      ),
+    return SettingTile(
+      icon: icon,
+      title: title,
+      subtitle:
+          linked ? l10n.securityProviderLinked : l10n.securityProviderTapToLink,
+      onTap: onTap,
+      trailing: linked
+          ? const Icon(
+              Icons.check_circle_rounded,
+              color: AppColors.brandPink,
+            )
+          : (onTap == null
+              ? null
+              : const Icon(
+                  Icons.chevron_right_rounded,
+                  color: AppColors.textTertiary,
+                )),
     );
   }
 }
