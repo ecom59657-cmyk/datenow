@@ -17,6 +17,9 @@
   "authTaglineLine2": "No more endless swiping.",
   "authCreateAccount": "Create my account",
   "authHaveAccount": "I already have an account",
+  "authContinueWithApple": "Continue with Apple",
+  "authContinueWithEmail": "Continue with email",
+  "authAppleFailed": "Apple sign in failed.",
   "authTerms": "By continuing, you agree to our Terms & Privacy Policy.",
 
   "signInTitle": "Welcome back",

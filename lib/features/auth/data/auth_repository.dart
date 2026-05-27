@@ -1,6 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:math';
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 
 import '../../../core/config/env.dart';
@@ -53,6 +57,13 @@ abstract class AuthRepository {
     required String token,
   });
 
+  /// Opens the native iOS Sign in with Apple sheet and exchanges the
+  /// resulting Apple ID token with Supabase. Returns the freshly-
+  /// authenticated user. Apple never provides a date of birth and only
+  /// provides the user's name on the FIRST sign-in — the app forces
+  /// missing fields via the profile-setup flow.
+  Future<AuthUser> signInWithApple();
+
   Future<void> signOut();
 
   /// Permanently deletes the current account. Implementations should
@@ -68,6 +79,14 @@ class MinorSignUpFailure extends AuthFailure {
           'DateNow is reserved for people 18 and older.',
           code: 'minor_sign_up',
         );
+}
+
+/// Surfaced when the user cancels the native Apple Sign In sheet.
+/// Distinct from an actual error so the UI can stay silent instead of
+/// showing a snack.
+class OAuthCancelledFailure extends AuthFailure {
+  const OAuthCancelledFailure()
+      : super('Cancelled by user', code: 'oauth_cancelled');
 }
 
 // ---------------------------------------------------------------------------
@@ -175,6 +194,113 @@ class SupabaseAuthRepository implements AuthRepository {
       );
       throw _mapOtpFailure(e);
     }
+  }
+
+  @override
+  Future<AuthUser> signInWithApple() async {
+    // Generate a per-request nonce. We send a SHA-256 hash of it to
+    // Apple (`nonce:` field) so Apple binds the returned ID token to
+    // this specific request; we then hand the RAW nonce to Supabase
+    // (`signInWithIdToken nonce:`) which re-derives the hash and
+    // verifies it matches the token's `nonce` claim. Without this the
+    // ID token is replay-able by anyone who intercepts it.
+    final rawNonce = _generateRawNonce();
+    final hashedNonce = _sha256Hex(rawNonce);
+    _log.info('signInWithApple — opening Apple sheet');
+
+    final AuthorizationCredentialAppleID credential;
+    try {
+      credential = await SignInWithApple.getAppleIDCredential(
+        scopes: const [
+          AppleIDAuthorizationScopes.email,
+          AppleIDAuthorizationScopes.fullName,
+        ],
+        nonce: hashedNonce,
+      );
+    } on SignInWithAppleAuthorizationException catch (e) {
+      if (e.code == AuthorizationErrorCode.canceled) {
+        _log.info('Apple sheet cancelled by user');
+        throw const OAuthCancelledFailure();
+      }
+      _log.warn(
+        'Apple authorization error: code=${e.code} message=${e.message}',
+      );
+      throw AuthFailure(e.message, code: 'apple_${e.code.name}');
+    }
+
+    final idToken = credential.identityToken;
+    if (idToken == null) {
+      _log.error('Apple credential returned without an identity token');
+      throw const AuthFailure(
+        'Apple did not return an identity token.',
+        code: 'apple_no_id_token',
+      );
+    }
+
+    _log.info(
+      'Apple credential — userId=${credential.userIdentifier} '
+      'has_name=${credential.givenName != null} '
+      'has_email=${credential.email != null}',
+    );
+
+    try {
+      final res = await _client.auth.signInWithIdToken(
+        provider: sb.OAuthProvider.apple,
+        idToken: idToken,
+        nonce: rawNonce,
+      );
+      final user = _mapUser(res.user);
+      if (user == null) {
+        throw const AuthFailure(
+          'No user returned from Apple sign in.',
+          code: 'no_user',
+        );
+      }
+      // Apple sends a `givenName` only on the very first sign-in. If
+      // we got it, push it into raw_user_meta_data so the profile-
+      // setup flow can pre-fill the field. The trigger has already
+      // run by now (relaxed migration 20260527100000) — this is a
+      // post-creation enrichment, not a gate.
+      if (credential.givenName != null &&
+          credential.givenName!.trim().isNotEmpty) {
+        try {
+          await _client.auth.updateUser(
+            sb.UserAttributes(
+              data: <String, dynamic>{
+                'first_name': credential.givenName!.trim(),
+                'display_name': credential.givenName!.trim(),
+              },
+            ),
+          );
+          _log.info(
+            'Apple givenName "${credential.givenName}" pushed to user metadata',
+          );
+        } catch (e) {
+          _log.warn('updateUser(givenName) failed (non-fatal): $e');
+        }
+      }
+      _log.info('signInWithApple success — user=${user.id}');
+      return user;
+    } on sb.AuthException catch (e, st) {
+      _log.error(
+        'signInWithApple Supabase error: code=${e.code} '
+        'message="${e.message}"',
+        e,
+        st,
+      );
+      throw _mapOtpFailure(e);
+    }
+  }
+
+  /// 32-byte URL-safe random nonce, base64-encoded.
+  String _generateRawNonce({int length = 32}) {
+    final random = Random.secure();
+    final bytes = List<int>.generate(length, (_) => random.nextInt(256));
+    return base64Url.encode(bytes).replaceAll('=', '');
+  }
+
+  String _sha256Hex(String input) {
+    return sha256.convert(utf8.encode(input)).toString();
   }
 
   @override
@@ -347,6 +473,23 @@ class MockAuthRepository implements AuthRepository {
       email: email,
       displayName: pending?.firstName,
       birthDate: pending?.birthDate,
+      createdAt: DateTime.now(),
+    );
+    _current = user;
+    _controller.add(user);
+    return user;
+  }
+
+  @override
+  Future<AuthUser> signInWithApple() async {
+    if (Env.supabaseConfigured) {
+      throw const AuthFailure('Mock unavailable when Supabase is configured.');
+    }
+    _log.info('mock signInWithApple — auto-completing');
+    final user = AuthUser(
+      id: 'mock-apple-${DateTime.now().millisecondsSinceEpoch}',
+      email: 'apple-user@privaterelay.appleid.com',
+      displayName: 'Apple User',
       createdAt: DateTime.now(),
     );
     _current = user;

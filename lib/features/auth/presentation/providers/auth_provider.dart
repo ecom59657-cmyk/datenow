@@ -133,6 +133,31 @@ class AuthController extends StateNotifier<AsyncValue<void>> {
     }
   }
 
+  /// Opens the native iOS Sign in with Apple sheet and authenticates
+  /// against Supabase. Returns true on success — the auth-state stream
+  /// then redirects the router (to /profile-setup if the OAuth user
+  /// hasn't filled their name + birth_date yet). Returns false on
+  /// failure; `state.error` carries the [AuthFailure]. User-cancellation
+  /// returns false but leaves `state.error` as [OAuthCancelledFailure]
+  /// so the UI can stay silent.
+  Future<bool> signInWithApple() async {
+    if (state.isLoading) {
+      _log.warn('signInWithApple ignored — another call is in flight.');
+      return false;
+    }
+    _log.info('signInWithApple called');
+    state = const AsyncValue.loading();
+    try {
+      await _ref.read(authRepositoryProvider).signInWithApple();
+      state = const AsyncValue.data(null);
+      return true;
+    } catch (e, st) {
+      _log.error('signInWithApple failed: $e', e, st);
+      state = AsyncValue.error(e, st);
+      return false;
+    }
+  }
+
   Future<void> signOut() async {
     await _ref.read(authRepositoryProvider).signOut();
   }

@@ -56,6 +56,15 @@ dependencies:
   # Supabase via the `update_my_location` RPC. No background tracking.
   geolocator: ^13.0.2
 
+  # Apple Sign In — auth sub-phase D. Provides
+  # `SignInWithApple.getAppleIDCredential` which surfaces the iOS native
+  # AuthenticationServices sheet. The returned ID token is exchanged
+  # with Supabase via `signInWithIdToken(provider: apple, …)`. Required
+  # for App Store review compliance once Google Sign In ships (sub-
+  # phase E): the two methods must be at parity on the auth landing.
+  sign_in_with_apple: ^6.1.4
+  crypto: ^3.0.6
+
   # Push notifications — Firebase Messaging used ONLY as the iOS APNs
   # bridge (device token retrieval, foreground/background callbacks).
   # The actual push payload is signed + sent by our `message-notification`
