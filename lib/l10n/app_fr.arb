@@ -171,6 +171,7 @@
 
   "birthDateLabel": "Date de naissance",
   "birthDateHint": "Touchez pour choisir votre date de naissance",
+  "commonDone": "OK",
   "birthDateAgeFormat": "{age} ans",
   "birthDateSetAtSignup": "Définie à l'inscription, non modifiable.",
 

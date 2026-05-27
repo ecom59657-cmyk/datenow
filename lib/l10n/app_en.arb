@@ -184,6 +184,7 @@
 
   "birthDateLabel": "Date of birth",
   "birthDateHint": "Tap to pick your date of birth",
+  "commonDone": "Done",
   "birthDateAgeFormat": "{age} years old",
   "@birthDateAgeFormat": {
     "placeholders": {

@@ -13,7 +13,7 @@ import '../../../../l10n/app_localizations.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_scaffold.dart';
 import '../../../../shared/widgets/app_text_field.dart';
-import '../../../../shared/widgets/date_input_field.dart';
+import '../../../../shared/widgets/cupertino_birth_date_picker.dart';
 import '../providers/auth_provider.dart';
 
 class SignUpScreen extends ConsumerStatefulWidget {
@@ -131,7 +131,7 @@ class _SignUpScreenState extends ConsumerState<SignUpScreen> {
               validator: (v) => Validators.firstName(v, l10n),
             ),
             const SizedBox(height: AppSpacing.md),
-            DateInputField(
+            CupertinoBirthDatePicker(
               initialValue: _birthDate,
               label: l10n.birthDateLabel,
               hint: l10n.birthDateHint,
