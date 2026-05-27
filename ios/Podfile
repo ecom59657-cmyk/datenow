@@ -43,10 +43,23 @@ post_install do |installer|
       # Apple removed bitcode support in Xcode 14+. Force OFF for every
       # pod target so the archive itself contains no bitcode references.
       config.build_settings['ENABLE_BITCODE'] = 'NO'
-      # dSYMs for Release → fewer "Upload Symbols Failed" warnings at
-      # App Store ingestion.
-      if config.name == 'Release'
+      # dSYMs for non-Debug builds → fewer "Upload Symbols Failed"
+      # warnings at App Store ingestion. We set this for both Release
+      # AND Profile (when the Pods project ends up with a Profile
+      # config), and we ALSO set GCC_GENERATE_DEBUGGING_SYMBOLS
+      # explicitly — YES is the Xcode default, but being loud about
+      # it beats losing symbolication silently after a CocoaPods
+      # upgrade.
+      #
+      # Note: Agora's iOS xcframeworks (AgoraRtcKit, AgoraRtmKit,
+      # Iris RTC and the audio/video extension dylibs) ship WITHOUT
+      # dSYMs in the CocoaPods feed. App Store Connect will still log
+      # "The archive did not include a dSYM for <…>.framework" for
+      # each of them — not fixable from our side without Agora
+      # publishing the symbols. See docs/IOS_DSYM_NOTES.md.
+      if config.name == 'Release' || config.name == 'Profile'
         config.build_settings['DEBUG_INFORMATION_FORMAT'] = 'dwarf-with-dsym'
+        config.build_settings['GCC_GENERATE_DEBUGGING_SYMBOLS'] = 'YES'
       end
       # permission_handler_apple 9.x compiles each permission behind a
       # PERMISSION_* preprocessor flag. WITHOUT these, `Permission.camera`
