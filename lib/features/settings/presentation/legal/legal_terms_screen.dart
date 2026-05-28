@@ -1,29 +1,24 @@
 import 'package:flutter/widgets.dart';
 
 import '../../../../l10n/app_localizations.dart';
-import 'legal_document_screen.dart';
+import 'legal_scaffold.dart';
 
 /// Conditions d'utilisation — version FR / EN cohérente avec l'app
 /// (matching live + dates vidéo 5 min + reveal post-date + abonnement
 /// Premium optionnel). Le contenu est crédible juridiquement,
 /// compatible App Store, et lisible par un utilisateur non-juriste.
-///
-/// Les dates « Dernière mise à jour » sont synchronisées sur la date
-/// du dernier remaniement substantiel du texte.
-class TermsScreen extends StatelessWidget {
-  const TermsScreen({super.key});
+class LegalTermsScreen extends StatelessWidget {
+  const LegalTermsScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final isFr = Localizations.localeOf(context).languageCode == 'fr';
 
-    final sections = isFr ? _frSections : _enSections;
-
-    return LegalDocumentScreen(
+    return LegalScaffold(
       title: l10n.termsTitle,
       lastUpdated: isFr ? '29 mai 2026' : 'May 29, 2026',
-      sections: sections,
+      sections: isFr ? _frSections : _enSections,
     );
   }
 }
@@ -43,7 +38,8 @@ const List<(String, String)> _frSections = [
   ),
   (
     'Comment fonctionne DateNow',
-    'DateNow met en relation des membres adultes, compatibles et '
+    'DateNow est une plateforme de rencontres en direct par vidéo. Nous '
+        'mettons en relation des membres adultes, compatibles et '
         'simultanément en ligne, pour un date audio ou vidéo en direct '
         'd\'une durée fixe de 5 minutes. À la fin de chaque date, chacun '
         'des deux participants choisit indépendamment de continuer, '
@@ -70,17 +66,20 @@ const List<(String, String)> _frSections = [
         'des informations personnelles ou des moyens de paiement.'
   ),
   (
-    'Contenu interdit',
+    'Contenu et usages interdits',
     'Sont strictement interdits : nudité, contenu sexuellement explicite, '
         'violence, contenu illégal, usurpation d\'identité (deepfake, '
         'photo d\'une autre personne, identité fictive), promotion ou '
         'sollicitation commerciale (escorting, services payants), spam, '
         'liens vers des sites tiers à caractère malveillant, et tout '
-        'contenu mettant en scène des mineurs. Toute infraction peut '
-        'entraîner la suspension immédiate du compte sans préavis.'
+        'contenu mettant en scène des mineurs. Est également interdit '
+        'tout enregistrement, capture d\'écran ou diffusion d\'un appel '
+        'vidéo ou audio sans le consentement explicite et préalable du '
+        'ou des autres participants. Toute infraction peut entraîner la '
+        'suspension immédiate du compte sans préavis.'
   ),
   (
-    'Modération et signalement',
+    'Modération, signalement et suspension',
     'Vous pouvez signaler à tout moment un profil, un message ou un '
         'comportement inapproprié depuis l\'écran post-date, depuis une '
         'conversation, ou depuis les réglages. Les signalements sont '
@@ -90,27 +89,29 @@ const List<(String, String)> _frSections = [
         'autorités compétentes en cas d\'infraction grave.'
   ),
   (
-    'Photos et reveal post-date',
-    'Vos photos restent privées tant qu\'aucun date n\'a abouti à un '
-        'reveal mutuel. Pendant un date vidéo en direct, votre image est '
-        'volontairement floutée par l\'application : seuls vos gestes et '
-        'votre voix sont transmis. Les deux participants ne voient les '
-        'photos l\'un de l\'autre qu\'après avoir accepté le reveal, à '
-        'la fin des 5 minutes. Cette mécanique fait partie intégrante de '
-        'la promesse produit.'
+    'Appels vidéo et reveal',
+    'DateNow facilite la mise en relation par vidéo en direct mais ne '
+        'peut pas garantir le comportement des autres utilisateurs. Vous '
+        'restez seul responsable de vos décisions, échanges et rencontres '
+        'éventuelles. Pendant un date, votre image est volontairement '
+        'floutée par l\'application : seuls vos gestes et votre voix sont '
+        'transmis. Les deux participants ne voient les photos l\'un de '
+        'l\'autre qu\'après avoir accepté le reveal à la fin des 5 minutes. '
+        'Cette mécanique est centrale au produit et ne peut être contournée.'
   ),
   (
     'Abonnement Premium et achats in-app',
     'Certaines fonctionnalités (dates illimités, filtres avancés, '
         'notifications prioritaires) nécessitent un abonnement Premium '
-        'mensuel ou annuel facturé via Apple App Store. Le renouvellement '
-        'est automatique jusqu\'à l\'annulation, gérable depuis les '
-        'réglages de votre compte Apple. Aucun remboursement partiel '
-        'n\'est pris en charge par DateNow : les demandes de '
-        'remboursement passent par Apple selon ses conditions.'
+        'mensuel ou annuel facturé via Apple App Store ou Google Play. '
+        'Le renouvellement est automatique jusqu\'à l\'annulation, '
+        'gérable depuis les réglages de votre compte Apple ou Google. '
+        'Aucun remboursement partiel n\'est pris en charge par DateNow : '
+        'les demandes de remboursement passent par Apple ou Google '
+        'selon leurs conditions.'
   ),
   (
-    'Suspension et résiliation',
+    'Suppression et résiliation',
     'Vous pouvez supprimer votre compte à tout moment depuis Réglages → '
         '« Supprimer mon compte ». La suppression efface définitivement '
         'votre profil, vos photos, vos matchs, vos conversations et votre '
@@ -120,12 +121,16 @@ const List<(String, String)> _frSections = [
         'Aucun remboursement n\'est dû en cas de résiliation pour faute.'
   ),
   (
-    'Modifications, droit applicable et contact',
-    'Nous pouvons faire évoluer ces conditions ; vous serez informé dans '
+    'Limitation de responsabilité et contact',
+    'Dans les limites autorisées par la loi, DateNow ne peut être tenu '
+        'responsable d\'un dommage indirect, immatériel ou consécutif '
+        'résultant de l\'utilisation du service, des comportements des '
+        'autres utilisateurs ou d\'une interruption technique. Nous '
+        'pouvons faire évoluer ces conditions ; vous serez informé dans '
         'l\'application au moins 14 jours avant l\'entrée en vigueur des '
         'changements substantiels. Les présentes conditions sont régies '
         'par le droit français. Pour toute question : '
-        'legal@datenow.app · support général : support@datenow.app.'
+        'support@datenow.app · questions juridiques : legal@datenow.app.'
   ),
 ];
 
@@ -143,11 +148,12 @@ const List<(String, String)> _enSections = [
   ),
   (
     'How DateNow works',
-    'DateNow connects adult members who are compatible and simultaneously '
-        'online for a 5-minute live audio or video date. At the end of '
-        'each date, both participants independently choose to continue, '
-        'swap profiles (the "reveal"), or move on. No exchange is forced: '
-        'a mutual agreement is required for any further interaction.'
+    'DateNow is a live video dating platform. We connect adult members '
+        'who are compatible and simultaneously online for a 5-minute '
+        'live audio or video date. At the end of each date, both '
+        'participants independently choose to continue, swap profiles '
+        '(the "reveal"), or move on. No exchange is forced: a mutual '
+        'agreement is required for any further interaction.'
   ),
   (
     'Account and eligibility',
@@ -166,17 +172,19 @@ const List<(String, String)> _enSections = [
         'a physical meeting, personal information or payment.'
   ),
   (
-    'Prohibited content',
+    'Prohibited content and uses',
     'The following are strictly prohibited: nudity, sexually explicit '
         'content, violence, illegal content, impersonation (deepfake, '
         'someone else\'s photo, fake identity), commercial promotion or '
         'solicitation (escorting, paid services), spam, links to '
         'malicious third-party sites, and any content involving minors. '
-        'Any infringement may lead to immediate account suspension '
-        'without notice.'
+        'Any recording, screenshot or broadcast of a video or audio call '
+        'without the explicit and prior consent of the other '
+        'participant(s) is also prohibited. Any infringement may lead to '
+        'immediate account suspension without notice.'
   ),
   (
-    'Moderation and reporting',
+    'Moderation, reporting and suspension',
     'You can report a profile, a message or a behaviour at any time from '
         'the post-date screen, from a conversation, or from settings. '
         'Reports are confidential and reviewed by our moderation team. '
@@ -185,22 +193,24 @@ const List<(String, String)> _enSections = [
         'authorities in case of serious infringement.'
   ),
   (
-    'Photos and post-date reveal',
-    'Your photos remain private until a date results in a mutual reveal. '
-        'During a live video date, your video feed is intentionally '
-        'blurred by the app: only your gestures and your voice are '
-        'transmitted. Both participants only see each other\'s photos '
-        'after they have accepted the reveal at the end of the 5 minutes. '
-        'This mechanic is core to the product promise.'
+    'Live video and reveal',
+    'DateNow facilitates live video matchmaking but cannot guarantee '
+        'the behaviour of other users. You remain solely responsible '
+        'for your decisions, exchanges and any meetings that follow. '
+        'During a date, your video feed is intentionally blurred by the '
+        'app: only your gestures and your voice are transmitted. Both '
+        'participants only see each other\'s photos after they have '
+        'accepted the reveal at the end of the 5 minutes. This mechanic '
+        'is core to the product and cannot be bypassed.'
   ),
   (
     'Premium subscription and in-app purchases',
     'Some features (unlimited dates, advanced filters, priority '
         'notifications) require a monthly or yearly Premium subscription '
-        'billed via Apple App Store. Renewal is automatic until '
-        'cancellation, which you can manage from your Apple account '
-        'settings. DateNow does not handle partial refunds: refund '
-        'requests go through Apple under its own terms.'
+        'billed via Apple App Store or Google Play. Renewal is automatic '
+        'until cancellation, which you can manage from your Apple or '
+        'Google account settings. DateNow does not handle partial refunds: '
+        'refund requests go through Apple or Google under their own terms.'
   ),
   (
     'Suspension and termination',
@@ -212,10 +222,14 @@ const List<(String, String)> _enSections = [
         'is due in case of termination for misconduct.'
   ),
   (
-    'Changes, governing law and contact',
-    'We may update these terms; you will be notified in-app at least 14 '
-        'days before any substantial change takes effect. These terms '
-        'are governed by French law. For any question: '
-        'legal@datenow.app · general support: support@datenow.app.'
+    'Limitation of liability and contact',
+    'To the extent permitted by law, DateNow cannot be held liable for '
+        'any indirect, immaterial or consequential damage arising from '
+        'the use of the service, from other users\' behaviour, or from a '
+        'technical interruption. We may update these terms; you will be '
+        'notified in-app at least 14 days before any substantial change '
+        'takes effect. These terms are governed by French law. For any '
+        'question: support@datenow.app · legal questions: '
+        'legal@datenow.app.'
   ),
 ];

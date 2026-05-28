@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
@@ -7,21 +8,24 @@ import '../../../../l10n/app_localizations.dart';
 import '../../../../shared/widgets/app_scaffold.dart';
 import '../../../../shared/widgets/glass_card.dart';
 
-/// Long-form legal screen — premium dark canvas with a soft magenta/violet
-/// glow backdrop, a gradient-tinted hero (title + "last updated" pill),
-/// and numbered sections rendered inside a single glass card with hairline
-/// rules between each block. Used by both Terms of Use and Privacy Policy.
+/// Reusable scaffold for the two long-form legal screens of DateNow
+/// (`LegalTermsScreen`, `PrivacyPolicyScreen`).
 ///
-/// Design language:
-///   • Apple / Notion / Linear / Arc — quiet density, big rhythm, no
-///     decoration that doesn't carry meaning.
-///   • Backdrop glow stays behind every layer (Stack base) so even a long
-///     scroll never feels flat-black.
-///   • Section headings get a small brand-pink "01 / 02 …" prefix so the
-///     reader can skim the structure without parsing labels.
-///   • Body text height 1.6 to maximise legibility on a long read.
-class LegalDocumentScreen extends StatelessWidget {
-  const LegalDocumentScreen({
+/// Visual language — Apple / Tinder / Bumble :
+///   • Plain white bold title (no gradient mask) — confident but not
+///     flashy. The brand identity is carried by the soft pink/violet
+///     glow backdrop and the small numbered prefixes, not the title.
+///   • Subtle radial-glow backdrop (pink + violet) absolutely positioned,
+///     IgnorePointer, behind the content. Premium "depth" cue on the
+///     dark canvas without competing with the text.
+///   • Numbered sections (`01 / 02 / …`) with a thin gradient hairline
+///     under each heading.
+///   • "Last updated" pill in brand-pink under the title.
+///   • Whole body fades in once on mount (350 ms easeOut). Scrolling is
+///     the default iOS BouncingScrollPhysics — fluid and native.
+///   • DateNow signature footer at the bottom (hairline + monogram).
+class LegalScaffold extends StatelessWidget {
+  const LegalScaffold({
     super.key,
     required this.title,
     required this.lastUpdated,
@@ -30,31 +34,31 @@ class LegalDocumentScreen extends StatelessWidget {
 
   final String title;
   final String lastUpdated;
+
+  /// Ordered list of `(heading, body)` sections.
   final List<(String, String)> sections;
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     return AppScaffold(
-      // BackButton kept on the AppBar so the gesture is iOS-native. The
-      // AppBar title stays small — the big visual identity comes from
-      // the hero in the body, à la Apple Settings.
       appBar: AppBar(
         leading: const BackButton(),
         title: Text(title),
       ),
       body: Stack(
         children: [
-          // Subtle radial glows (brand-pink + brand-violet) behind the
-          // content — gives the dark canvas the premium "depth" cue
-          // without any decoration that competes with the text.
           const _BackdropGlow(),
           ListView(
+            // BouncingScrollPhysics is the iOS default in Material on
+            // iOS — set it explicitly so Android/iPad builds also feel
+            // the iOS spring inertia.
+            physics: const BouncingScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(
               AppSpacing.lg,
               AppSpacing.lg,
               AppSpacing.lg,
-              80,
+              AppSpacing.xxl,
             ),
             children: [
               _Hero(
@@ -73,10 +77,7 @@ class LegalDocumentScreen extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     for (final (i, section) in sections.indexed) ...[
-                      _SectionHeading(
-                        index: i + 1,
-                        label: section.$1,
-                      ),
+                      _SectionHeading(index: i + 1, label: section.$1),
                       const SizedBox(height: 10),
                       const _HairlineRule(),
                       const SizedBox(height: 12),
@@ -94,8 +95,12 @@ class LegalDocumentScreen extends StatelessWidget {
                   ],
                 ),
               ),
+              const _DateNowFooter(),
             ],
-          ),
+          ).animate().fadeIn(
+                duration: 350.ms,
+                curve: Curves.easeOut,
+              ),
         ],
       ),
     );
@@ -103,9 +108,8 @@ class LegalDocumentScreen extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Backdrop — two muted radial glows (pink + violet) absolutely positioned
-// behind every other layer. Pointer-transparent so it never interferes
-// with scrolling or selecting text in the document.
+// Backdrop glow — pointer-transparent so it never interferes with scroll
+// or text selection (which is off by default on Text anyway).
 // ---------------------------------------------------------------------------
 
 class _BackdropGlow extends StatelessWidget {
@@ -144,10 +148,9 @@ class _BackdropGlow extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Hero — gradient-painted title + "last updated" pill. The title is the
-// document name (Conditions / Privacy) rendered with the brand gradient
-// via ShaderMask, so it reads as the unmistakable identity of the page
-// without resorting to a separate banner image.
+// Hero — plain white bold title + "last updated" pill. No ShaderMask
+// gradient on the title : the spec calls for Apple / Tinder / Bumble
+// confidence — a single confident bold word, not a flashy paint.
 // ---------------------------------------------------------------------------
 
 class _Hero extends StatelessWidget {
@@ -161,20 +164,14 @@ class _Hero extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        ShaderMask(
-          shaderCallback: (rect) =>
-              AppColors.brandGradient.createShader(rect),
-          blendMode: BlendMode.srcIn,
-          child: Text(
-            title,
-            style: AppTypography.h1.copyWith(
-              fontSize: 30,
-              height: 1.1,
-              letterSpacing: -0.5,
-              // ShaderMask needs a non-null colour upstream; the shader
-              // blends over white so any base colour works.
-              color: Colors.white,
-            ),
+        Text(
+          title,
+          style: AppTypography.h1.copyWith(
+            fontSize: 30,
+            height: 1.1,
+            letterSpacing: -0.5,
+            color: AppColors.textPrimary,
+            fontWeight: FontWeight.w800,
           ),
         ),
         const SizedBox(height: AppSpacing.sm),
@@ -222,9 +219,9 @@ class _LastUpdatedPill extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Section heading — small brand-pink "01 / 02 …" prefix above the label
-// so the reader can skim. The label uses bodyStrong scaled up slightly
-// for a confident reading rhythm.
+// Section heading — small brand-pink `01 / 02 / …` prefix above the
+// label so the reader can skim. The label is bodyStrong scaled up
+// slightly for a confident long-form reading rhythm.
 // ---------------------------------------------------------------------------
 
 class _SectionHeading extends StatelessWidget {
@@ -261,11 +258,6 @@ class _SectionHeading extends StatelessWidget {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Hairline under the section heading — a 1 px subtle gradient line that
-// gives a "section opens here" cue without weight.
-// ---------------------------------------------------------------------------
-
 class _HairlineRule extends StatelessWidget {
   const _HairlineRule();
 
@@ -279,6 +271,65 @@ class _HairlineRule extends StatelessWidget {
           colors: [
             AppColors.brandPink.withValues(alpha: 0.7),
             AppColors.brandPink.withValues(alpha: 0),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// DateNow signature footer — quiet hairline + monogram + copyright.
+// Closes the document with a small editorial signature, à la Apple
+// "Designed by Apple in California" → but DateNow-styled.
+// ---------------------------------------------------------------------------
+
+class _DateNowFooter extends StatelessWidget {
+  const _DateNowFooter();
+
+  @override
+  Widget build(BuildContext context) {
+    final year = DateTime.now().year;
+    return Padding(
+      padding: const EdgeInsets.only(
+        top: AppSpacing.xl,
+        bottom: AppSpacing.md,
+      ),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 32,
+              height: 1,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    AppColors.brandPink.withValues(alpha: 0.5),
+                    AppColors.brandViolet.withValues(alpha: 0.35),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+            Text(
+              'DATENOW',
+              style: AppTypography.caption.copyWith(
+                color: AppColors.textTertiary,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 2.4,
+                fontSize: 11,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '© $year',
+              style: AppTypography.caption.copyWith(
+                color: AppColors.textTertiary,
+                letterSpacing: 0.4,
+                fontSize: 10,
+              ),
+            ),
           ],
         ),
       ),

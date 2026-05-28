@@ -28,7 +28,7 @@ import '../../features/settings/presentation/debug_datenow_screen.dart';
 import '../../features/settings/presentation/debug_matching_screen.dart';
 import '../../features/settings/presentation/help_screen.dart';
 import '../../features/settings/presentation/legal/privacy_policy_screen.dart';
-import '../../features/settings/presentation/legal/terms_screen.dart';
+import '../../features/settings/presentation/legal/legal_terms_screen.dart';
 import '../../features/settings/presentation/notifications_screen.dart';
 import '../../features/settings/presentation/privacy_screen.dart';
 import '../../features/settings/presentation/security_screen.dart';
@@ -203,7 +203,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoute.settingsTerms.path,
         name: AppRoute.settingsTerms.name,
-        builder: (_, _) => const TermsScreen(),
+        builder: (_, _) => const LegalTermsScreen(),
       ),
       GoRoute(
         path: AppRoute.settingsPrivacyPolicy.path,
