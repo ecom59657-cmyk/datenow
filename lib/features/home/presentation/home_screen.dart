@@ -23,6 +23,7 @@ import '../../quota/data/quota_repository.dart';
 import '../../quota/presentation/widgets/quota_limit_sheet.dart';
 import '../../subscription/presentation/providers/subscription_provider.dart';
 import 'widgets/available_dates_display.dart';
+import 'widgets/home_discover_link.dart';
 import 'widgets/home_header.dart';
 import 'widgets/home_hero_card.dart';
 import 'widgets/stat_tile.dart';
@@ -68,6 +69,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           const SizedBox(height: AppSpacing.xl),
           HomeHeroCard(
             onPressed: _onFindDate,
+          ),
+          // Tighter gap (md vs xl) so the secondary CTA reads as a
+          // *quiet alternative* to the live pill above, not as a new
+          // section. The full xl gap is restored below before the
+          // stats block, which IS a new section.
+          const SizedBox(height: AppSpacing.md),
+          HomeDiscoverLink(
+            // Discover lives in the same StatefulShell branch as Home
+            // (`/discover`). `goNamed` swaps branches cleanly and keeps
+            // the bottom nav state intact — exactly the pattern used
+            // by the "Dates proposés aujourd'hui" stat tile below.
+            onPressed: () => context.goNamed(AppRoute.discover.name),
           ),
           const SizedBox(height: AppSpacing.xl),
           Text(l10n.tonightOnDatenow, style: AppTypography.h3),

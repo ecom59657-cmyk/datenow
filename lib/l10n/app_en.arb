@@ -75,6 +75,8 @@
   "homeHeroTitle": "Someone is waiting to date right now.",
   "homeOnlineNow": "online now",
   "findDateSubtitle": "Get matched with someone online and compatible. Live, in seconds.",
+  "homeDiscoverProfilesCta": "Discover your profiles",
+  "homeDiscoverProfilesHint": "Hand-picked for you",
   "findDateNotAuthenticated": "You need to sign in first.",
   "findDateProfileIncomplete": "Finish your profile to start matching.",
   "findDatePhotoRequiredTitle": "A photo is required",
