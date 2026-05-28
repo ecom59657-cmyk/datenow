@@ -230,18 +230,26 @@ class SupabaseAuthRepository implements AuthRepository {
 
   @override
   Future<AuthUser> signInWithApple() async {
-    // Generate a per-request nonce. We send a SHA-256 hash of it to
-    // Apple (`nonce:` field) so Apple binds the returned ID token to
-    // this specific request; we then hand the RAW nonce to Supabase
-    // (`signInWithIdToken nonce:`) which re-derives the hash and
-    // verifies it matches the token's `nonce` claim. Without this the
-    // ID token is replay-able by anyone who intercepts it.
+    // ──────────────────────────────────────────────────────────────
+    // TEMP — numbered [APPLE N] logs so we can pinpoint the exact
+    // step that breaks during diagnostic. Tag each branch (cancel,
+    // no_id_token, audience, nonce, …) with its own [APPLE ERR …]
+    // so the Mac console / Xcode console shows the cause as the
+    // very next line after the last successful step. Remove the
+    // [APPLE …] tags once both OAuth flows are stable in TestFlight.
+    // ──────────────────────────────────────────────────────────────
+    _log.info('[APPLE 1] entry — generating per-request nonce');
     final rawNonce = _generateRawNonce();
     final hashedNonce = _sha256Hex(rawNonce);
-    _log.info('signInWithApple — opening Apple sheet');
+    _log.info(
+      '[APPLE 2] nonce ready — rawNonce_len=${rawNonce.length} '
+      'hashedNonce_len=${hashedNonce.length}',
+    );
 
     final AuthorizationCredentialAppleID credential;
     try {
+      _log.info('[APPLE 3] calling SignInWithApple.getAppleIDCredential — '
+          'this is where the iOS native sheet + Face ID happens');
       credential = await SignInWithApple.getAppleIDCredential(
         scopes: const [
           AppleIDAuthorizationScopes.email,
@@ -249,20 +257,30 @@ class SupabaseAuthRepository implements AuthRepository {
         ],
         nonce: hashedNonce,
       );
+      _log.info('[APPLE 4] Apple credential returned by native SDK');
     } on SignInWithAppleAuthorizationException catch (e) {
       if (e.code == AuthorizationErrorCode.canceled) {
-        _log.info('Apple sheet cancelled by user');
+        _log.info('[APPLE ERR cancel] user dismissed the Apple sheet');
         throw const OAuthCancelledFailure();
       }
       _log.warn(
-        'Apple authorization error: code=${e.code} message=${e.message}',
+        '[APPLE ERR native] AuthorizationErrorCode=${e.code} '
+        'message="${e.message}"',
       );
-      throw AuthFailure(e.message, code: 'apple_${e.code.name}');
+      throw AuthFailure(
+        e.message,
+        code: 'apple_${e.code.name}',
+        originalMessage: e.message,
+      );
     }
 
     final idToken = credential.identityToken;
     if (idToken == null) {
-      _log.error('Apple credential returned without an identity token');
+      _log.error(
+        '[APPLE ERR no_id_token] credential.identityToken is null — '
+        'Apple did not return an id_token. Usually means the request '
+        'scopes were missing the email scope or the entitlement is off.',
+      );
       throw const AuthFailure(
         'Apple did not return an identity token.',
         code: 'apple_no_id_token',
@@ -270,10 +288,13 @@ class SupabaseAuthRepository implements AuthRepository {
     }
 
     _log.info(
-      'Apple credential — userId=${credential.userIdentifier} '
+      '[APPLE 5] credential parsed — userId=${credential.userIdentifier} '
       'has_name=${credential.givenName != null} '
-      'has_email=${credential.email != null}',
+      'has_email=${credential.email != null} '
+      'idToken_len=${idToken.length}',
     );
+    // [APPLE 6] decodes and logs the id_token payload (iss/aud/sub/
+    // nonce/azp/exp/email) for cross-check vs Supabase Apple provider.
     _logJwtPayload(
       provider: 'apple',
       idToken: idToken,
@@ -282,19 +303,27 @@ class SupabaseAuthRepository implements AuthRepository {
     );
 
     try {
+      _log.info('[APPLE 7] calling Supabase signInWithIdToken — '
+          'provider=apple nonce_len=${rawNonce.length}');
       final res = await _client.auth.signInWithIdToken(
         provider: sb.OAuthProvider.apple,
         idToken: idToken,
         nonce: rawNonce,
       );
+      _log.info('[APPLE 8] Supabase exchange OK — session opened, '
+          'user_id=${res.user?.id}');
       final user = _mapUser(res.user);
       if (user == null) {
+        _log.error('[APPLE ERR no_user] Supabase returned a response with '
+            'no user — should never happen if exchange succeeded');
         throw const AuthFailure(
           'No user returned from Apple sign in.',
-          code: 'no_user',
+          code: 'apple_no_user',
         );
       }
+      _log.info('[APPLE 9] calling ensure_profile_exists RPC');
       await _ensureProfileExists();
+      _log.info('[APPLE 10] ensure_profile_exists returned');
       // Apple sends a `givenName` only on the very first sign-in. If
       // we got it, push it into raw_user_meta_data so the profile-
       // setup flow can pre-fill the field. The trigger has already
@@ -303,6 +332,8 @@ class SupabaseAuthRepository implements AuthRepository {
       if (credential.givenName != null &&
           credential.givenName!.trim().isNotEmpty) {
         try {
+          _log.info('[APPLE 11] pushing givenName="${credential.givenName}" '
+              'to user metadata');
           await _client.auth.updateUser(
             sb.UserAttributes(
               data: <String, dynamic>{
@@ -312,18 +343,18 @@ class SupabaseAuthRepository implements AuthRepository {
             ),
           );
           _log.info(
-            'Apple givenName "${credential.givenName}" pushed to user metadata',
+            '[APPLE 12] givenName pushed OK',
           );
         } catch (e) {
           _log.warn('updateUser(givenName) failed (non-fatal): $e');
         }
       }
-      _log.info('signInWithApple success — user=${user.id}');
+      _log.info('[APPLE 13] success — user=${user.id} — returning');
       return user;
     } on sb.AuthException catch (e, st) {
       _log.error(
-        'signInWithApple Supabase error: code=${e.code} '
-        'message="${e.message}"',
+        '[APPLE ERR supabase] AuthException at signInWithIdToken — '
+        'code=${e.code} message="${e.message}"',
         e,
         st,
       );
@@ -333,7 +364,7 @@ class SupabaseAuthRepository implements AuthRepository {
 
   @override
   Future<AuthUser> signInWithGoogle() async {
-    _log.info('signInWithGoogle — opening Google sheet');
+    _log.info('[GOOGLE 1] entry — reading Env.googleWebClientId');
     // `serverClientId` MUST be the Web OAuth client ID (the same value
     // Supabase Auth → Providers → Google is configured with). Without
     // it, Google issues an id_token whose `aud` claim is the iOS
@@ -344,10 +375,13 @@ class SupabaseAuthRepository implements AuthRepository {
     final webClientId = Env.googleWebClientId;
     if (webClientId.isEmpty) {
       _log.warn(
-        'GOOGLE_WEB_CLIENT_ID is empty — Google will issue an id_token '
-        'with the iOS client as audience, which Supabase will reject '
-        'unless its "Authorized Client IDs" allow-list includes it.',
+        '[GOOGLE 2 WARN] GOOGLE_WEB_CLIENT_ID is empty — Google will '
+        'issue an id_token with the iOS client as audience, which '
+        'Supabase rejects unless its "Authorized Client IDs" includes '
+        'the iOS client.',
       );
+    } else {
+      _log.info('[GOOGLE 2] webClientId set (len=${webClientId.length})');
     }
     final googleSignIn = GoogleSignIn(
       serverClientId: webClientId.isEmpty ? null : webClientId,
@@ -355,49 +389,68 @@ class SupabaseAuthRepository implements AuthRepository {
     );
     final GoogleSignInAccount? account;
     try {
+      _log.info('[GOOGLE 3] calling googleSignIn.signIn() — opens native '
+          'iOS sheet');
       account = await googleSignIn.signIn();
+      _log.info('[GOOGLE 4] googleSignIn.signIn() returned');
     } catch (e, st) {
-      _log.warn('Google signIn() threw: $e\n$st');
-      throw AuthFailure('Google sign in failed: $e', code: 'google_failed');
+      _log.warn('[GOOGLE ERR native] googleSignIn.signIn() threw: $e\n$st');
+      throw AuthFailure(
+        'Google sign in failed: $e',
+        code: 'google_failed',
+        originalMessage: e.toString(),
+      );
     }
     if (account == null) {
-      _log.info('Google sheet cancelled by user');
+      _log.info('[GOOGLE ERR cancel] account is null — user dismissed sheet');
       throw const OAuthCancelledFailure();
     }
+    _log.info('[GOOGLE 5] account received — email=${account.email}');
     final auth = await account.authentication;
     final idToken = auth.idToken;
     final accessToken = auth.accessToken;
     if (idToken == null) {
-      _log.error('Google credential returned without idToken');
+      _log.error(
+        '[GOOGLE ERR no_id_token] auth.idToken is null — '
+        'check GoogleService-Info.plist CLIENT_ID + scopes',
+      );
       throw const AuthFailure(
         'Google did not return an identity token.',
         code: 'google_no_id_token',
       );
     }
     _log.info(
-      'Google credential — email=${account.email} '
+      '[GOOGLE 6] credential parsed — email=${account.email} '
       'has_displayName=${account.displayName != null} '
-      'has_access=${accessToken != null}',
+      'has_access=${accessToken != null} idToken_len=${idToken.length}',
     );
+    // [GOOGLE 7] decodes and logs the id_token payload (iss/aud/sub/
+    // nonce/azp/exp/email) for cross-check vs Supabase Google provider.
     _logJwtPayload(
       provider: 'google',
       idToken: idToken,
       extraContext: 'serverClientId_set=${webClientId.isNotEmpty}',
     );
     try {
+      _log.info('[GOOGLE 8] calling Supabase signInWithIdToken');
       final res = await _client.auth.signInWithIdToken(
         provider: sb.OAuthProvider.google,
         idToken: idToken,
         accessToken: accessToken,
       );
+      _log.info('[GOOGLE 9] Supabase exchange OK — session opened, '
+          'user_id=${res.user?.id}');
       final user = _mapUser(res.user);
       if (user == null) {
+        _log.error('[GOOGLE ERR no_user] Supabase exchange returned no user');
         throw const AuthFailure(
           'No user returned from Google sign in.',
-          code: 'no_user',
+          code: 'google_no_user',
         );
       }
+      _log.info('[GOOGLE 10] calling ensure_profile_exists RPC');
       await _ensureProfileExists();
+      _log.info('[GOOGLE 11] ensure_profile_exists returned');
       // Google reliably provides displayName / email on every sign-in.
       // Push first_name into metadata so profile-setup pre-fills the
       // form. Only on first signin (the trigger has already created a
@@ -413,17 +466,19 @@ class SupabaseAuthRepository implements AuthRepository {
               },
             ),
           );
-          _log.info('Google displayName "$name" pushed to user metadata');
+          _log.info('[GOOGLE 12] displayName "$name" pushed to metadata');
         } catch (e) {
-          _log.warn('updateUser(displayName) failed (non-fatal): $e');
+          _log.warn(
+            '[GOOGLE 12 WARN] updateUser(displayName) failed (non-fatal): $e',
+          );
         }
       }
-      _log.info('signInWithGoogle success — user=${user.id}');
+      _log.info('[GOOGLE 13] success — user=${user.id} — returning');
       return user;
     } on sb.AuthException catch (e, st) {
       _log.error(
-        'signInWithGoogle Supabase error: code=${e.code} '
-        'message="${e.message}"',
+        '[GOOGLE ERR supabase] AuthException at signInWithIdToken — '
+        'code=${e.code} message="${e.message}"',
         e,
         st,
       );
@@ -555,16 +610,45 @@ class SupabaseAuthRepository implements AuthRepository {
       return AuthFailure('OTP code invalid',
           code: 'otp_invalid', originalMessage: e.message);
     }
-    // Google audience mismatch — the id_token's `aud` claim doesn't
-    // match Supabase's configured Google Client ID. Fix is in
-    // Env.googleWebClientId + Supabase Google Provider config (see
-    // Bug 1 of the auth audit). Surface as a stable code so the UI
-    // can show a humane message instead of the raw Supabase string.
+    // Audience mismatch — the id_token's `aud` claim doesn't match
+    // any of Supabase's configured Client IDs for this provider.
+    //
+    //   Google → `Env.googleWebClientId` (serverClientId) or iOS
+    //            CLIENT_ID must match Supabase Google Provider's
+    //            "Client ID (for OAuth)" + "Authorized Client IDs".
+    //   Apple  → bundle id (com.datenow.app) must be in Supabase
+    //            Apple Provider's "Client IDs" comma-list alongside
+    //            the Services ID (com.datenow.app.auth).
+    //
+    // CRITICAL: tag the code with the actual provider so the UI maps
+    // to the right humane string. Earlier this used a single
+    // `oauth_audience_mismatch` code that always mapped to the
+    // Google message — a real Apple failure was shown as "Connexion
+    // Google impossible", confusing the user about which provider
+    // actually broke.
     if (msg.contains('unacceptable audience') ||
-        msg.contains('audience') && msg.contains('id_token')) {
+        (msg.contains('audience') && msg.contains('id_token'))) {
+      final mappedCode = provider == 'apple'
+          ? 'apple_audience_mismatch'
+          : provider == 'google'
+              ? 'google_audience_mismatch'
+              : 'oauth_audience_mismatch';
       return AuthFailure(
-        'Google id_token audience mismatch',
-        code: 'oauth_audience_mismatch',
+        'id_token audience mismatch ($provider)',
+        code: mappedCode,
+        originalMessage: e.message,
+      );
+    }
+    // Apple-specific: nonce present on one side but not the other.
+    // Usually fires when the iOS native SDK didn't forward our
+    // hashedNonce to AuthenticationServices, so Apple returned a
+    // token with no nonce claim while we still send the rawNonce to
+    // Supabase (or vice versa). Different from the audience case.
+    if (msg.contains('nonce') &&
+        (msg.contains('both exist') || msg.contains('should either'))) {
+      return AuthFailure(
+        'Apple nonce mismatch',
+        code: 'apple_nonce_mismatch',
         originalMessage: e.message,
       );
     }

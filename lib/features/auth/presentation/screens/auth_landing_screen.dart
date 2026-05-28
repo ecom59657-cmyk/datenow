@@ -45,8 +45,18 @@ class _AuthLandingScreenState extends ConsumerState<AuthLandingScreen> {
     final err = ref.read(authControllerProvider).error;
     if (err is OAuthCancelledFailure) return;
     final l10n = AppLocalizations.of(context);
+    // TEMP — `includeRaw: true` appends the underlying Supabase /
+    // SDK message after the humane string so on-screen errors carry
+    // the real cause during the OAuth diagnostic phase. Flip back to
+    // false (or drop the param entirely) once Apple + Google are
+    // green end-to-end on TestFlight.
     context.showSnack(
-      humaneAuthError(err, l10n, fallback: AuthFallback.oauthApple),
+      humaneAuthError(
+        err,
+        l10n,
+        fallback: AuthFallback.oauthApple,
+        includeRaw: true,
+      ),
     );
   }
 
@@ -61,8 +71,15 @@ class _AuthLandingScreenState extends ConsumerState<AuthLandingScreen> {
     final err = ref.read(authControllerProvider).error;
     if (err is OAuthCancelledFailure) return;
     final l10n = AppLocalizations.of(context);
+    // TEMP — same diagnostic mode as the Apple path above. Drop
+    // `includeRaw: true` once OAuth is stable.
     context.showSnack(
-      humaneAuthError(err, l10n, fallback: AuthFallback.oauthGoogle),
+      humaneAuthError(
+        err,
+        l10n,
+        fallback: AuthFallback.oauthGoogle,
+        includeRaw: true,
+      ),
     );
   }
 

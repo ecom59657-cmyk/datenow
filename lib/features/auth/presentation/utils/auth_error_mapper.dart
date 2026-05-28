@@ -15,7 +15,22 @@ String humaneAuthError(
   Object? err,
   AppLocalizations l10n, {
   required AuthFallback fallback,
+  bool includeRaw = false,
 }) {
+  final humane = _humaneAuthErrorCore(err, l10n, fallback);
+  if (!includeRaw || err is! Failure) return humane;
+  final raw = err.originalMessage;
+  if (raw == null || raw.isEmpty || raw == err.message) return humane;
+  // Cap the raw at 180 chars so the snack stays one or two lines.
+  final cropped = raw.length > 180 ? '${raw.substring(0, 180)}…' : raw;
+  return '$humane — $cropped';
+}
+
+String _humaneAuthErrorCore(
+  Object? err,
+  AppLocalizations l10n,
+  AuthFallback fallback,
+) {
   if (err is Failure) {
     switch (err.code) {
       case 'rate_limited':
@@ -33,14 +48,17 @@ String humaneAuthError(
         // We still return a string in case the call site shows it
         // anyway.
         return l10n.authGenericRetry;
+      case 'apple_audience_mismatch':
+      case 'apple_nonce_mismatch':
+      case 'apple_failed':
+      case 'apple_no_id_token':
+      case 'apple_no_user':
+        return l10n.authAppleFailed;
+      case 'google_audience_mismatch':
       case 'oauth_audience_mismatch':
-        return l10n.authGoogleAudienceMismatch;
       case 'google_failed':
       case 'google_no_id_token':
         return l10n.authGoogleFailed;
-      case 'apple_failed':
-      case 'apple_no_id_token':
-        return l10n.authAppleFailed;
       case 'db_signup_error':
       case 'unexpected_failure':
         return l10n.authDbSignupError;
