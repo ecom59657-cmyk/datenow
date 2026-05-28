@@ -109,6 +109,45 @@ void main() {
       expect(r(location: '/auth'), AppRoute.home.path);
       expect(r(location: '/profile-setup'), AppRoute.home.path);
     });
+
+    test(
+        'app cold-start unauth→auth transition: profileLoading=true AND '
+        'profileHasValue=true (stale null from previous unauth emission) '
+        '→ splash, NOT /profile-setup', () {
+      // The bug: on app relaunch (the system killed the previous instance),
+      // currentProfileProvider first builds Stream.value(null) for the
+      // unauth user (state = AsyncData(null) → hasValue=true), then
+      // rebuilds when authStateProvider emits the restored user. Riverpod
+      // surfaces that rebuild as AsyncLoading(previous: AsyncData(null))
+      // → profileLoading=true AND profileHasValue=true AND
+      // value?.isComplete=false. Pre-fix, gate 4 had `!profileHasValue`
+      // so it didn't fire; the router fell through to gate 5 and
+      // flashed `/profile-setup` for ~300 ms before the real row arrived
+      // and gate 6 corrected to /home. This test locks the fix.
+      expect(
+        r(
+          profileLoading: true,
+          profileHasValue: true,
+          profileComplete: false,
+          location: '/home',
+        ),
+        AppRoute.splash.path,
+      );
+    });
+
+    test(
+        'app cold-start: same scenario but already on /splash → stay (null)',
+        () {
+      expect(
+        r(
+          profileLoading: true,
+          profileHasValue: true,
+          profileComplete: false,
+          location: '/splash',
+        ),
+        isNull,
+      );
+    });
   });
 
   group('decideRedirect — first-time user', () {

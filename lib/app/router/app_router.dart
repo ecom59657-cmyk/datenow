@@ -292,16 +292,27 @@ class _RouterNotifier extends ChangeNotifier {
 /// unit-tested with deterministic inputs. Returns the redirect target or
 /// `null` to stay on [location].
 ///
-/// The five gates, in order:
+/// The six gates, in order:
 ///   1. Auth or onboarding still loading → splash (never decide blind).
 ///   2. Onboarding not done yet → /onboarding.
 ///   3. Onboarded but not signed in → /auth.
-///   4. Signed in but the profile stream hasn't emitted yet → splash.
-///      ⚠ Returning users have a fully-completed profile in DB but it
-///      takes one round-trip to fetch on cold start; if we treated that
-///      loading window as "no profile" the router would bounce them to
-///      ProfileSetup 1/4 — the exact bug this layout exists to prevent.
-///   5. Signed in + profile loaded but not complete → /profile-setup.
+///   4. Signed in but the profile stream is still loading → splash. We
+///      trigger this on **any** AsyncLoading state, regardless of whether
+///      `hasValue` is true. The historic condition `!profileHasValue` was
+///      tuned for the brand-new cold start; it missed the more common
+///      app-relaunch case where:
+///        a. `currentProfileProvider` first emits a synthetic `null`
+///           (the unauth branch returns `Stream.value(null)`),
+///        b. then `currentUserProvider` resolves to the restored user,
+///        c. `currentProfileProvider` rebuilds, Riverpod transitions to
+///           `AsyncLoading(previous: AsyncData(null))` →
+///           `profileLoading=true` AND `profileHasValue=true` AND
+///           `value?.isComplete=false`.
+///      Without this gate the router fell through to gate 5 and flashed
+///      `/profile-setup` for ~300 ms before gate 6 corrected it. Holding
+///      the splash for the same 300 ms is invisible UX-wise — the splash
+///      was already rendered from gate 1 and stays put.
+///   5. Signed in + profile decided but not complete → /profile-setup.
 ///   6. Signed in + profile complete → /home if currently on a pre-app
 ///      surface, else stay put.
 @visibleForTesting
@@ -335,8 +346,12 @@ String? decideRedirect({
     return isOnAuth ? null : AppRoute.authLanding.path;
   }
 
-  // 4. Profile stream still loading (returning user, cold start) → splash.
-  if (signedIn && profileLoading && !profileHasValue) {
+  // 4. Profile stream still loading → splash. Catches cold-start
+  //    (no value yet) AND the unauth→auth rebuild (stale `null` carried
+  //    as previous). `profileHasValue` stays on the signature for the
+  //    existing tests but is intentionally NOT consulted here — see the
+  //    doc comment above gate 4 for the full reasoning.
+  if (signedIn && profileLoading) {
     return isOnSplash ? null : AppRoute.splash.path;
   }
 
