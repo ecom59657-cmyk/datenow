@@ -6,6 +6,7 @@ import '../../../app/router/app_routes.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../app/theme/app_typography.dart';
+import '../../../core/utils/age.dart';
 import '../../../core/utils/extensions.dart';
 import '../../../core/utils/logger.dart';
 import '../../../l10n/app_localizations.dart';
@@ -125,6 +126,23 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
     final l10n = AppLocalizations.of(context);
     final draft = ref.watch(profileSetupControllerProvider);
     final canContinue = _validForStep(_index, draft) && !_submitting;
+
+    // TEMP — diagnostic for the step-1 "Continuer" bug. Logs every
+    // rebuild with the values driving `canContinue` so the actual
+    // blocker is visible in Mac Console.app (filter: ProfileSetupScreen).
+    // Remove this `_log.info` once the onboarding flow is stable.
+    _log.info(
+      'build step=$_index canContinue=$canContinue submitting=$_submitting '
+      'firstName="${draft.firstName ?? "<null>"}" '
+      'birthDate=${draft.birthDate?.toIso8601String() ?? "<null>"} '
+      'isOfMinAge=${draft.birthDate == null ? "n/a" : isOfMinimumAge(draft.birthDate!)} '
+      'gender=${draft.gender?.name ?? "<null>"} '
+      'orientation=${draft.orientation?.name ?? "<null>"} '
+      'isStep1Valid=${draft.isStep1Valid} '
+      'isStep2Valid=${draft.isStep2Valid} '
+      'isStep3Valid=${draft.isStep3Valid} '
+      'isStep4Valid=${draft.isStep4Valid}',
+    );
 
     return AppScaffold(
       appBar: AppBar(

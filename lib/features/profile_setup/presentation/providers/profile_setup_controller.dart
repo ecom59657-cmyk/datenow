@@ -32,6 +32,14 @@ class ProfileSetupController extends StateNotifier<ProfileDraft> {
   void setOrientation(Orientation value) =>
       state = state.copyWith(orientation: value);
 
+  /// Sets birth date for users who arrived via OAuth (Apple/Google) —
+  /// these flows never provide DOB, so the picker on step 1 is the
+  /// only entry point. Email/OTP users land here with a non-null DOB
+  /// already (collected at signup) and the UI hides the picker in
+  /// favour of a locked summary card.
+  void setBirthDate(DateTime value) =>
+      state = state.copyWith(birthDate: value);
+
   // ---------- Step 2 ----------
   void toggleSeekingGender(Gender g) {
     final next = {...state.seekingGenders};

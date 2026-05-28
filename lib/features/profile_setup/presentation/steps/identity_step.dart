@@ -7,8 +7,10 @@ import 'package:intl/intl.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
+import '../../../../core/utils/validators.dart';
 import '../../../../l10n/app_localizations.dart';
 import '../../../../shared/widgets/app_text_field.dart';
+import '../../../../shared/widgets/cupertino_birth_date_picker.dart';
 import '../../../../shared/widgets/glass_card.dart';
 import '../../domain/enums.dart';
 import '../providers/profile_setup_controller.dart';
@@ -62,11 +64,28 @@ class _IdentityStepState extends ConsumerState<IdentityStep> {
           onChanged: ctrl.setFirstName,
         ),
         const SizedBox(height: AppSpacing.md),
-        // Birth date is set at sign up — surfacing it here as a locked card
-        // makes the 18+ rule visible and avoids re-asking. Editing it in
-        // production should go through identity verification.
+        // Two birth-date paths converge here:
+        //   1. Email/OTP signup users already have DOB in auth metadata
+        //      (collected on the SignUp screen) → show the read-only
+        //      summary card so the 18+ rule is visible without re-asking.
+        //   2. OAuth users (Apple/Google) NEVER get a DOB from the
+        //      provider → show the iOS-native CupertinoBirthDatePicker
+        //      so they can fill it here. Required field — isStep1Valid
+        //      checks birthDate != null + age >= 18, so without this
+        //      picker the "Continuer" button stays disabled forever
+        //      with no on-screen path forward (the bug this fix closes).
         if (draft.birthDate != null)
-          _BirthDateCard(birthDate: draft.birthDate!, age: draft.age!),
+          _BirthDateCard(birthDate: draft.birthDate!, age: draft.age!)
+        else
+          CupertinoBirthDatePicker(
+            label: l10n.birthDateLabel,
+            hint: l10n.birthDateHint,
+            initialValue: draft.birthDate,
+            validator: (v) => Validators.birthDate(v, l10n),
+            onChanged: (date) {
+              if (date != null) ctrl.setBirthDate(date);
+            },
+          ),
         const SizedBox(height: AppSpacing.xl),
         _Label(l10n.genderLabel),
         const SizedBox(height: AppSpacing.sm),
