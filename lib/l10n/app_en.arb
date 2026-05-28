@@ -135,8 +135,10 @@
 
   "profileTitle": "Profile",
   "profileSignOut": "Sign out",
-  "profileAnonymousName": "Anonymous Date",
+  "profileAnonymousName": "DateNow profile",
   "profileNotSignedIn": "Not signed in",
+  "profileCardSubtitleComplete": "Profile complete",
+  "profileCardSubtitleDefault": "DateNow profile",
   "profilePreferences": "Preferences",
   "profilePreferencesSubtitle": "Age, distance, what you're looking for",
   "profilePhotos": "Photos",

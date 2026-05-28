@@ -7,11 +7,13 @@ import '../../../app/scaffold/active_tab.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../app/theme/app_typography.dart';
+import '../../../core/utils/display_name.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../shared/widgets/app_button.dart';
 import '../../../shared/widgets/app_scaffold.dart';
 import '../../../shared/widgets/glass_card.dart';
 import '../../auth/presentation/providers/auth_provider.dart';
+import '../../profile_setup/presentation/providers/profile_provider.dart';
 import 'edit/providers/profile_photos_provider.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
@@ -30,6 +32,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final user = ref.watch(currentUserProvider);
+    // Same precedence as Home: profile.firstName > user.displayName
+    // (with @-guard) > localised fallback. Email is NEVER shown in
+    // the profile card — Apple Private Relay aliases would leak
+    // otherwise (see core/utils/display_name.dart).
+    final profile = ref.watch(currentProfileProvider).asData?.value;
+    final humaneName = resolveUserDisplayName(profile, user);
+    final cardSubtitle = (profile?.isComplete ?? false)
+        ? l10n.profileCardSubtitleComplete
+        : l10n.profileCardSubtitleDefault;
 
     return AppScaffold(
       body: ListView(
@@ -51,12 +62,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        user?.displayName ?? l10n.profileAnonymousName,
+                        humaneName ?? l10n.profileAnonymousName,
                         style: AppTypography.h3,
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        user?.email ?? l10n.profileNotSignedIn,
+                        cardSubtitle,
                         style: AppTypography.body.copyWith(
                           color: AppColors.textSecondary,
                         ),
