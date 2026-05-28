@@ -14,6 +14,7 @@ import '../../../shared/widgets/app_scaffold.dart';
 import '../../../shared/widgets/glass_card.dart';
 import '../../auth/presentation/providers/auth_provider.dart';
 import '../../profile_setup/presentation/providers/profile_provider.dart';
+import '../../subscription/presentation/providers/subscription_provider.dart';
 import 'edit/providers/profile_photos_provider.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
@@ -109,6 +110,27 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
             subtitle: l10n.profileSettingsSubtitle,
             onTap: () => context.pushNamed(AppRoute.settings.name),
           ),
+          // Subscription entry — copy adapts to whether the user is
+          // already Premium. Falls back to "Discover" when the
+          // subscription stream is still loading, so a first paint
+          // never reads as a "manage" call-to-action to a free user.
+          Builder(builder: (context) {
+            final isPremium = ref
+                    .watch(subscriptionStateProvider)
+                    .asData
+                    ?.value
+                    .isPremium ??
+                false;
+            return _SectionTile(
+              icon: Icons.workspace_premium_rounded,
+              label: l10n.profileSubscription,
+              subtitle: isPremium
+                  ? l10n.profileSubscriptionManage
+                  : l10n.profileSubscriptionDiscover,
+              onTap: () =>
+                  context.pushNamed(AppRoute.settingsSubscription.name),
+            );
+          }),
           const SizedBox(height: AppSpacing.xl),
           AppButton(
             label: l10n.profileSignOut,

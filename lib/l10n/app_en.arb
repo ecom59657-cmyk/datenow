@@ -147,6 +147,9 @@
   "profilePhotosSubtitle": "Manage your profile pictures",
   "profileSettings": "Settings",
   "profileSettingsSubtitle": "Notifications, privacy, account",
+  "profileSubscription": "Subscription",
+  "profileSubscriptionManage": "Manage your Premium subscription",
+  "profileSubscriptionDiscover": "Discover DateNow Premium",
 
   "settingsTitle": "Settings",
   "settingsAccount": "Account",
