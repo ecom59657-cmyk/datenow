@@ -153,25 +153,67 @@ class _AuthLandingScreenState extends ConsumerState<AuthLandingScreen> {
             textAlign: TextAlign.center,
             style: AppTypography.caption,
           ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
+          const SizedBox(height: 4),
+          // Wrap (not Row) so the two links flow to a second line on
+          // narrow iPhones (SE / mini) instead of being truncated. No
+          // middot separator — the spacing alone carries the visual
+          // beat and never ends up orphaned on its own wrap-line.
+          Wrap(
+            alignment: WrapAlignment.center,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 14,
+            runSpacing: 0,
             children: [
-              TextButton(
+              _AuthLegalLink(
+                label: l10n.settingsTerms,
                 onPressed: () =>
                     context.pushNamed(AppRoute.settingsTerms.name),
-                child: Text(l10n.settingsTerms),
               ),
-              const Text('·',
-                  style: TextStyle(color: AppColors.textTertiary)),
-              TextButton(
+              _AuthLegalLink(
+                label: l10n.settingsPrivacyPolicy,
                 onPressed: () =>
                     context.pushNamed(AppRoute.settingsPrivacyPolicy.name),
-                child: Text(l10n.settingsPrivacyPolicy),
               ),
             ],
           ),
           const SizedBox(height: AppSpacing.md),
         ],
+      ),
+    );
+  }
+}
+
+/// Minimalist legal link used in the auth footer — quiet underline
+/// affordance (Apple-style), no fill, tight padding so the [Wrap]
+/// parent can pack two side-by-side on wide phones and stack them
+/// vertically on the smallest iPhones (SE).
+class _AuthLegalLink extends StatelessWidget {
+  const _AuthLegalLink({required this.label, required this.onPressed});
+
+  final String label;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextButton(
+      onPressed: onPressed,
+      style: TextButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+        minimumSize: const Size(48, 36),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        foregroundColor: AppColors.textSecondary,
+        overlayColor: AppColors.brandPink.withValues(alpha: 0.10),
+      ),
+      child: Text(
+        label,
+        style: AppTypography.caption.copyWith(
+          color: AppColors.textSecondary,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.2,
+          decoration: TextDecoration.underline,
+          decorationColor: AppColors.textTertiary,
+          decorationThickness: 0.8,
+        ),
       ),
     );
   }

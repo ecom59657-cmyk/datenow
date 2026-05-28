@@ -3,9 +3,13 @@ import 'package:flutter/widgets.dart';
 import '../../../../l10n/app_localizations.dart';
 import 'legal_document_screen.dart';
 
-/// Static placeholder content for the Terms of Use. Real copy lives with
-/// legal — this MVP build ships generic but plausible text so the screen
-/// is exploitable end-to-end.
+/// Conditions d'utilisation — version FR / EN cohérente avec l'app
+/// (matching live + dates vidéo 5 min + reveal post-date + abonnement
+/// Premium optionnel). Le contenu est crédible juridiquement,
+/// compatible App Store, et lisible par un utilisateur non-juriste.
+///
+/// Les dates « Dernière mise à jour » sont synchronisées sur la date
+/// du dernier remaniement substantiel du texte.
 class TermsScreen extends StatelessWidget {
   const TermsScreen({super.key});
 
@@ -14,81 +18,204 @@ class TermsScreen extends StatelessWidget {
     final l10n = AppLocalizations.of(context);
     final isFr = Localizations.localeOf(context).languageCode == 'fr';
 
-    final sections = isFr
-        ? const <(String, String)>[
-            (
-              '1. Acceptation',
-              'En utilisant DateNow, vous acceptez les présentes conditions. '
-                  'Si vous n\'êtes pas d\'accord, n\'utilisez pas l\'application.'
-            ),
-            (
-              '2. Comment ça fonctionne',
-              'DateNow propose des dates audio ou vidéo en direct de 5 minutes '
-                  'entre membres compatibles et en ligne. À la fin de chaque date, '
-                  'chacun choisit de continuer, d\'échanger les profils ou de passer.'
-            ),
-            (
-              '3. Compte et éligibilité',
-              'Vous devez avoir 18 ans ou plus pour utiliser DateNow. Vous êtes '
-                  'responsable de la confidentialité de vos identifiants.'
-            ),
-            (
-              '4. Comportement attendu',
-              'Soyez respectueux. Les insultes, le harcèlement, le contenu '
-                  'illégal et l\'usurpation d\'identité sont interdits et peuvent '
-                  'entraîner la suspension de votre compte.'
-            ),
-            (
-              '5. Photos et confidentialité',
-              'Les photos sont privées tant qu\'un date en direct de 5 minutes '
-                  'n\'a pas été terminé avec succès. Les autres membres ne voient '
-                  'qu\'une silhouette avant cette étape.'
-            ),
-            (
-              '6. Modifications',
-              'Nous pouvons mettre à jour ces conditions ; vous serez informé '
-                  'dans l\'application avant qu\'elles ne prennent effet.'
-            ),
-          ]
-        : const <(String, String)>[
-            (
-              '1. Acceptance',
-              'By using DateNow, you agree to these terms. If you do not '
-                  'agree, please do not use the app.'
-            ),
-            (
-              '2. How it works',
-              'DateNow proposes 5-minute live audio or video dates between '
-                  'compatible, online members. At the end of each date, both '
-                  'people choose to continue, swap profiles, or move on.'
-            ),
-            (
-              '3. Account and eligibility',
-              'You must be 18 or older to use DateNow. You are responsible '
-                  'for keeping your credentials confidential.'
-            ),
-            (
-              '4. Expected behaviour',
-              'Be respectful. Insults, harassment, illegal content and '
-                  'impersonation are prohibited and may result in your '
-                  'account being suspended.'
-            ),
-            (
-              '5. Photos and privacy',
-              'Photos are private until a successful 5-minute live date has '
-                  'completed. Other members only see a silhouette until then.'
-            ),
-            (
-              '6. Changes',
-              'We may update these terms; you will be notified in-app before '
-                  'any change takes effect.'
-            ),
-          ];
+    final sections = isFr ? _frSections : _enSections;
 
     return LegalDocumentScreen(
       title: l10n.termsTitle,
-      lastUpdated: isFr ? '13 mai 2026' : 'May 13, 2026',
+      lastUpdated: isFr ? '29 mai 2026' : 'May 29, 2026',
       sections: sections,
     );
   }
 }
+
+// ---------------------------------------------------------------------------
+// FR
+// ---------------------------------------------------------------------------
+
+const List<(String, String)> _frSections = [
+  (
+    'Acceptation des conditions',
+    'En créant un compte sur DateNow ou en utilisant l\'application, vous '
+        'acceptez intégralement les présentes Conditions d\'utilisation. '
+        'Si vous n\'êtes pas d\'accord avec un seul de leurs termes, vous '
+        'ne devez pas utiliser le service. Ces conditions forment un '
+        'contrat entre vous et DateNow.'
+  ),
+  (
+    'Comment fonctionne DateNow',
+    'DateNow met en relation des membres adultes, compatibles et '
+        'simultanément en ligne, pour un date audio ou vidéo en direct '
+        'd\'une durée fixe de 5 minutes. À la fin de chaque date, chacun '
+        'des deux participants choisit indépendamment de continuer, '
+        'd\'échanger les profils (« reveal ») ou de passer. Aucun '
+        'échange n\'est forcé : il faut un accord mutuel pour qu\'une '
+        'mise en relation se poursuive.'
+  ),
+  (
+    'Compte et éligibilité',
+    'Vous devez avoir 18 ans révolus pour créer un compte. Vous certifiez '
+        'que les informations que vous fournissez (prénom, date de '
+        'naissance, photos, préférences) sont exactes et vous appartiennent. '
+        'Un seul compte par personne. Vous êtes responsable de la '
+        'confidentialité de votre adresse e-mail et de toute activité '
+        'effectuée depuis votre compte.'
+  ),
+  (
+    'Comportement attendu',
+    'DateNow repose sur le respect. Pendant un date ou une conversation, '
+        'vous vous engagez à rester courtois, à ne pas tenir de propos '
+        'haineux, sexistes, racistes, homophobes ou discriminatoires, à '
+        'ne pas harceler une autre personne, à ne pas insister après un '
+        'refus, et à ne pas tenter d\'extorquer une rencontre physique, '
+        'des informations personnelles ou des moyens de paiement.'
+  ),
+  (
+    'Contenu interdit',
+    'Sont strictement interdits : nudité, contenu sexuellement explicite, '
+        'violence, contenu illégal, usurpation d\'identité (deepfake, '
+        'photo d\'une autre personne, identité fictive), promotion ou '
+        'sollicitation commerciale (escorting, services payants), spam, '
+        'liens vers des sites tiers à caractère malveillant, et tout '
+        'contenu mettant en scène des mineurs. Toute infraction peut '
+        'entraîner la suspension immédiate du compte sans préavis.'
+  ),
+  (
+    'Modération et signalement',
+    'Vous pouvez signaler à tout moment un profil, un message ou un '
+        'comportement inapproprié depuis l\'écran post-date, depuis une '
+        'conversation, ou depuis les réglages. Les signalements sont '
+        'confidentiels et examinés par notre équipe de modération. Selon '
+        'la gravité, nous pouvons avertir, suspendre temporairement ou '
+        'supprimer définitivement un compte. Nous coopérons avec les '
+        'autorités compétentes en cas d\'infraction grave.'
+  ),
+  (
+    'Photos et reveal post-date',
+    'Vos photos restent privées tant qu\'aucun date n\'a abouti à un '
+        'reveal mutuel. Pendant un date vidéo en direct, votre image est '
+        'volontairement floutée par l\'application : seuls vos gestes et '
+        'votre voix sont transmis. Les deux participants ne voient les '
+        'photos l\'un de l\'autre qu\'après avoir accepté le reveal, à '
+        'la fin des 5 minutes. Cette mécanique fait partie intégrante de '
+        'la promesse produit.'
+  ),
+  (
+    'Abonnement Premium et achats in-app',
+    'Certaines fonctionnalités (dates illimités, filtres avancés, '
+        'notifications prioritaires) nécessitent un abonnement Premium '
+        'mensuel ou annuel facturé via Apple App Store. Le renouvellement '
+        'est automatique jusqu\'à l\'annulation, gérable depuis les '
+        'réglages de votre compte Apple. Aucun remboursement partiel '
+        'n\'est pris en charge par DateNow : les demandes de '
+        'remboursement passent par Apple selon ses conditions.'
+  ),
+  (
+    'Suspension et résiliation',
+    'Vous pouvez supprimer votre compte à tout moment depuis Réglages → '
+        '« Supprimer mon compte ». La suppression efface définitivement '
+        'votre profil, vos photos, vos matchs, vos conversations et votre '
+        'présence en quelques secondes. DateNow peut suspendre ou '
+        'résilier votre compte sans préavis en cas de violation des '
+        'présentes conditions ou de risque pour les autres utilisateurs. '
+        'Aucun remboursement n\'est dû en cas de résiliation pour faute.'
+  ),
+  (
+    'Modifications, droit applicable et contact',
+    'Nous pouvons faire évoluer ces conditions ; vous serez informé dans '
+        'l\'application au moins 14 jours avant l\'entrée en vigueur des '
+        'changements substantiels. Les présentes conditions sont régies '
+        'par le droit français. Pour toute question : '
+        'legal@datenow.app · support général : support@datenow.app.'
+  ),
+];
+
+// ---------------------------------------------------------------------------
+// EN
+// ---------------------------------------------------------------------------
+
+const List<(String, String)> _enSections = [
+  (
+    'Acceptance of terms',
+    'By creating an account on DateNow or by using the app, you fully '
+        'accept these Terms of Use. If you disagree with any of them, do '
+        'not use the service. These terms form a contract between you '
+        'and DateNow.'
+  ),
+  (
+    'How DateNow works',
+    'DateNow connects adult members who are compatible and simultaneously '
+        'online for a 5-minute live audio or video date. At the end of '
+        'each date, both participants independently choose to continue, '
+        'swap profiles (the "reveal"), or move on. No exchange is forced: '
+        'a mutual agreement is required for any further interaction.'
+  ),
+  (
+    'Account and eligibility',
+    'You must be 18 or older to create an account. You certify that the '
+        'information you provide (first name, birth date, photos, '
+        'preferences) is accurate and is yours. One account per person. '
+        'You are responsible for keeping your e-mail credentials secure '
+        'and for any activity conducted through your account.'
+  ),
+  (
+    'Expected behaviour',
+    'DateNow runs on respect. During a date or a conversation you commit '
+        'to staying courteous, never engaging in hateful, sexist, racist, '
+        'homophobic or discriminatory speech, never harassing another '
+        'person, never pressing a refusal, and never attempting to extract '
+        'a physical meeting, personal information or payment.'
+  ),
+  (
+    'Prohibited content',
+    'The following are strictly prohibited: nudity, sexually explicit '
+        'content, violence, illegal content, impersonation (deepfake, '
+        'someone else\'s photo, fake identity), commercial promotion or '
+        'solicitation (escorting, paid services), spam, links to '
+        'malicious third-party sites, and any content involving minors. '
+        'Any infringement may lead to immediate account suspension '
+        'without notice.'
+  ),
+  (
+    'Moderation and reporting',
+    'You can report a profile, a message or a behaviour at any time from '
+        'the post-date screen, from a conversation, or from settings. '
+        'Reports are confidential and reviewed by our moderation team. '
+        'Depending on severity, we may warn, temporarily suspend or '
+        'permanently delete an account. We cooperate with the relevant '
+        'authorities in case of serious infringement.'
+  ),
+  (
+    'Photos and post-date reveal',
+    'Your photos remain private until a date results in a mutual reveal. '
+        'During a live video date, your video feed is intentionally '
+        'blurred by the app: only your gestures and your voice are '
+        'transmitted. Both participants only see each other\'s photos '
+        'after they have accepted the reveal at the end of the 5 minutes. '
+        'This mechanic is core to the product promise.'
+  ),
+  (
+    'Premium subscription and in-app purchases',
+    'Some features (unlimited dates, advanced filters, priority '
+        'notifications) require a monthly or yearly Premium subscription '
+        'billed via Apple App Store. Renewal is automatic until '
+        'cancellation, which you can manage from your Apple account '
+        'settings. DateNow does not handle partial refunds: refund '
+        'requests go through Apple under its own terms.'
+  ),
+  (
+    'Suspension and termination',
+    'You can delete your account at any time from Settings → "Delete my '
+        'account". Deletion permanently wipes your profile, photos, '
+        'matches, conversations and presence within seconds. DateNow may '
+        'suspend or terminate your account without notice for any '
+        'violation of these terms or any risk to other users. No refund '
+        'is due in case of termination for misconduct.'
+  ),
+  (
+    'Changes, governing law and contact',
+    'We may update these terms; you will be notified in-app at least 14 '
+        'days before any substantial change takes effect. These terms '
+        'are governed by French law. For any question: '
+        'legal@datenow.app · general support: support@datenow.app.'
+  ),
+];
