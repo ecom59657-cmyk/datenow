@@ -1,0 +1,205 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!--
+    DateNow Privacy Manifest. Declares the categories of user data we
+    collect AND the Apple "Required Reason APIs" the bundled SDKs use.
+    Apple has been requiring this since May 2024 (warning at upload),
+    with progressive enforcement. Without it, future App Store reviews
+    may surface a rejection citing "missing privacy manifest".
+
+    Update this file whenever:
+      - we add a new data type to profiles (e.g. interests/intentions
+        already listed, but anything beyond name/email/photo/coarse-
+        location goes under OtherUserContent),
+      - we add a new package that uses a Required Reason API (check
+        the package's own PrivacyInfo.xcprivacy for the categories /
+        reasons it declares — we must declare the same ones at app
+        level if WE call them too).
+  -->
+
+  <key>NSPrivacyTracking</key>
+  <false/>
+
+  <key>NSPrivacyTrackingDomains</key>
+  <array/>
+
+  <!--
+    Data we collect, all "linked to user" (Supabase Auth + profile
+    row tied to auth.users.id). None of it is shared with third-party
+    advertisers or used for cross-app tracking, so Tracking=false on
+    each entry. Purpose=AppFunctionality is the right bucket for
+    "needed for the app to work" (auth, matching, calls).
+  -->
+  <key>NSPrivacyCollectedDataTypes</key>
+  <array>
+    <!-- Email — collected at signup for Supabase Auth. -->
+    <dict>
+      <key>NSPrivacyCollectedDataType</key>
+      <string>NSPrivacyCollectedDataTypeEmailAddress</string>
+      <key>NSPrivacyCollectedDataTypeLinked</key>
+      <true/>
+      <key>NSPrivacyCollectedDataTypeTracking</key>
+      <false/>
+      <key>NSPrivacyCollectedDataTypePurposes</key>
+      <array>
+        <string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+      </array>
+    </dict>
+
+    <!-- First name — shown on profile / matching cards. -->
+    <dict>
+      <key>NSPrivacyCollectedDataType</key>
+      <string>NSPrivacyCollectedDataTypeName</string>
+      <key>NSPrivacyCollectedDataTypeLinked</key>
+      <true/>
+      <key>NSPrivacyCollectedDataTypeTracking</key>
+      <false/>
+      <key>NSPrivacyCollectedDataTypePurposes</key>
+      <array>
+        <string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+      </array>
+    </dict>
+
+    <!-- Profile photos — user-provided, stored in Supabase Storage. -->
+    <dict>
+      <key>NSPrivacyCollectedDataType</key>
+      <string>NSPrivacyCollectedDataTypePhotosorVideos</string>
+      <key>NSPrivacyCollectedDataTypeLinked</key>
+      <true/>
+      <key>NSPrivacyCollectedDataTypeTracking</key>
+      <false/>
+      <key>NSPrivacyCollectedDataTypePurposes</key>
+      <array>
+        <string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+      </array>
+    </dict>
+
+    <!--
+      Coarse location — used for "find a date nearby". We use the iOS
+      WhenInUse permission + store the lat/lon in PostGIS but only
+      surface approximate distance to other users. Declared as
+      CoarseLocation (not Precise) since the user-visible feature is
+      "approximate distance".
+    -->
+    <dict>
+      <key>NSPrivacyCollectedDataType</key>
+      <string>NSPrivacyCollectedDataTypeCoarseLocation</string>
+      <key>NSPrivacyCollectedDataTypeLinked</key>
+      <true/>
+      <key>NSPrivacyCollectedDataTypeTracking</key>
+      <false/>
+      <key>NSPrivacyCollectedDataTypePurposes</key>
+      <array>
+        <string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+      </array>
+    </dict>
+
+    <!--
+      Audio data — live 5-minute call streamed via Agora. NOT
+      recorded, NOT stored. Linked=false because the audio itself is
+      not retained, only the call metadata (timestamps, who reveals)
+      is persisted.
+    -->
+    <dict>
+      <key>NSPrivacyCollectedDataType</key>
+      <string>NSPrivacyCollectedDataTypeAudioData</string>
+      <key>NSPrivacyCollectedDataTypeLinked</key>
+      <false/>
+      <key>NSPrivacyCollectedDataTypeTracking</key>
+      <false/>
+      <key>NSPrivacyCollectedDataTypePurposes</key>
+      <array>
+        <string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+      </array>
+    </dict>
+
+    <!-- Device ID — APNs push token + Supabase device_tokens row. -->
+    <dict>
+      <key>NSPrivacyCollectedDataType</key>
+      <string>NSPrivacyCollectedDataTypeDeviceID</string>
+      <key>NSPrivacyCollectedDataTypeLinked</key>
+      <true/>
+      <key>NSPrivacyCollectedDataTypeTracking</key>
+      <false/>
+      <key>NSPrivacyCollectedDataTypePurposes</key>
+      <array>
+        <string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+      </array>
+    </dict>
+
+    <!--
+      Birth date, gender, sexual orientation, intentions, interests
+      — none of these have a dedicated Apple data type, they all
+      fall under OtherUserContent (per Apple's privacy-types doc).
+    -->
+    <dict>
+      <key>NSPrivacyCollectedDataType</key>
+      <string>NSPrivacyCollectedDataTypeOtherUserContent</string>
+      <key>NSPrivacyCollectedDataTypeLinked</key>
+      <true/>
+      <key>NSPrivacyCollectedDataTypeTracking</key>
+      <false/>
+      <key>NSPrivacyCollectedDataTypePurposes</key>
+      <array>
+        <string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+      </array>
+    </dict>
+  </array>
+
+  <!--
+    "Required Reason APIs" the bundled SDKs touch. Each entry declares
+    the API category + a reason code from Apple's published list. The
+    reason codes here cover what shared_preferences, image_picker,
+    cached_network_image, and the Flutter engine itself invoke.
+  -->
+  <key>NSPrivacyAccessedAPITypes</key>
+  <array>
+    <!-- shared_preferences → NSUserDefaults. CA92.1 = "Access info
+         from same app". -->
+    <dict>
+      <key>NSPrivacyAccessedAPIType</key>
+      <string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+      <key>NSPrivacyAccessedAPITypeReasons</key>
+      <array>
+        <string>CA92.1</string>
+      </array>
+    </dict>
+
+    <!-- image_picker / cached_network_image read file mtime to manage
+         caches. C617.1 = "Display to user inside the app". -->
+    <dict>
+      <key>NSPrivacyAccessedAPIType</key>
+      <string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
+      <key>NSPrivacyAccessedAPITypeReasons</key>
+      <array>
+        <string>C617.1</string>
+      </array>
+    </dict>
+
+    <!-- Flutter engine uses mach_absolute_time / boot-relative timers
+         for frame scheduling. 35F9.1 = "Measure time within the app". -->
+    <dict>
+      <key>NSPrivacyAccessedAPIType</key>
+      <string>NSPrivacyAccessedAPICategorySystemBootTime</string>
+      <key>NSPrivacyAccessedAPITypeReasons</key>
+      <array>
+        <string>35F9.1</string>
+      </array>
+    </dict>
+
+    <!-- cached_network_image checks free disk space before writing
+         cache files. E174.1 = "App requires disk-space info to
+         function". -->
+    <dict>
+      <key>NSPrivacyAccessedAPIType</key>
+      <string>NSPrivacyAccessedAPICategoryDiskSpace</string>
+      <key>NSPrivacyAccessedAPITypeReasons</key>
+      <array>
+        <string>E174.1</string>
+      </array>
+    </dict>
+  </array>
+</dict>
+</plist>
