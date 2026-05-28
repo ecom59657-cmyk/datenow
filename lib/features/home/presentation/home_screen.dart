@@ -14,9 +14,11 @@ import '../../../l10n/app_localizations.dart';
 import '../../../shared/widgets/app_button.dart';
 import '../../../shared/widgets/app_scaffold.dart';
 import '../../../shared/widgets/glass_card.dart';
+import '../../auth/domain/auth_user.dart';
 import '../../auth/presentation/providers/auth_provider.dart';
 import '../../presence/data/presence_repository.dart';
 import '../../profile_setup/data/profile_repository.dart';
+import '../../profile_setup/domain/user_profile.dart';
 import '../../profile_setup/presentation/providers/profile_provider.dart';
 import '../../quota/data/quota_repository.dart';
 import '../../quota/presentation/widgets/quota_limit_sheet.dart';
@@ -25,6 +27,32 @@ import 'widgets/available_dates_display.dart';
 import 'widgets/home_header.dart';
 import 'widgets/home_hero_card.dart';
 import 'widgets/stat_tile.dart';
+
+/// Picks the human name shown under the home greeting. Strictly:
+///
+///   1. `profile.firstName`  — source of truth once onboarding has run
+///      (writes to `public.profiles.first_name`). This is the value the
+///      user actually typed in step 1/4, so it is always the right one
+///      to display when present.
+///   2. `user.displayName`   — fallback from `auth.users.raw_user_meta_data`
+///      (Google's `displayName` or what `signUpScreen` pushed there).
+///      Rejected if it contains "@" so a stray email (e.g. an Apple
+///      Private Relay alias accidentally landing in display_name) can
+///      never leak to the UI.
+///   3. `null`              — HomeHeader falls back to the localised
+///      welcome string (`homeFallbackName`). No email is ever shown.
+///
+/// Pure function for ease of testing and to make the precedence list
+/// readable at a glance.
+String? _resolveHomeName(UserProfile? profile, AuthUser? user) {
+  final fromProfile = profile?.firstName?.trim();
+  if (fromProfile != null && fromProfile.isNotEmpty) return fromProfile;
+  final fromAuth = user?.displayName?.trim();
+  if (fromAuth != null && fromAuth.isNotEmpty && !fromAuth.contains('@')) {
+    return fromAuth;
+  }
+  return null;
+}
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -42,6 +70,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final user = ref.watch(currentUserProvider);
+    // currentProfileProvider streams from public.profiles in realtime,
+    // so once onboarding writes `first_name` the home name flips
+    // without needing a manual refresh. We never bubble the email
+    // here — Apple Private Relay aliases like
+    // `ttsfv4hm22@privaterelay.appleid.com` previously leaked through
+    // the old `user.displayName ?? user.email` fallback.
+    final profile = ref.watch(currentProfileProvider).asData?.value;
+    final humaneName = _resolveHomeName(profile, user);
 
     return AppScaffold(
       body: ListView(
@@ -51,7 +87,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         children: [
           const SizedBox(height: AppSpacing.md),
           HomeHeader(
-            displayName: user?.displayName ?? user?.email,
+            displayName: humaneName,
             // Tapping the avatar switches to the Profile tab via the
             // existing shell branch — no new screen, no extra route.
             onAvatarTap: () => context.goNamed(AppRoute.profile.name),

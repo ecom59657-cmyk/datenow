@@ -68,7 +68,7 @@
   "homeGreetingAfternoon": "Good afternoon",
   "homeGreetingEvening": "Good evening",
   "homeGreetingNight": "Good night",
-  "homeFallbackName": "there",
+  "homeFallbackName": "Welcome",
   "youAreOnline": "You are online",
   "findDateTitle": "Find a date",
   "findDateHook": "Ready for a date tonight?",
