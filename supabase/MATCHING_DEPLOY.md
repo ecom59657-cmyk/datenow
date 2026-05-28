@@ -128,25 +128,32 @@ SELECT jobname, schedule FROM cron.job
 Les fonctions partagent du code via `_shared/` (résolu par Supabase CLI).
 
 ```bash
-# Déploiement individuel — à faire pour chaque nouvelle fonction
-supabase functions deploy join-queue           --no-verify-jwt=false
-supabase functions deploy leave-queue          --no-verify-jwt=false
-supabase functions deploy find-match           --no-verify-jwt=false
-supabase functions deploy accept-match         --no-verify-jwt=false
-supabase functions deploy decline-match        --no-verify-jwt=false
-supabase functions deploy create-agora-room    --no-verify-jwt=false
-supabase functions deploy heartbeat-presence   --no-verify-jwt=false
-supabase functions deploy cancel-session       --no-verify-jwt=false
-supabase functions deploy session-timeout      --no-verify-jwt=false
+# Fonctions client : verify-jwt activé (défaut) → la session JWT du
+# user authentifié est validée par la plateforme AVANT que le code
+# Edge ne tourne.
+supabase functions deploy join-queue
+supabase functions deploy leave-queue
+supabase functions deploy find-match
+supabase functions deploy accept-match
+supabase functions deploy decline-match
+supabase functions deploy create-agora-room
+supabase functions deploy heartbeat-presence
+supabase functions deploy cancel-session
+
+# session-timeout : appelée par un cron, jamais par un humain.
+# --no-verify-jwt : la plateforme ne contrôle pas de JWT, l'unique
+# protection est le secret MATCHING_CRON_SECRET (header X-Cron-Secret)
+# vérifié dans le code de la fonction.
+supabase functions deploy session-timeout --no-verify-jwt
 ```
 
-> `--no-verify-jwt=false` (par défaut sur Supabase) impose un JWT
-> Supabase valide. `session-timeout` ajoute son propre contrôle par
-> secret cron (header `X-Cron-Secret`) **en plus** du JWT — pour le
-> trigger cron externe, utilise n'importe quel JWT anon valide + le
-> bon `X-Cron-Secret`. (Si tu veux exposer `session-timeout` sans JWT,
-> redéploie avec `--no-verify-jwt=true` ; le secret cron reste alors la
-> seule protection.)
+> **Pourquoi pas de JWT pour session-timeout ?** Un scheduler externe
+> (Supabase Cron, GitHub Actions, uptime-robot, etc.) n'a pas de session
+> utilisateur ; lui demander un JWT Supabase complique inutilement la
+> conf alors que le secret cron de 256 bits est déjà une garde forte.
+> Note : si pg_cron est actif (cf. §2), il appelle directement
+> `mm_sweep_timeouts()` en interne, sans HTTP — cette Edge Function
+> n'est alors qu'une voie alternative.
 
 Les Edge Functions existantes — `generate-agora-token`,
 `message-notification`, `delete-account` — ne sont **pas** redéployées
