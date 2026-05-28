@@ -274,6 +274,12 @@ class SupabaseAuthRepository implements AuthRepository {
       'has_name=${credential.givenName != null} '
       'has_email=${credential.email != null}',
     );
+    _logJwtPayload(
+      provider: 'apple',
+      idToken: idToken,
+      extraContext: 'rawNonce_len=${rawNonce.length} '
+          'hashedNonce=$hashedNonce',
+    );
 
     try {
       final res = await _client.auth.signInWithIdToken(
@@ -372,6 +378,11 @@ class SupabaseAuthRepository implements AuthRepository {
       'Google credential — email=${account.email} '
       'has_displayName=${account.displayName != null} '
       'has_access=${accessToken != null}',
+    );
+    _logJwtPayload(
+      provider: 'google',
+      idToken: idToken,
+      extraContext: 'serverClientId_set=${webClientId.isNotEmpty}',
     );
     try {
       final res = await _client.auth.signInWithIdToken(
@@ -582,6 +593,57 @@ class SupabaseAuthRepository implements AuthRepository {
     }
     return AuthFailure(e.message,
         code: e.code, originalMessage: e.message);
+  }
+
+  /// TEMP — diagnostic helper. Decodes the un-verified JWT payload of
+  /// an id_token to log the key claims (`aud`, `iss`, `sub`, `nonce`,
+  /// `azp`, `exp`) so we can see EXACTLY what the OAuth provider sent
+  /// before we hand it to Supabase. Pure inspection, NO verification
+  /// (gotrue does the cryptographic check on its side). Safe to ship
+  /// — never logs the signature, never logs the full token.
+  ///
+  /// Remove this helper + its 2 call sites once the OAuth flows are
+  /// stable and we no longer need the visibility.
+  void _logJwtPayload({
+    required String provider,
+    required String idToken,
+    String? extraContext,
+  }) {
+    try {
+      final parts = idToken.split('.');
+      if (parts.length != 3) {
+        _log.warn('[$provider id_token] malformed JWT (parts=${parts.length})');
+        return;
+      }
+      var payload = parts[1];
+      // base64Url with optional padding
+      switch (payload.length % 4) {
+        case 2: payload += '=='; break;
+        case 3: payload += '=';  break;
+      }
+      final decoded = utf8.decode(base64Url.decode(payload));
+      final m = jsonDecode(decoded) as Map<String, dynamic>;
+      final aud = m['aud'];
+      final iss = m['iss'];
+      final sub = m['sub'];
+      final nonce = m['nonce'];
+      final azp = m['azp'];
+      final exp = m['exp'];
+      final email = m['email'];
+      _log.info(
+        '[$provider id_token] '
+        'iss=$iss '
+        'aud=$aud '
+        'azp=$azp '
+        'sub=$sub '
+        'nonce=${nonce ?? "<absent>"} '
+        'exp=$exp '
+        'email=$email'
+        '${extraContext == null ? '' : ' $extraContext'}',
+      );
+    } catch (e, st) {
+      _log.warn('[$provider id_token] decode failed: $e\n$st');
+    }
   }
 
   AuthUser? _mapUser(sb.User? user) {
