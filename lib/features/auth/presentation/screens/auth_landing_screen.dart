@@ -135,13 +135,43 @@ class _AuthLandingScreenState extends ConsumerState<AuthLandingScreen> {
                 ? null
                 : () => context.pushNamed(AppRoute.signUp.name),
           ).animate().fadeIn(delay: 540.ms).slideY(begin: 0.2, end: 0),
-          const SizedBox(height: 6),
-          Center(
-            child: TextButton(
-              onPressed: _busy
-                  ? null
-                  : () => context.pushNamed(AppRoute.signIn.name),
-              child: Text(l10n.authHaveAccount),
+          // Returning-user reassurance — purely informational. NOT a
+          // TextButton (used to be) because "Continuer avec un email"
+          // already covers the signin path, and OAuth providers
+          // (Apple, Google) handle sign-up vs sign-in transparently.
+          // Rendering this as a Center>TextButton made it look like a
+          // 4th call-to-action and confused users into thinking they
+          // needed a separate "I already have an account" flow.
+          //
+          // No GestureDetector / InkWell / underline — it must read as
+          // copy, not as a tap target. `IgnorePointer` defensively
+          // forbids any future hit-testing on this block in case a
+          // parent ever tried to wrap it.
+          const SizedBox(height: AppSpacing.md),
+          IgnorePointer(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+              child: Text.rich(
+                TextSpan(
+                  style: AppTypography.caption.copyWith(
+                    color: AppColors.textSecondary,
+                    height: 1.45,
+                    fontSize: 12,
+                  ),
+                  children: [
+                    TextSpan(
+                      text: l10n.authReturningUserPrefix,
+                      style: const TextStyle(
+                        color: AppColors.textPrimary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const TextSpan(text: ' '),
+                    TextSpan(text: l10n.authReturningUserBody),
+                  ],
+                ),
+                textAlign: TextAlign.center,
+              ),
             ),
           ).animate().fadeIn(delay: 620.ms),
           const SizedBox(height: AppSpacing.md),
