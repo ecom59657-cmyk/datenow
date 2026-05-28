@@ -49,17 +49,29 @@ abstract class DiscoverRepository {
 /// existing mock-only behaviour is preserved.
 typedef CandidateSource = Future<List<UserProfile>> Function(UserProfile self);
 
+/// Source for the **persisted** Discover "Confirmed matches" surface.
+///
+/// When provided, [MockDiscoverRepository.watchMatches] delegates to this
+/// function instead of reading from its RAM map — so a confirmed match
+/// shows up on **both** participants' phones (the row is in the `matches`
+/// table, RLS authorises both participants). When `null`, the legacy
+/// in-memory path is kept untouched (tests, no-Supabase mode).
+typedef MutualMatchesSource = Stream<List<MutualMatch>> Function(String userId);
+
 class MockDiscoverRepository implements DiscoverRepository {
   MockDiscoverRepository(
     this._service, {
     MockCandidateFactory? factory,
     CandidateSource? candidateSource,
+    MutualMatchesSource? mutualMatchesSource,
   })  : _factory = factory ?? MockCandidateFactory(),
-        _candidateSource = candidateSource;
+        _candidateSource = candidateSource,
+        _mutualMatchesSource = mutualMatchesSource;
 
   final WeeklySuggestionsService _service;
   final MockCandidateFactory _factory;
   final CandidateSource? _candidateSource;
+  final MutualMatchesSource? _mutualMatchesSource;
   static const _log = AppLogger('MockDiscover');
 
   // How many synthetic candidates we generate when no real source is wired.
@@ -253,7 +265,17 @@ class MockDiscoverRepository implements DiscoverRepository {
   }
 
   @override
-  Stream<List<MutualMatch>> watchMatches(String userId) async* {
+  Stream<List<MutualMatch>> watchMatches(String userId) {
+    // When a Supabase-backed source is injected we read straight from the
+    // `matches` table — that's the only way phone B can see the row that
+    // phone A's reveal-repo upserted in DB. The RAM map is kept as the
+    // fallback for tests and the no-Supabase mode.
+    final supa = _mutualMatchesSource;
+    if (supa != null) return supa(userId);
+    return _ramWatchMatches(userId);
+  }
+
+  Stream<List<MutualMatch>> _ramWatchMatches(String userId) async* {
     yield _matchesByUser[userId] ?? const <MutualMatch>[];
     yield* _matchStream(userId).stream;
   }
@@ -264,6 +286,17 @@ class MockDiscoverRepository implements DiscoverRepository {
     required UserProfile candidate,
     required MatchScore score,
   }) async {
+    // With the Supabase source active, persistence is already done upstream
+    // by `revealRepository.createMatch` (it upserts into `matches` from
+    // post_call_screen for BOTH participants). Writing into the RAM map
+    // would create a phantom row that nobody reads.
+    if (_mutualMatchesSource != null) {
+      _log.info(
+        'recordMutualMatch no-op — Supabase source active; '
+        'pair=${self.userId}↔${candidate.userId}',
+      );
+      return;
+    }
     final now = DateTime.now();
     final mm = MutualMatch(
       id: 'mm-${now.microsecondsSinceEpoch}',
@@ -278,6 +311,91 @@ class MockDiscoverRepository implements DiscoverRepository {
     _matchStream(self.userId).add(list);
     _log.info('mutual match recorded for ${self.userId} ↔ ${candidate.userId}');
   }
+}
+
+// ---------------------------------------------------------------------------
+// Supabase-backed "Confirmed matches" — reads the `matches` table directly
+// (RLS authorises both participants), then hydrates each row with the peer's
+// UserProfile via the existing ProfileRepository. Plugged into
+// [MockDiscoverRepository] as a [MutualMatchesSource].
+//
+// We intentionally subscribe to the matches Realtime stream WITHOUT a client
+// filter — RLS already constrains the rows to the calling user, and emissions
+// trigger a hydrated re-fetch through `_fetch` (peer profiles aren't reachable
+// from a single PostgREST embed because UserProfile spans profiles +
+// user_preferences + user_photos).
+// ---------------------------------------------------------------------------
+
+class _SupabaseMutualMatchesSource {
+  _SupabaseMutualMatchesSource({
+    required sb.SupabaseClient client,
+    required ProfileRepository profiles,
+  })  : _client = client,
+        _profiles = profiles;
+
+  final sb.SupabaseClient _client;
+  final ProfileRepository _profiles;
+  static const _log = AppLogger('SupaMatches');
+  static const _table = 'matches';
+
+  Stream<List<MutualMatch>> watch(String userId) {
+    // Each Realtime emission (initial snapshot + every change) triggers a
+    // fresh hydrated fetch. Cheap: typical "Matchs effectués" cardinality
+    // is single-digit per user.
+    return _client
+        .from(_table)
+        .stream(primaryKey: ['id'])
+        .asyncMap((_) => _fetch(userId));
+  }
+
+  Future<List<MutualMatch>> _fetch(String userId) async {
+    try {
+      final rows = await _client
+          .from(_table)
+          .select()
+          .or('user_a_id.eq.$userId,user_b_id.eq.$userId')
+          .order('matched_at', ascending: false);
+      // Hydrate peers in parallel — N+1 is fine at this cardinality.
+      final futures = rows.cast<Map<String, dynamic>>().map(
+            (row) => _hydrate(row, userId),
+          );
+      final hydrated = await Future.wait(futures);
+      return hydrated.whereType<MutualMatch>().toList(growable: false);
+    } catch (e, st) {
+      _log.error('fetch failed for $userId', e, st);
+      return const <MutualMatch>[];
+    }
+  }
+
+  Future<MutualMatch?> _hydrate(
+    Map<String, dynamic> row,
+    String userId,
+  ) async {
+    final aId = row['user_a_id'] as String;
+    final bId = row['user_b_id'] as String;
+    final peerId = aId == userId ? bId : aId;
+    final peer = await _profiles.getProfile(peerId);
+    if (peer == null) {
+      _log.warn('peer profile $peerId missing — skipping match row ${row['id']}');
+      return null;
+    }
+    return MutualMatch(
+      id: row['id'] as String,
+      userId: userId,
+      candidate: peer,
+      compatibilityScore: (row['compatibility_score'] as num?)?.toInt() ?? 0,
+      matchedAt: DateTime.parse(row['matched_at'] as String).toUtc(),
+      status: _statusFromWire(row['status'] as String?),
+    );
+  }
+
+  /// `matches.status` is one of `'new' | 'conversation_open' | 'archived'`
+  /// (cf. `20260513120000_initial_schema.sql`). The 'archived' wire value
+  /// folds onto `newMatch` for now — Discover's UI doesn't distinguish it.
+  MatchStatus _statusFromWire(String? wire) => switch (wire) {
+        'conversation_open' => MatchStatus.conversationOpen,
+        _ => MatchStatus.newMatch,
+      };
 }
 
 // ---------------------------------------------------------------------------
@@ -348,13 +466,21 @@ final discoverRepositoryProvider = Provider<DiscoverRepository>((ref) {
   if (!supabaseUp) {
     return MockDiscoverRepository(service);
   }
-  // Supabase is configured: wire the real candidate pool. We still use the
-  // in-memory orchestrator because the server-side persistence of weekly
-  // batches hasn't shipped yet — but the pool itself is now real users.
+  // Supabase is configured:
+  //   • candidate pool = real Supabase profiles,
+  //   • "Confirmed matches" = the `matches` table directly, so phone B
+  //     sees the row phone A's reveal repo upserted (and vice versa).
+  // Weekly-suggestion cards stay in RAM for now — out of scope.
   final profiles = ref.watch(profileRepositoryProvider);
+  final client = ref.watch(supabaseClientProvider);
+  final supaMatches = _SupabaseMutualMatchesSource(
+    client: client,
+    profiles: profiles,
+  );
   return MockDiscoverRepository(
     service,
     candidateSource: (self) =>
         profiles.fetchPotentialCandidates(selfUserId: self.userId),
+    mutualMatchesSource: supaMatches.watch,
   );
 });
