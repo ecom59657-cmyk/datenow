@@ -22,8 +22,9 @@ import '../../profile_setup/data/profile_repository.dart';
 import '../../profile_setup/domain/user_profile.dart';
 import '../../profile_setup/presentation/providers/profile_provider.dart';
 import '../../profile_setup/presentation/widgets/blurred_avatar.dart';
+import '../data/matching_driver.dart';
+import '../data/matching_driver_provider.dart';
 import '../data/matching_repository.dart';
-import '../data/matchmaking_repository.dart';
 import '../domain/active_match.dart';
 import '../domain/match_score.dart';
 import 'matching_cleanup_controller.dart';
@@ -87,7 +88,10 @@ class _MatchingScreenState extends ConsumerState<MatchingScreen>
   /// `[MATCHING V1]` log could fire — the dispose teardown threw,
   /// killing the matching screen before the user had a chance to tap
   /// « Trouver un date ».
-  MatchmakingRepository? _disposeRepo;
+  /// The active matching driver — V1 today (default flag OFF), V2-with-V1-fallback
+  /// when `FeatureFlags.useMatchingV2` is flipped. Cached on the
+  /// dispose-safe path so teardown can `leaveQueue` without `ref.read`.
+  MatchingDriver? _disposeDriver;
   String? _disposeUserId;
   PresenceController? _disposePresence;
 
@@ -107,10 +111,10 @@ class _MatchingScreenState extends ConsumerState<MatchingScreen>
     WidgetsBinding.instance.addObserver(this);
     _cleanup = MatchingCleanupController(
       leaveQueue: () async {
-        final repo = _disposeRepo;
+        final driver = _disposeDriver;
         final selfId = _disposeUserId;
-        if (repo != null && selfId != null) {
-          await repo.leaveQueue(selfId);
+        if (driver != null && selfId != null) {
+          await driver.leaveQueue(selfId);
         }
       },
       resetPresence: () {
@@ -188,24 +192,25 @@ class _MatchingScreenState extends ConsumerState<MatchingScreen>
   }
 
   Future<void> _enterQueueAndSearch() async {
-    final repo = ref.read(matchmakingRepositoryProvider);
+    final driver = ref.read(matchingDriverProvider);
     final self = ref.read(currentProfileProvider).asData?.value;
-    if (repo == null || self == null) {
+    if (driver == null || self == null) {
       _log.warn(
-        'Matchmaking unavailable — supabase=${repo != null} '
+        'Matchmaking unavailable — driver=${driver != null} '
         'profile=${self != null}',
       );
       if (mounted) setState(() => _phase = _Phase.empty);
       return;
     }
+    _log.info('Using driver=${driver.name}');
 
-    // Cache for dispose-safe cleanup (see field doc on _disposeRepo).
-    _disposeRepo = repo;
+    // Cache for dispose-safe cleanup (see field doc on _disposeDriver).
+    _disposeDriver = driver;
     _disposeUserId = self.userId;
 
     // Step A — INSERT row in matchmaking_queue.
     try {
-      await repo.joinQueue(self.userId);
+      await driver.joinQueue(self.userId);
     } catch (e, st) {
       _log.error('STEP A joinQueue THREW — pas de row en queue', e, st);
       if (mounted) setState(() => _phase = _Phase.empty);
@@ -215,8 +220,10 @@ class _MatchingScreenState extends ConsumerState<MatchingScreen>
     // Step A.bis — VERIFICATION : the row must actually exist server-side.
     // Catches the silent-RLS-refusal case (upsert returns null) AND the
     // case where a sweep / trigger deletes the row in the same tick.
+    // V2 returns a synthetic confirmation (the Edge Function already
+    // validated server-side) so this branch always passes there.
     try {
-      final row = await repo.selfQueueRow(self.userId);
+      final row = await driver.selfQueueRow(self.userId);
       if (row == null) {
         _log.error(
           'STEP A.bis VERIFY — row NOT FOUND immediately after upsert. '
@@ -235,7 +242,7 @@ class _MatchingScreenState extends ConsumerState<MatchingScreen>
     // (possibly stale) heartbeat_at, so prime it now instead of waiting
     // up to 12 s for the first timer tick.
     try {
-      await repo.heartbeat();
+      await driver.heartbeat();
     } catch (e, st) {
       _log.error(
         'STEP B initial heartbeat THREW — row peut-être déjà swept. '
@@ -250,7 +257,7 @@ class _MatchingScreenState extends ConsumerState<MatchingScreen>
     _log.info('joined queue ok — clock started at ${_queueEnteredAt!.toIso8601String()}');
 
     // Realtime: catch the case where a *peer* claims this user first.
-    _callSub = repo.watchMyActiveCall(self.userId).listen(
+    _callSub = driver.watchMyActiveCall(self.userId).listen(
       _onRealtimeCall,
       onError: (e, st) => _log.error('watchMyActiveCall error', e, st),
     );
@@ -260,7 +267,7 @@ class _MatchingScreenState extends ConsumerState<MatchingScreen>
     // drop out of everyone's candidate list within 30 s.
     _heartbeatTimer = Timer.periodic(
       const Duration(seconds: 12),
-      (_) => unawaited(_heartbeat(repo)),
+      (_) => unawaited(_heartbeat(driver)),
     );
 
     // Active search: poll the queue, score peers, claim the best ≥75 %.
@@ -272,10 +279,10 @@ class _MatchingScreenState extends ConsumerState<MatchingScreen>
     unawaited(_refreshActiveCount());
   }
 
-  Future<void> _heartbeat(MatchmakingRepository repo) async {
+  Future<void> _heartbeat(MatchingDriver driver) async {
     if (!mounted || _match != null) return;
     try {
-      await repo.heartbeat();
+      await driver.heartbeat();
     } catch (e) {
       _log.warn('queue heartbeat failed (will retry): $e');
     }
@@ -301,12 +308,12 @@ class _MatchingScreenState extends ConsumerState<MatchingScreen>
     if (_resolving || _match != null || !mounted) return;
     _resolving = true;
     try {
-      final repo = ref.read(matchmakingRepositoryProvider);
+      final driver = ref.read(matchingDriverProvider);
       final profiles = ref.read(profileRepositoryProvider);
       final self = ref.read(currentProfileProvider).asData?.value;
-      if (repo == null || self == null) return;
+      if (driver == null || self == null) return;
 
-      final result = await repo.findBestLiveCandidateV1(
+      final result = await driver.findBestLiveCandidateV1(
         selfId: self.userId,
         // Threshold tuned for tonight's test — the v3 plan (sub-phase
         // 1.5) replaces this with the freshness-decay state machine.
@@ -347,7 +354,7 @@ class _MatchingScreenState extends ConsumerState<MatchingScreen>
         'poll — claiming ${peer.userId} score=${result.totalScore}/100 '
         'dist=${result.distanceM}m',
       );
-      final session = await repo.claimMatch(peer.userId);
+      final session = await driver.claimMatch(peer.userId);
       if (!mounted) return;
       _onMatched(
         session,
