@@ -175,6 +175,58 @@ void main() {
     });
   });
 
+  group('decideRedirect — legal pages always reachable', () {
+    // Regression guard for the bug where an unsigned user on AuthLanding
+    // tapped 'Conditions d'utilisation' / 'Politique de confidentialité',
+    // the push iOS animation ran, then gate 3 ('!signedIn && not on
+    // /auth/*') bumped them back to /auth/landing — the legal screen
+    // was visible for ~0 frame, appearing as a transparent ghost over
+    // AuthLanding.
+
+    test('unsigned user can read terms (no redirect)', () {
+      expect(
+        r(signedIn: false, location: AppRoute.settingsTerms.path),
+        isNull,
+      );
+    });
+
+    test('unsigned user can read privacy policy (no redirect)', () {
+      expect(
+        r(signedIn: false, location: AppRoute.settingsPrivacyPolicy.path),
+        isNull,
+      );
+    });
+
+    test('signed-in user on legal route stays (no redirect to home)', () {
+      expect(r(location: AppRoute.settingsTerms.path), isNull);
+      expect(r(location: AppRoute.settingsPrivacyPolicy.path), isNull);
+    });
+
+    test(
+        'legal route during onboarding (onboardingDone=false) → stay '
+        '(rule of thumb: legal must be readable BEFORE accepting onboarding)',
+        () {
+      expect(
+        r(
+          onboardingDone: false,
+          signedIn: false,
+          location: AppRoute.settingsTerms.path,
+        ),
+        isNull,
+      );
+    });
+
+    test(
+        'legal route during auth loading (cold start race) → stay; '
+        'we never hijack a tap on a legal link even before auth resolves',
+        () {
+      expect(
+        r(authLoading: true, location: AppRoute.settingsTerms.path),
+        isNull,
+      );
+    });
+  });
+
   group('decideRedirect — settled / steady state', () {
     test('signed in + complete + on /home → stay (null)', () {
       expect(r(location: '/home'), isNull);

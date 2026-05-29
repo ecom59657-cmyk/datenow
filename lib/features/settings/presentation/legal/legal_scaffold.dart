@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
@@ -97,10 +96,12 @@ class LegalScaffold extends StatelessWidget {
               ),
               const _DateNowFooter(),
             ],
-          ).animate().fadeIn(
-                duration: 350.ms,
-                curve: Curves.easeOut,
-              ),
+          ),
+          // No body-level fade — the iOS push transition already provides
+          // a smooth slide-and-fade entrance. Layering a 350 ms fadeIn on
+          // top kept the content at near-zero opacity for the full push
+          // duration, producing the "écran transparent" perception
+          // reported on TestFlight.
         ],
       ),
     );

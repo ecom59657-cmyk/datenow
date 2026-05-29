@@ -331,6 +331,14 @@ String? decideRedirect({
   final isOnAuth = location.startsWith(AppRoute.authLanding.path);
   final isOnProfileSetup = location == AppRoute.profileSetup.path;
 
+  // 0. Legal pages — always reachable, no gate may hijack them. Apple/Play
+  //    review require legal links from any pre-auth surface; bumping the
+  //    push off-route mid-transition reads as a broken app.
+  if (location == AppRoute.settingsTerms.path ||
+      location == AppRoute.settingsPrivacyPolicy.path) {
+    return null;
+  }
+
   // 1. Auth / onboarding loading → splash.
   if (authLoading || onboardingLoading) {
     return isOnSplash ? null : AppRoute.splash.path;
