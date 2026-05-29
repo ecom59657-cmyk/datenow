@@ -178,7 +178,7 @@ class AgoraCallView extends ConsumerStatefulWidget {
 }
 
 class _AgoraCallViewState extends ConsumerState<AgoraCallView> {
-  static const _log = AppLogger('Agora');
+  static const _log = AppLogger('AGORA');
 
   /// Owns the public-facing controls (mic/cam/switch/stop). Created in
   /// initState so the parent can immediately receive it, wired to the
@@ -315,8 +315,19 @@ class _AgoraCallViewState extends ConsumerState<AgoraCallView> {
             _publishDebug();
           },
           onUserJoined: (connection, remoteUid, elapsed) {
+            // Capture more diagnostic context than just the uid — UIKit's
+            // user list size + mainAgoraUser uid let a post-mortem
+            // confirm the OneToOneLayout actually sees the peer. If
+            // remoteCount goes from 0 → 1 but the screen still shows
+            // local fullscreen, the layout is broken; here we'd see
+            // remote_user_added but mainAgoraUser still on the local uid.
+            final sc = client.sessionController.value;
             _log.info(
-              'onUserJoined — remoteUid=$remoteUid elapsed=${elapsed}ms',
+              'onUserJoined — remoteUid=$remoteUid elapsed=${elapsed}ms '
+              'channel=${connection.channelId} '
+              'sessionController.users.len=${sc.users.length} '
+              'mainAgoraUser.uid=${sc.mainAgoraUser.uid} '
+              'localUid=${sc.localUid}',
             );
             if (!mounted) return;
             _peerAbsentTimer?.cancel();
@@ -359,6 +370,15 @@ class _AgoraCallViewState extends ConsumerState<AgoraCallView> {
           },
           onRemoteAudioStateChanged:
               (connection, remoteUid, state, reason, elapsed) {
+            // Log EVERY state transition (was: only flash on decoding).
+            // The state + reason pair is enough to tell remote-not-published
+            // (state=stopped reason=remoteMuted) from remote-muted-by-us
+            // (state=stopped reason=localMuted) from network-stall
+            // (state=frozen reason=networkCongestion).
+            _log.info(
+              'onRemoteAudioStateChanged — remoteUid=$remoteUid '
+              'state=$state reason=$reason elapsed=${elapsed}ms',
+            );
             if (state == rtc.RemoteAudioState.remoteAudioStateDecoding &&
                 !_shownAudioActive) {
               _shownAudioActive = true;
@@ -367,11 +387,37 @@ class _AgoraCallViewState extends ConsumerState<AgoraCallView> {
           },
           onRemoteVideoStateChanged:
               (connection, remoteUid, state, reason, elapsed) {
+            // Same exhaustive logging as audio — the video pipeline
+            // states are the most diagnostic signal for a "remote feed
+            // invisible" report : if we never see
+            // `remoteVideoStateDecoding`, the stream never arrived; if
+            // we see it but the screen stays empty, the layout / canvas
+            // is the culprit.
+            _log.info(
+              'onRemoteVideoStateChanged — remoteUid=$remoteUid '
+              'state=$state reason=$reason elapsed=${elapsed}ms',
+            );
             if (state == rtc.RemoteVideoState.remoteVideoStateDecoding &&
                 !_shownVideoActive) {
               _shownVideoActive = true;
               _flashMessage('Caméra active');
             }
+          },
+          // Local capture state — proves enableVideo() / startPreview()
+          // ran successfully. Pairs with the local PIP rendering : a
+          // user complaining "I don't see my own camera" can be told
+          // immediately whether the local pipeline is healthy.
+          onLocalVideoStateChanged: (source, state, reason) {
+            _log.info(
+              'onLocalVideoStateChanged — source=$source '
+              'state=$state reason=$reason',
+            );
+          },
+          // Local audio capture — same idea for the mic side.
+          onLocalAudioStateChanged: (connection, state, reason) {
+            _log.info(
+              'onLocalAudioStateChanged — state=$state reason=$reason',
+            );
           },
           onConnectionStateChanged: (connection, state, reason) {
             _log.info(
@@ -481,13 +527,26 @@ class _AgoraCallViewState extends ConsumerState<AgoraCallView> {
 
     return Stack(
       children: [
-        // AgoraVideoViewer paints the remote tiles (one full-screen, or
-        // a grid when >1) and the local PIP. Default styling kept — the
-        // DateNow chrome already provides the back / timer / EN DIRECT
-        // overlay from the parent CallScreen.
+        // 1:1 video layout — the dating room has exactly two
+        // participants (caller + callee). `Layout.oneToOne` puts the
+        // REMOTE peer in fullscreen and the LOCAL self in a small
+        // rounded top-right PIP (~20%h × 33%w, see
+        // `agora_uikit/.../one_to_one_layout.dart:78-152`), which is the
+        // correct semantics for a date.
+        //
+        // Was `Layout.floating` — that variant always promoted the
+        // FIRST joiner (us) to fullscreen and pushed every subsequent
+        // user into a 20%-of-screen-height scrollable PIP strip
+        // anchored at the TOP of the screen. Combined with this
+        // file's `BackdropFilter` (sigma-15 blur over the whole
+        // viewer) and the parent CallScreen's top chrome (timer pill
+        // + EN DIRECT pill sitting in the same vertical band), the
+        // remote PIP became completely indistinguishable from a
+        // blurred glyph at the very top — the symptom users reported
+        // was "I only see my own (blurred) camera, no peer".
         AgoraVideoViewer(
           client: c,
-          layoutType: Layout.floating,
+          layoutType: Layout.oneToOne,
           showAVState: false,
           showNumberOfUsers: false,
           enableHostControls: false,

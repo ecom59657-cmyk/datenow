@@ -42,7 +42,7 @@ class AgoraTokenRepository {
   AgoraTokenRepository(this._client);
 
   final SupabaseClient _client;
-  static const _log = AppLogger('Agora');
+  static const _log = AppLogger('AGORA');
 
   /// Maps a Supabase user id to a stable positive int32 Agora uid. Each
   /// device computes its own — the two peers only need distinct values,
