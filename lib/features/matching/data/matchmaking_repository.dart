@@ -23,13 +23,85 @@ class MatchmakingRepository {
 
   /// Enters the queue. Upsert keeps it idempotent if the user re-taps
   /// "search" without having left first.
+  ///
+  /// Logs are intentionally noisy so a TestFlight S1 failure ("row never
+  /// appears in matchmaking_queue") can be diagnosed from the console
+  /// alone — we surface :
+  ///   • the auth session UID vs the userId arg (RLS gate),
+  ///   • the PostgREST representation actually returned by the upsert
+  ///     (forced via `.select().maybeSingle()` so a silent RLS refusal
+  ///     surfaces as `null`),
+  ///   • a typed [PostgrestException] when the server actually rejects
+  ///     the call (code + message + details).
   Future<void> joinQueue(String userId) async {
-    _log.info('joinQueue user=$userId');
-    DebugLog.match('joinQueue'); // debug-observer
-    await _client.from(_queueTable).upsert(
-      {'user_id': userId},
-      onConflict: 'user_id',
+    final session = _client.auth.currentSession;
+    final sessionUid = session?.user.id;
+    final tokenExpired = session?.isExpired ?? true;
+    _log.info(
+      'joinQueue START userId=$userId sessionUid=$sessionUid '
+      'tokenExpired=$tokenExpired',
     );
+    if (sessionUid == null) {
+      _log.error(
+        'joinQueue ABORT — no auth session client-side. RLS will deny. '
+        'Vérifie supabase.auth.currentSession et le restore session.',
+      );
+      throw StateError('joinQueue: no auth session');
+    }
+    if (sessionUid != userId) {
+      _log.error(
+        'joinQueue ABORT — sessionUid ($sessionUid) != userId ($userId). '
+        'WITH CHECK mq_modify_own va refuser. Mismatch profil vs auth.',
+      );
+      throw StateError('joinQueue: auth/userId mismatch');
+    }
+    DebugLog.match('joinQueue'); // debug-observer
+    try {
+      final inserted = await _client
+          .from(_queueTable)
+          .upsert({'user_id': userId}, onConflict: 'user_id')
+          .select()
+          .maybeSingle();
+      if (inserted == null) {
+        _log.error(
+          'joinQueue UPSERT returned NULL — likely silent RLS refusal. '
+          'Vérifie la policy mq_modify_own et que sessionUid == auth.uid().',
+        );
+      } else {
+        _log.info(
+          'joinQueue UPSERT ok — row id=${inserted['id']} '
+          'user_id=${inserted['user_id']} '
+          'created_at=${inserted['created_at']} '
+          'heartbeat_at=${inserted['heartbeat_at']} '
+          'expires_at=${inserted['expires_at']}',
+        );
+      }
+    } on PostgrestException catch (e) {
+      _log.error(
+        'joinQueue PostgrestException — code=${e.code} '
+        'message=${e.message} hint=${e.hint} details=${e.details}',
+        e,
+      );
+      rethrow;
+    }
+  }
+
+  /// Diagnostic helper — does the **caller** currently have a row in the
+  /// queue? Bypasses the [active_queue_peers] RPC (which excludes self
+  /// by design) so we can prove the upsert actually persisted.
+  ///
+  /// Returns `null` if the row is missing (sweep / RLS), or the row's
+  /// `(heartbeat_at, expires_at)` pair when present.
+  Future<Map<String, dynamic>?> selfQueueRow(String userId) async {
+    final res = await _client
+        .from(_queueTable)
+        .select('user_id, heartbeat_at, expires_at')
+        .eq('user_id', userId)
+        .maybeSingle();
+    _log.info(
+      'selfQueueRow userId=$userId → ${res ?? 'MISSING'}',
+    );
+    return res;
   }
 
   /// Leaves the queue. Safe to call when not queued.
@@ -41,8 +113,25 @@ class MatchmakingRepository {
   /// Refreshes the caller's queue heartbeat (server clock). Called on a
   /// ~12 s cadence while the search screen is open so peers can tell the
   /// caller is still actively searching.
+  ///
+  /// `queue_heartbeat` is `SECURITY DEFINER` and UPDATEs `WHERE
+  /// user_id = auth.uid()` — it returns void and never raises when the
+  /// caller has no row in the queue (silent 0-row update). We log every
+  /// invocation so a TestFlight S1 dump can confirm the RPC is at least
+  /// reaching the server, and catch `PostgrestException` typed to surface
+  /// the rare cases where it does fail (auth missing, network).
   Future<void> heartbeat() async {
-    await _client.rpc<dynamic>('queue_heartbeat');
+    try {
+      await _client.rpc<dynamic>('queue_heartbeat');
+      _log.info('queue_heartbeat RPC ok (silent — no return value)');
+    } on PostgrestException catch (e) {
+      _log.error(
+        'queue_heartbeat PostgrestException — code=${e.code} '
+        'message=${e.message} hint=${e.hint} details=${e.details}',
+        e,
+      );
+      rethrow;
+    }
   }
 
   /// User ids of peers currently searching with a *fresh* heartbeat

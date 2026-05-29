@@ -120,19 +120,51 @@ class _MatchingScreenState extends ConsumerState<MatchingScreen> {
       return;
     }
 
+    // Step A — INSERT row in matchmaking_queue.
     try {
       await repo.joinQueue(self.userId);
-      // Stamp a fresh server heartbeat right away — an upsert on a re-tap
-      // keeps the old (possibly stale) heartbeat_at, so prime it now
-      // instead of waiting up to 12 s for the first timer tick.
-      await repo.heartbeat();
-      _queueEnteredAt = DateTime.now();
-      _log.info('joined queue ok — clock started at ${_queueEnteredAt!.toIso8601String()}');
     } catch (e, st) {
-      _log.error('joinQueue failed', e, st);
+      _log.error('STEP A joinQueue THREW — pas de row en queue', e, st);
       if (mounted) setState(() => _phase = _Phase.empty);
       return;
     }
+
+    // Step A.bis — VERIFICATION : the row must actually exist server-side.
+    // Catches the silent-RLS-refusal case (upsert returns null) AND the
+    // case where a sweep / trigger deletes the row in the same tick.
+    try {
+      final row = await repo.selfQueueRow(self.userId);
+      if (row == null) {
+        _log.error(
+          'STEP A.bis VERIFY — row NOT FOUND immediately after upsert. '
+          'Soit RLS a refusé silently (sessionUid != self.userId), '
+          'soit un trigger/sweep a delete la row tout de suite. '
+          'Cf logs joinQueue UPSERT au-dessus pour le détail.',
+        );
+        if (mounted) setState(() => _phase = _Phase.empty);
+        return;
+      }
+    } catch (e, st) {
+      _log.error('STEP A.bis VERIFY THREW', e, st);
+    }
+
+    // Step B — Initial heartbeat. An upsert on a re-tap keeps the old
+    // (possibly stale) heartbeat_at, so prime it now instead of waiting
+    // up to 12 s for the first timer tick.
+    try {
+      await repo.heartbeat();
+    } catch (e, st) {
+      _log.error(
+        'STEP B initial heartbeat THREW — row peut-être déjà swept. '
+        'Le timer reprendra dans 12s.',
+        e,
+        st,
+      );
+      // Non-fatal : on continue le flow. Le timer essaiera de nouveau.
+    }
+
+    _queueEnteredAt = DateTime.now();
+    _log.info('joined queue ok — clock started at ${_queueEnteredAt!.toIso8601String()}');
 
     // Realtime: catch the case where a *peer* claims this user first.
     _callSub = repo.watchMyActiveCall(self.userId).listen(
