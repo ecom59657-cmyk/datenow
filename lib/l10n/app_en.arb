@@ -13,8 +13,9 @@
   "onboarding3Title": "You stay in control",
   "onboarding3Subtitle": "After 5 minutes, choose to keep talking, swap profiles, or move on. Always your call.",
 
-  "authTaglineLine1": "Real people. Real moments.",
-  "authTaglineLine2": "No more endless swiping.",
+  "authTaglineLine1": "Real people.",
+  "authTaglineLine2": "Real moments.",
+  "authTaglineLine3": "No more endless swiping.",
   "authCreateAccount": "Create my account",
   "authReturningUserPrefix": "Already signed up?",
   "authReturningUserBody": "Sign back in automatically with Apple, Google or your email.",

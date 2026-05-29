@@ -13,8 +13,9 @@
   "onboarding3Title": "Vous gardez le contrôle",
   "onboarding3Subtitle": "Au bout de 5 minutes, choisissez de continuer, d'échanger les profils, ou de passer. C'est toujours vous qui décidez.",
 
-  "authTaglineLine1": "De vraies personnes. De vrais moments.",
-  "authTaglineLine2": "Fini les swipes à l'infini.",
+  "authTaglineLine1": "De vraies personnes.",
+  "authTaglineLine2": "De vrais moments.",
+  "authTaglineLine3": "Fini les swipes à l'infini.",
   "authCreateAccount": "Créer mon compte",
   "authReturningUserPrefix": "Déjà inscrit ?",
   "authReturningUserBody": "Reconnecte-toi automatiquement avec Apple, Google ou ton email.",

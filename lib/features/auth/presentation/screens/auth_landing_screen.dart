@@ -125,9 +125,25 @@ class _AuthLandingScreenState extends ConsumerState<AuthLandingScreen> {
               .fadeIn(duration: 600.ms)
               .slideY(begin: 0.15, end: 0, curve: Curves.easeOutCubic),
           const SizedBox(height: AppSpacing.lg),
+          // Slogan tri-ligne FORCÉ — la mise en page éditoriale doit
+          // rester identique sur tous les iPhones (SE → Pro Max). Trois
+          // clés l10n distinctes (une par ligne) + retours \n explicites
+          // → aucune dépendance au comportement auto-wrap du moteur de
+          // text rendering.
+          //
+          //   De vraies personnes.
+          //   De vrais moments.
+          //   Fini les swipes à l'infini.
+          //
+          // À 16 pt, la phrase la plus longue ('Fini les swipes…') tient
+          // confortablement sur 272 pt utiles côté SE — aucun risque
+          // d'overflow. maxLines: 3 verrouille le compte.
           Text(
-            '${l10n.authTaglineLine1}\n${l10n.authTaglineLine2}',
+            '${l10n.authTaglineLine1}\n'
+            '${l10n.authTaglineLine2}\n'
+            '${l10n.authTaglineLine3}',
             textAlign: TextAlign.center,
+            maxLines: 3,
             style: AppTypography.body.copyWith(
               color: AppColors.textSecondary,
               fontSize: 16,
