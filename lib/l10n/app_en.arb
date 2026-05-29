@@ -26,7 +26,8 @@
   "authGoogleAudienceMismatch": "Google sign in unavailable. Please try again in a moment.",
   "authDbSignupError": "We couldn't create your account. Please try again in a moment.",
   "authGenericRetry": "Something went wrong. Please try again in a moment.",
-  "authTerms": "By continuing, you agree to our Terms & Privacy Policy.",
+  "authLegalIntro": "By continuing, you agree to our",
+  "authLegalConjunction": " and ",
 
   "signInTitle": "Welcome back",
   "signInSubtitleOtp": "Enter your email, we'll send a one-time code to sign you in.",

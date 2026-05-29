@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -33,6 +34,34 @@ class AuthLandingScreen extends ConsumerStatefulWidget {
 
 class _AuthLandingScreenState extends ConsumerState<AuthLandingScreen> {
   bool _busy = false;
+
+  /// Tap recognizers for the inline legal links in the Text.rich footer.
+  /// They MUST live in the State (not be created in build) so they survive
+  /// rebuilds and get disposed cleanly when the screen unmounts.
+  late final TapGestureRecognizer _termsRecognizer;
+  late final TapGestureRecognizer _privacyRecognizer;
+
+  @override
+  void initState() {
+    super.initState();
+    _termsRecognizer = TapGestureRecognizer()
+      ..onTap = () {
+        if (!mounted) return;
+        context.pushNamed(AppRoute.settingsTerms.name);
+      };
+    _privacyRecognizer = TapGestureRecognizer()
+      ..onTap = () {
+        if (!mounted) return;
+        context.pushNamed(AppRoute.settingsPrivacyPolicy.name);
+      };
+  }
+
+  @override
+  void dispose() {
+    _termsRecognizer.dispose();
+    _privacyRecognizer.dispose();
+    super.dispose();
+  }
 
   Future<void> _signInWithApple() async {
     if (_busy) return;
@@ -174,38 +203,62 @@ class _AuthLandingScreenState extends ConsumerState<AuthLandingScreen> {
               ),
             ),
           ).animate().fadeIn(delay: 620.ms),
-          const SizedBox(height: AppSpacing.md),
-          // Apple expects easy access to Terms + Privacy from any
-          // pre-auth surface. Keep the legal sentence above the two
-          // tappable links.
-          Text(
-            l10n.authTerms,
-            textAlign: TextAlign.center,
-            style: AppTypography.caption,
-          ),
-          const SizedBox(height: 4),
-          // Wrap (not Row) so the two links flow to a second line on
-          // narrow iPhones (SE / mini) instead of being truncated. No
-          // middot separator — the spacing alone carries the visual
-          // beat and never ends up orphaned on its own wrap-line.
-          Wrap(
-            alignment: WrapAlignment.center,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 14,
-            runSpacing: 0,
-            children: [
-              _AuthLegalLink(
-                label: l10n.settingsTerms,
-                onPressed: () =>
-                    context.pushNamed(AppRoute.settingsTerms.name),
+          // Extra air between the "Déjà inscrit ?" reassurance and the
+          // legal footer — the spec asks for the footer to feel like a
+          // true secondary surface, not stacked against the line above.
+          const SizedBox(height: AppSpacing.lg),
+          // Premium minimalist legal footer (Apple / Bumble / Revolut /
+          // Notion). One Text.rich :
+          //   • intro line — 11 pt w400, white α=0.45 (whisper-quiet) ;
+          //   • link line — 12 pt w500, white α=0.72 ;
+          //   • " et " / " and " between the two links keeps the intro
+          //     style, so the link labels read as a single coherent
+          //     phrase instead of a button list.
+          // No background, no border, no underline — pure typography.
+          // The inline TapGestureRecognizers belong to the State (init/
+          // dispose) so they survive rebuilds and never leak.
+          //
+          // On iPhone SE the line wraps naturally between the two link
+          // labels — the recognizers stay attached to the words, so
+          // tapping the wrapped label still hits the right route.
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+            child: Text.rich(
+              TextSpan(
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w400,
+                  color: Colors.white.withValues(alpha: 0.45),
+                  height: 1.55,
+                  letterSpacing: 0.05,
+                ),
+                children: [
+                  TextSpan(text: l10n.authLegalIntro),
+                  const TextSpan(text: '\n'),
+                  TextSpan(
+                    text: l10n.settingsTerms,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.white.withValues(alpha: 0.72),
+                    ),
+                    recognizer: _termsRecognizer,
+                  ),
+                  TextSpan(text: l10n.authLegalConjunction),
+                  TextSpan(
+                    text: l10n.settingsPrivacyPolicy,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.white.withValues(alpha: 0.72),
+                    ),
+                    recognizer: _privacyRecognizer,
+                  ),
+                ],
               ),
-              _AuthLegalLink(
-                label: l10n.settingsPrivacyPolicy,
-                onPressed: () =>
-                    context.pushNamed(AppRoute.settingsPrivacyPolicy.name),
-              ),
-            ],
-          ),
+              textAlign: TextAlign.center,
+            ),
+          ).animate().fadeIn(delay: 700.ms),
           const SizedBox(height: AppSpacing.md),
         ],
       ),
@@ -213,38 +266,3 @@ class _AuthLandingScreenState extends ConsumerState<AuthLandingScreen> {
   }
 }
 
-/// Minimalist legal link used in the auth footer — quiet underline
-/// affordance (Apple-style), no fill, tight padding so the [Wrap]
-/// parent can pack two side-by-side on wide phones and stack them
-/// vertically on the smallest iPhones (SE).
-class _AuthLegalLink extends StatelessWidget {
-  const _AuthLegalLink({required this.label, required this.onPressed});
-
-  final String label;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return TextButton(
-      onPressed: onPressed,
-      style: TextButton.styleFrom(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-        minimumSize: const Size(48, 36),
-        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        foregroundColor: AppColors.textSecondary,
-        overlayColor: AppColors.brandPink.withValues(alpha: 0.10),
-      ),
-      child: Text(
-        label,
-        style: AppTypography.caption.copyWith(
-          color: AppColors.textSecondary,
-          fontWeight: FontWeight.w600,
-          letterSpacing: 0.2,
-          decoration: TextDecoration.underline,
-          decorationColor: AppColors.textTertiary,
-          decorationThickness: 0.8,
-        ),
-      ),
-    );
-  }
-}

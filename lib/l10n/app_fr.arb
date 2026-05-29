@@ -26,7 +26,8 @@
   "authGoogleAudienceMismatch": "Connexion Google impossible. Réessaie dans quelques instants.",
   "authDbSignupError": "Impossible de créer le compte. Réessaie dans un instant.",
   "authGenericRetry": "Quelque chose a coincé. Réessaie dans un instant.",
-  "authTerms": "En continuant, vous acceptez nos Conditions et notre Politique de confidentialité.",
+  "authLegalIntro": "En continuant, vous acceptez nos",
+  "authLegalConjunction": " et ",
 
   "signInTitle": "Bon retour",
   "signInSubtitleOtp": "Entre ton email, on t'envoie un code pour te connecter.",
