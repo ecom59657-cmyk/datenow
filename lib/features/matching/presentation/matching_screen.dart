@@ -75,6 +75,20 @@ class _MatchingScreenState extends ConsumerState<MatchingScreen> {
   /// dump to know whether a "no match" report came after 5 s or 5 min.
   DateTime? _queueEnteredAt;
 
+  /// Dispose-safe cached handles. Populated during the initial
+  /// synchronous build paths (`_startSearch`, `_enterQueueAndSearch`)
+  /// where `ref.read(...)` is legal, and consumed in [dispose] /
+  /// [_leaveQueueBestEffort] where it ISN'T : after the framework
+  /// starts unmounting, any `ref.read` throws
+  /// `Bad state: Cannot use "ref" after the widget was disposed`.
+  /// This was the actual crash observed on TestFlight before any
+  /// `[MATCHING V1]` log could fire — the dispose teardown threw,
+  /// killing the matching screen before the user had a chance to tap
+  /// « Trouver un date ».
+  MatchmakingRepository? _disposeRepo;
+  String? _disposeUserId;
+  PresenceController? _disposePresence;
+
   @override
   void initState() {
     super.initState();
@@ -84,8 +98,11 @@ class _MatchingScreenState extends ConsumerState<MatchingScreen> {
   void _startSearch() {
     _log.info('Match flow started — entering matchmaking queue');
     // Tell the world we're actively searching — feeds the peers' active
-    // count and the Debug presence panel.
-    ref.read(presenceControllerProvider).setIntent(PresenceStatus.searching);
+    // count and the Debug presence panel. Cache the controller for
+    // dispose-safe access (see field doc on _disposePresence).
+    final presence = ref.read(presenceControllerProvider);
+    _disposePresence = presence;
+    presence.setIntent(PresenceStatus.searching);
     DebugObserver.instance.startSession(); // debug-observer
     setState(() {
       _phase = _Phase.searching;
@@ -119,6 +136,10 @@ class _MatchingScreenState extends ConsumerState<MatchingScreen> {
       if (mounted) setState(() => _phase = _Phase.empty);
       return;
     }
+
+    // Cache for dispose-safe cleanup (see field doc on _disposeRepo).
+    _disposeRepo = repo;
+    _disposeUserId = self.userId;
 
     // Step A — INSERT row in matchmaking_queue.
     try {
@@ -347,11 +368,15 @@ class _MatchingScreenState extends ConsumerState<MatchingScreen> {
 
   /// Fire-and-forget queue exit so a cancelled / disposed search frees
   /// the user's slot for future matches.
+  ///
+  /// Reads from the cached fields ([_disposeRepo], [_disposeUserId])
+  /// rather than `ref` — this method is called from [dispose] where
+  /// `ref.read` throws once the unmount has started.
   void _leaveQueueBestEffort() {
-    final repo = ref.read(matchmakingRepositoryProvider);
-    final self = ref.read(currentProfileProvider).asData?.value;
-    if (repo != null && self != null) {
-      unawaited(repo.leaveQueue(self.userId));
+    final repo = _disposeRepo;
+    final selfId = _disposeUserId;
+    if (repo != null && selfId != null) {
+      unawaited(repo.leaveQueue(selfId));
     }
   }
 
@@ -387,7 +412,8 @@ class _MatchingScreenState extends ConsumerState<MatchingScreen> {
     // they navigated to the call screen.
     if (_match == null) {
       _leaveQueueBestEffort();
-      ref.read(presenceControllerProvider).setIntent(PresenceStatus.online);
+      // `ref.read` would throw here — use the cached controller instead.
+      _disposePresence?.setIntent(PresenceStatus.online);
     }
     super.dispose();
   }

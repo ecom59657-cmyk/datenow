@@ -30,5 +30,10 @@ class AppLogger {
       error: error,
       stackTrace: stackTrace,
     );
+    // ALSO surface to stdout so `flutter run` captures the line directly
+    // — `developer.log` goes through the iOS unified log and does not
+    // always reach the flutter_tools terminal. Debug-mode only (gated by
+    // the kDebugMode early-return above) so release builds stay silent.
+    debugPrint('[$tag][$level] $message${error == null ? '' : ' | err=$error'}');
   }
 }

@@ -8,6 +8,7 @@ import '../../../app/scaffold/active_tab.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../app/theme/app_typography.dart';
+import '../../../core/services/location_service.dart';
 import '../../../core/utils/display_name.dart';
 import '../../../core/utils/extensions.dart';
 import '../../../core/utils/logger.dart';
@@ -268,6 +269,51 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     } catch (e, st) {
       _log.error('Quota check failed (continuing anyway): $e', e, st);
     }
+
+    // 3.5. Location guard — `find_best_live_candidate_v1` hard-rejects
+    //      callers with `profiles.location IS NULL` via
+    //      `rejection_reason = 'no_location_self'` (see
+    //      `supabase/migrations/20260526170000_find_best_live_candidate_v1.sql:89-95`).
+    //      Without this gate the user enters the queue but the scoring
+    //      RPC refuses them every poll and they never match.
+    //
+    //      `refreshIfStale` is cheap when fresh (one column SELECT) and
+    //      only triggers a GPS read + `update_my_location` RPC when the
+    //      cached `location_updated_at` is missing or > 24 h old —
+    //      which is exactly the "first time the user taps Find a date"
+    //      case we are repairing here.
+    final locResult = await LocationService.instance.refreshIfStale();
+    if (locResult is LocationDenied) {
+      _log.warn(
+        'Location denied — aborting match. permanently=${locResult.permanently}',
+      );
+      if (!context.mounted) return;
+      context.showSnack(
+        locResult.permanently
+            ? l10n.privacyLocationStatusDeniedForever
+            : l10n.privacyLocationDeniedSnack,
+      );
+      return;
+    }
+    if (locResult is LocationServicesOff) {
+      _log.warn('Device location services OFF — aborting match.');
+      if (!context.mounted) return;
+      context.showSnack(l10n.privacyLocationServicesOff);
+      return;
+    }
+    if (locResult is LocationFailed) {
+      _log.warn(
+        'Location capture failed (${locResult.reason}) — aborting match.',
+      );
+      if (!context.mounted) return;
+      context.showSnack(l10n.privacyLocationFailedSnack);
+      return;
+    }
+    // null  → cached location_updated_at is fresh (< 24 h) → proceed.
+    // Captured → just pushed → proceed.
+    _log.info(
+      'Location ready (${locResult is LocationCaptured ? "captured+pushed" : "cached fresh"})',
+    );
 
     // 4. Navigate to the matching screen. The matching screen owns the
     //    "find candidate → start call session → open call screen" chain.
