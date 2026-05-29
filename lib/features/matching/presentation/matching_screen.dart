@@ -26,6 +26,7 @@ import '../data/matching_repository.dart';
 import '../data/matchmaking_repository.dart';
 import '../domain/active_match.dart';
 import '../domain/match_score.dart';
+import 'matching_cleanup_controller.dart';
 import 'providers/active_match_provider.dart';
 import 'widgets/compatibility_badge.dart';
 
@@ -41,7 +42,8 @@ class MatchingScreen extends ConsumerStatefulWidget {
 
 enum _Phase { searching, found, empty }
 
-class _MatchingScreenState extends ConsumerState<MatchingScreen> {
+class _MatchingScreenState extends ConsumerState<MatchingScreen>
+    with WidgetsBindingObserver {
   // Tag intentionally explicit so a TestFlight log dump can grep for
   // `[MATCHING V1]` and immediately know which engine the user was on.
   // The future v2 driver will use the tag `[MATCHING V2]` so both
@@ -89,10 +91,70 @@ class _MatchingScreenState extends ConsumerState<MatchingScreen> {
   String? _disposeUserId;
   PresenceController? _disposePresence;
 
+  /// Owns the "already-left-queue" flag so the three exit paths
+  /// (cancel button, framework dispose, app-pause / detached) cannot
+  /// stack duplicate `leaveQueue` + `setIntent(online)` calls. Built
+  /// once in [initState] with closures over the cached dispose-safe
+  /// handles — the closures read at call-time so a teardown firing
+  /// BEFORE `_enterQueueAndSearch` populated the handles is a clean
+  /// no-op. Pure-Dart class, unit-tested in
+  /// `test/matching_cleanup_controller_test.dart`.
+  late final MatchingCleanupController _cleanup;
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _cleanup = MatchingCleanupController(
+      leaveQueue: () async {
+        final repo = _disposeRepo;
+        final selfId = _disposeUserId;
+        if (repo != null && selfId != null) {
+          await repo.leaveQueue(selfId);
+        }
+      },
+      resetPresence: () {
+        _disposePresence?.setIntent(PresenceStatus.online);
+      },
+      logger: (msg) => _log.info(msg),
+    );
     _startSearch();
+  }
+
+  /// Single source of truth for "stop everything that ticks". Used by
+  /// every exit path so a future timer added to the search loop only
+  /// has to be cancelled here once.
+  void _cancelAllTimers() {
+    _messageRotator?.cancel();
+    _navTimer?.cancel();
+    _pollTimer?.cancel();
+    _heartbeatTimer?.cancel();
+    _callSub?.cancel();
+  }
+
+  /// Lifecycle gate for Cas 3 (app backgrounded mid-search). On
+  /// `paused` / `detached` the device may suspend the Dart isolate
+  /// indefinitely; we proactively drop out of the queue + cancel
+  /// timers so the row goes stale immediately rather than waiting
+  /// for the server-side sweep (30 s heartbeat window + 60 s cron).
+  /// Resume UX after a pause is intentionally degraded — the screen
+  /// keeps its searching visuals but the queue row is gone, so the
+  /// user has to tap cancel + retry to re-enter. Documented trade-off.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      _log.info(
+        'App lifecycle = ${state.name} — exiting queue best-effort',
+      );
+      _cancelAllTimers();
+      unawaited(
+        _cleanup.run(
+          matched: _match != null,
+          trigger: 'lifecycle:${state.name}',
+        ),
+      );
+    }
   }
 
   void _startSearch() {
@@ -272,6 +334,15 @@ class _MatchingScreenState extends ConsumerState<MatchingScreen> {
         return;
       }
 
+      // Defensive guard right before the only mutating server call in
+      // this poll. Without it, a screen disposed between the candidate
+      // fetch and claim_match would still create a `calls` row — the
+      // peer gets paged into a ghost call this client never opens.
+      // `_cleanup.hasRun` also covers the lifecycle-pause case where
+      // we already left the queue but a poll Future was already in
+      // flight when `paused` fired.
+      if (!mounted || _cleanup.hasRun) return;
+
       _log.info(
         'poll — claiming ${peer.userId} score=${result.totalScore}/100 '
         'dist=${result.distanceM}m',
@@ -366,30 +437,13 @@ class _MatchingScreenState extends ConsumerState<MatchingScreen> {
     context.pushReplacementNamed(AppRoute.call.name);
   }
 
-  /// Fire-and-forget queue exit so a cancelled / disposed search frees
-  /// the user's slot for future matches.
-  ///
-  /// Reads from the cached fields ([_disposeRepo], [_disposeUserId])
-  /// rather than `ref` — this method is called from [dispose] where
-  /// `ref.read` throws once the unmount has started.
-  void _leaveQueueBestEffort() {
-    final repo = _disposeRepo;
-    final selfId = _disposeUserId;
-    if (repo != null && selfId != null) {
-      unawaited(repo.leaveQueue(selfId));
-    }
-  }
-
   void _cancel() {
     _log.info('Match flow cancelled');
-    _messageRotator?.cancel();
-    _navTimer?.cancel();
-    _pollTimer?.cancel();
-    _heartbeatTimer?.cancel();
-    _callSub?.cancel();
-    _leaveQueueBestEffort();
-    // No longer searching — drop back to plain "online".
-    ref.read(presenceControllerProvider).setIntent(PresenceStatus.online);
+    _cancelAllTimers();
+    // Idempotent — if a lifecycle pause already triggered teardown
+    // this is a no-op. Otherwise it flips `_cleanup.hasRun` and the
+    // imminent `dispose()` is also a no-op.
+    unawaited(_cleanup.run(matched: _match != null, trigger: 'cancel'));
     ref.read(activeMatchProvider.notifier).state = null;
     _log.info('Matching state reset');
     _log.info('Navigating back after cancel');
@@ -402,19 +456,13 @@ class _MatchingScreenState extends ConsumerState<MatchingScreen> {
 
   @override
   void dispose() {
-    _messageRotator?.cancel();
-    _navTimer?.cancel();
-    _pollTimer?.cancel();
-    _heartbeatTimer?.cancel();
-    _callSub?.cancel();
-    // Only leave the queue if we didn't match — a match already removed
-    // both users server-side, and we want to keep the user reachable if
-    // they navigated to the call screen.
-    if (_match == null) {
-      _leaveQueueBestEffort();
-      // `ref.read` would throw here — use the cached controller instead.
-      _disposePresence?.setIntent(PresenceStatus.online);
-    }
+    WidgetsBinding.instance.removeObserver(this);
+    _cancelAllTimers();
+    // Idempotent and matched-aware (see MatchingCleanupController).
+    // `unawaited` because dispose is synchronous — the `_ran` flag
+    // flips before the first `await` inside `run()`, so subsequent
+    // calls within the same tick already see it as run.
+    unawaited(_cleanup.run(matched: _match != null, trigger: 'dispose'));
     super.dispose();
   }
 
