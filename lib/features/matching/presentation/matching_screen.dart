@@ -42,7 +42,11 @@ class MatchingScreen extends ConsumerStatefulWidget {
 enum _Phase { searching, found, empty }
 
 class _MatchingScreenState extends ConsumerState<MatchingScreen> {
-  static const _log = AppLogger('Matching');
+  // Tag intentionally explicit so a TestFlight log dump can grep for
+  // `[MATCHING V1]` and immediately know which engine the user was on.
+  // The future v2 driver will use the tag `[MATCHING V2]` so both
+  // versions are diff-able in the same log stream.
+  static const _log = AppLogger('MATCHING V1');
   // Only the two *search* messages loop here. "Confirmation du match…"
   // belongs to the `found` phase — it must never show while still
   // searching, so it is not part of this rotation.
@@ -64,6 +68,12 @@ class _MatchingScreenState extends ConsumerState<MatchingScreen> {
 
   /// Guards against overlapping poll cycles and double-claims.
   bool _resolving = false;
+
+  /// Wall-clock instant when [joinQueue] returned successfully. Used to
+  /// stamp the time-in-queue duration on every meaningful transition
+  /// (matched, empty, cancelled) — handy when reading a TestFlight log
+  /// dump to know whether a "no match" report came after 5 s or 5 min.
+  DateTime? _queueEnteredAt;
 
   @override
   void initState() {
@@ -116,6 +126,8 @@ class _MatchingScreenState extends ConsumerState<MatchingScreen> {
       // keeps the old (possibly stale) heartbeat_at, so prime it now
       // instead of waiting up to 12 s for the first timer tick.
       await repo.heartbeat();
+      _queueEnteredAt = DateTime.now();
+      _log.info('joined queue ok — clock started at ${_queueEnteredAt!.toIso8601String()}');
     } catch (e, st) {
       _log.error('joinQueue failed', e, st);
       if (mounted) setState(() => _phase = _Phase.empty);
@@ -268,9 +280,13 @@ class _MatchingScreenState extends ConsumerState<MatchingScreen> {
     int distanceKm = 0,
   }) {
     if (_match != null) return;
+    final waitedMs = _queueEnteredAt != null
+        ? DateTime.now().difference(_queueEnteredAt!).inMilliseconds
+        : null;
     _log.info(
       'Matched! peer=${peer.userId} score=${score.percentage}% '
-      'session=${session.id} dist=${distanceKm}km',
+      'session=${session.id} dist=${distanceKm}km '
+      'waited=${waitedMs ?? '?'}ms',
     );
     _pollTimer?.cancel();
     _heartbeatTimer?.cancel();

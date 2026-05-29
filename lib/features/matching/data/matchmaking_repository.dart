@@ -18,7 +18,7 @@ class MatchmakingRepository {
   MatchmakingRepository(this._client);
 
   final SupabaseClient _client;
-  static const _log = AppLogger('Matchmaking');
+  static const _log = AppLogger('MATCHING V1');
   static const _queueTable = 'matchmaking_queue';
 
   /// Enters the queue. Upsert keeps it idempotent if the user re-taps
