@@ -32,6 +32,7 @@ enum AppRoute {
   matching('/matching'),
   call('/call'),
   postCall('/post-call'),
+  callInterrupted('/call-interrupted'),
   messages('/messages'),
   conversation('/messages/:id');
 

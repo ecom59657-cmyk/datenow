@@ -21,6 +21,7 @@ import '../../post_call/data/reveal_repository.dart';
 import '../../presence/domain/presence_status.dart';
 import '../../presence/presentation/presence_controller.dart';
 import '../data/call_session_repository.dart';
+import '../domain/call_end_reason.dart';
 import 'agora_call_view.dart';
 
 /// 5-minute live call screen — Jitsi-only.
@@ -143,7 +144,9 @@ class _CallScreenState extends ConsumerState<CallScreen>
           _log.info(
             'Pause grace expired (${_pauseGrace.inSeconds}s) — ending call',
           );
-          unawaited(_endCall());
+          unawaited(
+            _endCall(reason: CallEndReason.appBackgroundTimeout),
+          );
         });
       case AppLifecycleState.resumed:
         if (_pauseGraceTimer != null) {
@@ -153,7 +156,7 @@ class _CallScreenState extends ConsumerState<CallScreen>
         }
       case AppLifecycleState.detached:
         _log.info('Lifecycle=detached during call — ending best-effort');
-        unawaited(_endCall());
+        unawaited(_endCall(reason: CallEndReason.appDetached));
       case AppLifecycleState.inactive:
       case AppLifecycleState.hidden:
         // Transient (call modal opening, focus loss, …) — ignore.
@@ -257,7 +260,7 @@ class _CallScreenState extends ConsumerState<CallScreen>
           );
           if (row.endedByPeer(selfId)) {
             _log.info('Call ended remotely by ${row.endedBy}');
-            _endCall(remote: true);
+            _endCall(remote: true, reason: CallEndReason.peerHangup);
             return;
           }
           // Both peers' CallScreens are up → start the join flourish.
@@ -324,21 +327,25 @@ class _CallScreenState extends ConsumerState<CallScreen>
     if (r.isNegative) {
       _ticker?.cancel();
       DebugLog.call('timer end'); // debug-observer
-      _endCall();
+      _endCall(reason: CallEndReason.timerCompleted);
       return;
     }
     setState(() => _remaining = r);
     DebugObserver.instance.setRemaining(r.inSeconds); // debug-observer
   }
 
-  Future<void> _endCall({bool remote = false}) async {
+  Future<void> _endCall({
+    CallEndReason reason = CallEndReason.normalHangup,
+    bool remote = false,
+  }) async {
     if (_ending) return;
     _ending = true;
     _pauseGraceTimer?.cancel();
     if (!mounted) return;
     _log.info(
-      'endCall requested — '
+      'endCall requested — reason=${reason.name} '
       'trigger=${remote ? "remote-peer-ended" : "local"} '
+      'interrupted=${reason.isInterrupted} '
       'callId=${_callId ?? "∅"} selfId=${_selfUserId ?? "∅"}',
     );
 
@@ -374,9 +381,19 @@ class _CallScreenState extends ConsumerState<CallScreen>
     ref.read(presenceControllerProvider).setIntent(PresenceStatus.online);
     ref.read(precallStateProvider.notifier).state = 'ended';
     DebugObserver.instance.markEnded(); // debug-observer
+    // Publish the reason BEFORE navigation so the destination screen
+    // can read it on initState. Cleared by the destination on dispose.
+    ref.read(lastCallEndReasonProvider.notifier).state = reason;
     if (!mounted) return;
-    _log.info('Navigating to post-call screen');
-    context.pushReplacementNamed(AppRoute.postCall.name);
+    if (reason.isInterrupted) {
+      _log.info(
+        'Navigating to call-interrupted screen (reason=${reason.name})',
+      );
+      context.pushReplacementNamed(AppRoute.callInterrupted.name);
+    } else {
+      _log.info('Navigating to post-call screen (reason=${reason.name})');
+      context.pushReplacementNamed(AppRoute.postCall.name);
+    }
   }
 
   @override
@@ -434,8 +451,8 @@ class _CallScreenState extends ConsumerState<CallScreen>
                 : AgoraCallView(
                     callId: _callId!,
                     channelName: _channelName!,
-                    onLeave: () {
-                      if (mounted && !_ending) _endCall();
+                    onLeave: (reason) {
+                      if (mounted && !_ending) _endCall(reason: reason);
                     },
                     onControllerCreated: (controller) {
                       _agoraController = controller;

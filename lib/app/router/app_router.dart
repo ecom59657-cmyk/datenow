@@ -8,6 +8,7 @@ import '../../features/auth/presentation/screens/auth_landing_screen.dart';
 import '../../features/auth/presentation/screens/sign_in_screen.dart';
 import '../../features/auth/presentation/screens/sign_up_screen.dart';
 import '../../features/auth/presentation/screens/email_otp_screen.dart';
+import '../../features/call/presentation/call_interrupted_screen.dart';
 import '../../features/call/presentation/call_screen.dart';
 import '../../features/discover/presentation/discover_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
@@ -239,6 +240,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: AppRoute.postCall.path,
         name: AppRoute.postCall.name,
         builder: (_, _) => const PostCallScreen(),
+      ),
+      GoRoute(
+        path: AppRoute.callInterrupted.path,
+        name: AppRoute.callInterrupted.name,
+        builder: (_, _) => const CallInterruptedScreen(),
       ),
       // /messages itself is the Messages tab inside the shell (above).
       // Only the per-conversation full-screen route remains outside.

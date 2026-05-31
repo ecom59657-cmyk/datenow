@@ -14,6 +14,7 @@ import '../../../app/theme/app_typography.dart';
 import '../../../core/debug/debug_observer.dart';
 import '../../../core/utils/logger.dart';
 import '../data/agora_token_repository.dart';
+import '../domain/call_end_reason.dart';
 
 /// In-app Agora video room built on top of `agora_uikit`.
 ///
@@ -163,9 +164,13 @@ class AgoraCallView extends ConsumerStatefulWidget {
   final String callId;
   final String channelName;
 
-  /// Called when the user taps the disconnect button so the parent can
-  /// run end-of-call cleanup (Supabase status flip, navigation).
-  final VoidCallback onLeave;
+  /// Called when this view needs the parent (CallScreen) to end the
+  /// call. The [CallEndReason] tells the parent whether to route to
+  /// the romantic `PostCallScreen` (`isInterrupted == false`) or to
+  /// `CallInterruptedScreen`. The parent always wraps this in its
+  /// own `_endCall` so Supabase status flip + Agora teardown + post-
+  /// call navigation all run in the same idempotent path.
+  final void Function(CallEndReason reason) onLeave;
 
   /// Fires once with the controller as soon as the state mounts. The
   /// parent stores the reference and calls [AgoraCallController.stopEngine]
@@ -260,6 +265,16 @@ class _AgoraCallViewState extends ConsumerState<AgoraCallView> {
   /// Drives the banner text "Votre date semble déconnecté. Fin dans
   /// Ns…" — null when there is no countdown in progress.
   int? _remoteOfflineSecondsLeft;
+
+  /// Early-warning flag for the testers' "B ne voit pas immédiatement
+  /// ce qu'il se passe" complaint. Set as soon as Agora signals the
+  /// remote stream stopped on a peer-side cause (`remoteOffline`,
+  /// `internal`, or a definitive `failed` state), which fires
+  /// **before** the actual `onUserOffline` event that the server has
+  /// to wait ~10 s to emit. Surfaces the soft banner "Votre date
+  /// semble déconnecté" right away; the steady-state countdown then
+  /// takes over once `onUserOffline` lands.
+  bool _remoteStruggling = false;
 
   /// Fires if we stay in the `reconnecting` connection state past
   /// [_reconnectAbortGrace] — i.e. the local network is gone for good.
@@ -399,6 +414,11 @@ class _AgoraCallViewState extends ConsumerState<AgoraCallView> {
             });
             // Cancel any pending offline countdown — the peer is back.
             _cancelRemoteOfflineCountdown();
+            // Clear the early-warning flag too — the peer is back
+            // and Agora video state will follow with `decoding`.
+            if (_remoteStruggling) {
+              setState(() => _remoteStruggling = false);
+            }
             DebugLog.agora(isRejoin ? 'peer back' : 'peer joined'); // debug-observer
             _flashMessage(
               isRejoin
@@ -462,6 +482,36 @@ class _AgoraCallViewState extends ConsumerState<AgoraCallView> {
               'onRemoteVideoStateChanged — remoteUid=$remoteUid '
               'state=$state reason=$reason elapsed=${elapsed}ms',
             );
+            if (!mounted) return;
+            // Early-warning: as soon as Agora reports the peer stream
+            // stopped/failed because of a peer-side cause, surface
+            // the soft "Votre date semble déconnecté" banner. The
+            // real onUserOffline (and the 10 s countdown that
+            // follows) lands ~10 s later, but the user has feedback
+            // immediately.
+            final isDefiniteStop = state ==
+                    rtc.RemoteVideoState.remoteVideoStateStopped ||
+                state == rtc.RemoteVideoState.remoteVideoStateFailed;
+            final isPeerSide = reason ==
+                    rtc.RemoteVideoStateReason
+                        .remoteVideoStateReasonRemoteOffline ||
+                reason ==
+                    rtc.RemoteVideoStateReason
+                        .remoteVideoStateReasonInternal;
+            if (isDefiniteStop && isPeerSide && !_remoteStruggling) {
+              _log.info(
+                'remote video stopped (peer-side) — soft warning ON',
+              );
+              setState(() => _remoteStruggling = true);
+            }
+            // Stream alive again → clear the soft warning so the
+            // banner gets out of the way.
+            if (state ==
+                    rtc.RemoteVideoState.remoteVideoStateDecoding &&
+                _remoteStruggling) {
+              _log.info('remote video back to decoding — soft warning OFF');
+              setState(() => _remoteStruggling = false);
+            }
             if (state == rtc.RemoteVideoState.remoteVideoStateDecoding &&
                 !_shownVideoActive) {
               _shownVideoActive = true;
@@ -514,7 +564,7 @@ class _AgoraCallViewState extends ConsumerState<AgoraCallView> {
                   '(${_reconnectAbortGrace.inSeconds}s) — ending call',
                 );
                 DebugLog.agora('reconnect grace expired'); // debug-observer
-                widget.onLeave();
+                widget.onLeave(CallEndReason.networkLost);
               });
             }
             if (!reconnecting && _wasReconnecting) {
@@ -630,7 +680,7 @@ class _AgoraCallViewState extends ConsumerState<AgoraCallView> {
             'remote-offline countdown 0 — ending call (trigger=remote_timeout)',
           );
           DebugLog.agora('remote offline countdown 0 → ending'); // debug-observer
-          widget.onLeave();
+          widget.onLeave(CallEndReason.remoteTimeout);
           return;
         }
         setState(() => _remoteOfflineSecondsLeft = remaining);
@@ -812,6 +862,14 @@ class _AgoraCallViewState extends ConsumerState<AgoraCallView> {
         return 'Fin de l\'appel…';
       }
       return 'Votre date semble déconnecté. Fin dans ${offlineLeft}s…';
+    }
+    // 3.bis Early warning: Agora has reported the remote stream
+    //       stopped on a peer-side cause but the server has not yet
+    //       fired onUserOffline (typically a ~10 s gap on iOS).
+    //       Surface the soft message so the user has feedback
+    //       IMMEDIATELY instead of staring at a frozen frame.
+    if (_remoteStruggling) {
+      return 'Votre date semble déconnecté';
     }
     // 4. Initial join screen — ONLY while we are not yet in the
     //    channel AND no peer has ever been seen. Once `_hadRemote`
