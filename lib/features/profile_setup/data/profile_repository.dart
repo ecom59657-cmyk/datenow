@@ -34,6 +34,22 @@ abstract class ProfileRepository {
   /// removing the URL from the profile's `photoUrls` list.
   Future<void> deletePhoto(String url);
 
+  /// Forces a re-emission on `watchProfile` for [userId] WITHOUT tearing
+  /// the StreamProvider subscription down.
+  ///
+  /// Use this from a caller that mutated a dependent table (e.g.
+  /// `user_photos` via [deletePhoto] / Edge Function moderation) and
+  /// needs the profile stream to reflect the new state. The previous
+  /// approach — `ref.invalidate(currentProfileProvider)` — pushed the
+  /// StreamProvider through an `AsyncLoading` transient that cascaded
+  /// through `_RouterNotifier.refreshListenable` → `decideRedirect`
+  /// gate 4 (signedIn + profileLoading → splash) → gate 6 (on splash
+  /// + complete → home), bouncing the user out of `/profile/photos`
+  /// mid-delete (cf. app_router.dart:368-381). Going through this
+  /// repo-level refresh keeps the StreamProvider in `AsyncData` so
+  /// the router never sees a loading flicker.
+  Future<void> refreshProfile(String userId);
+
   /// Resolves the raw bytes for a photo identifier. Returns `null` when the
   /// identifier is unknown.
   Future<Uint8List?> getPhotoBytes(String url);
@@ -86,6 +102,12 @@ class MockProfileRepository implements ProfileRepository {
   }
 
   int _photoCounter = 0;
+
+  @override
+  Future<void> refreshProfile(String userId) async {
+    // Mock writes go through saveProfile which synchronously emits on
+    // the per-user broadcast — no separate refresh path needed.
+  }
 
   @override
   Future<String> uploadPhoto(String userId, Uint8List bytes) async {
@@ -310,9 +332,14 @@ class SupabaseProfileRepository implements ProfileRepository {
     _log.info('deletePhoto: $url');
     await _client.storage.from(_bucket).remove([url]);
     await _client.from('user_photos').delete().eq('storage_path', url);
-    // We don't know which user owns the row from `url` alone; the caller's
-    // saveProfile / watchProfile pair will refresh the relevant user.
+    // We don't know which user owns the row from `url` alone; the
+    // caller must invoke [refreshProfile] explicitly with their
+    // userId after a successful delete to re-emit the now-shorter
+    // profile on the `watchProfile` stream.
   }
+
+  @override
+  Future<void> refreshProfile(String userId) => _refresh(userId);
 
   @override
   Future<Uint8List?> getPhotoBytes(String url) async {

@@ -112,6 +112,12 @@ class _EditPhotosScreenState extends ConsumerState<EditPhotosScreen> {
       // date gate reads the fresh answer on the very next tap.
       ref.invalidate(hasApprovedPhotoProvider);
     }
+    // Re-fetch per-photo statuses so the grid overlay shows the
+    // verdict for this tile. Whatever the outcome (approved /
+    // rejected / manual_review / server-error keeping it pending),
+    // the grid must reflect it immediately — no stale "no overlay"
+    // on a photo that just got rejected.
+    ref.invalidate(myPhotoStatusesProvider);
   }
 
   Future<void> _deletePhoto(UserProfile profile, int index) async {
@@ -137,8 +143,21 @@ class _EditPhotosScreenState extends ConsumerState<EditPhotosScreen> {
     // a no-op for photoUrls anyway and re-UPSERTing the profile row
     // on every photo delete was wasteful.
     await repo.deletePhoto(removedUrl);
+    // Force a re-emission on `watchProfile` WITHOUT invalidating the
+    // StreamProvider — `ref.invalidate(currentProfileProvider)` would
+    // push the provider through AsyncLoading, which cascades through
+    // `_RouterNotifier.refreshListenable` to `decideRedirect` gate 4
+    // (signedIn + profileLoading → /splash) → gate 6 (on splash +
+    // complete → /home). That bounced the user out of /profile/photos
+    // mid-delete (build 36 bug). Going through the repo refresh
+    // keeps the provider in AsyncData so the router never sees a
+    // loading flicker — user stays on /profile/photos.
+    await repo.refreshProfile(profile.userId);
     if (!mounted) return;
-    ref.invalidate(currentProfileProvider);
+    // Bust the per-tile status cache too so a deleted photo never
+    // lingers as a stale "rejected" or "pending" badge for the row
+    // that does not exist anymore.
+    ref.invalidate(myPhotoStatusesProvider);
     setState(() => _busy = false);
   }
 
@@ -267,6 +286,12 @@ class _Grid extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final bytesAsync = ref.watch(profilePhotoBytesProvider);
+    // Per-tile moderation status. Empty map on error → tiles fall
+    // back to "no overlay" (= behave as approved). Invalidated on
+    // upload verdict + delete so the overlay reflects the latest DB
+    // state without ever flashing stale badges.
+    final statuses = ref.watch(myPhotoStatusesProvider).asData?.value ??
+        const <String, PhotoModerationStatus>{};
 
     final count = profile.photoUrls.length;
     final hasAddSlot = count < UserProfile.maxPhotos;
@@ -299,6 +324,7 @@ class _Grid extends ConsumerWidget {
             return PhotoTile.filled(
               bytes: b,
               onTap: () => onTapPhoto(i),
+              status: statuses[profile.photoUrls[i]],
             );
           },
         );

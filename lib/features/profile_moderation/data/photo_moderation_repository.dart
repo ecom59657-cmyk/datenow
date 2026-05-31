@@ -154,6 +154,40 @@ class PhotoModerationRepository {
     );
   }
 
+  /// Returns the moderation status of every `user_photos` row owned by
+  /// the caller, keyed by `storage_path`. Drives the per-tile overlay
+  /// on the `EditPhotosScreen` grid so a `rejected` photo shows
+  /// greyed-out with a "Photo refusée" badge while a `pending` /
+  /// `manual_review` one shows a discreet "En vérification…" badge.
+  ///
+  /// Implicitly scoped to `auth.uid()` via the
+  /// `user_photos_all_owner` RLS policy — the SELECT cannot leak
+  /// other users' statuses.
+  ///
+  /// Returns an empty map on any error (fail-soft) so the UI falls
+  /// back to "no overlay" (= approved) rather than crashing or
+  /// flashing red flags on every tile.
+  Future<Map<String, PhotoModerationStatus>> myPhotoStatuses() async {
+    try {
+      final rows = await _client
+          .from('user_photos')
+          .select('storage_path, status');
+      final map = <String, PhotoModerationStatus>{};
+      for (final raw in rows as List<dynamic>) {
+        final r = (raw as Map).cast<String, dynamic>();
+        final path = r['storage_path'] as String?;
+        if (path == null) continue;
+        map[path] =
+            PhotoModerationStatus.fromWire(r['status'] as String?);
+      }
+      _log.info('myPhotoStatuses → ${map.length} rows');
+      return map;
+    } catch (e, st) {
+      _log.warn('myPhotoStatuses failed (returning empty): $e\n$st');
+      return const <String, PhotoModerationStatus>{};
+    }
+  }
+
   /// Authoritative answer to "can this user launch a date right now,
   /// or must they upload a moderated photo first?".
   ///
@@ -188,4 +222,20 @@ final hasApprovedPhotoProvider = FutureProvider<bool>((ref) async {
   final repo = ref.watch(photoModerationRepositoryProvider);
   if (repo == null) return false;
   return repo.hasApprovedPhoto();
+});
+
+/// Per-photo moderation status map keyed by `storage_path`. Watched by
+/// the `EditPhotosScreen` grid so each `PhotoTile` can render its own
+/// overlay (greyscale + "Photo refusée" for rejected; discreet "En
+/// vérification…" for pending / manual_review). Empty map on error so
+/// the grid falls back to "no overlay" rather than failing.
+///
+/// Invalidate this provider after :
+///   * Edge Function returns a verdict (`_moderateAndSurface`)
+///   * a photo is deleted (`_deletePhoto`)
+final myPhotoStatusesProvider =
+    FutureProvider<Map<String, PhotoModerationStatus>>((ref) async {
+  final repo = ref.watch(photoModerationRepositoryProvider);
+  if (repo == null) return const <String, PhotoModerationStatus>{};
+  return repo.myPhotoStatuses();
 });
