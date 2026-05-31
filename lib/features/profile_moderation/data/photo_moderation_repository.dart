@@ -6,11 +6,22 @@ import '../../../core/utils/logger.dart';
 import '../domain/photo_moderation_status.dart';
 
 /// Verdict returned by the `analyze-profile-photo` Edge Function.
+///
+/// Two orthogonal axes :
+///   * [status] — what the server actually decided (`approved` /
+///     `rejected` / `manual_review`). Mirrors `user_photos.status`.
+///   * [serverError] — true when the Edge Function call FAILED
+///     before producing a real verdict (HTTP 4xx / 5xx, network
+///     timeout, malformed payload). The UI must use a different copy
+///     in that case so the user is not falsely told "Photo en cours
+///     de vérification" when the real problem is server-side.
 class PhotoModerationVerdict {
   const PhotoModerationVerdict({
     required this.status,
     required this.rejectReason,
     required this.userMessage,
+    this.serverError = false,
+    this.errorCode,
   });
 
   final PhotoModerationStatus status;
@@ -23,8 +34,25 @@ class PhotoModerationVerdict {
   /// Pre-localised, premium message ready to show in the UI:
   ///   * approved      → "Photo validée"
   ///   * rejected      → "Votre photo n'a pas pu être validée"
-  ///   * pending/manual_review → "Photo en cours de vérification"
+  ///   * manual_review → "Photo en cours de vérification"
+  ///   * server error  → "Erreur de vérification photo, réessaie
+  ///                       plus tard"
+  /// The previous behaviour conflated the manual_review and server-
+  /// error cases under the same "en cours" message, which silently
+  /// masked Vision / billing / trigger failures during TestFlight.
   final String userMessage;
+
+  /// True ONLY when the verdict was NOT produced by the server —
+  /// i.e. the Edge Function call failed (4xx / 5xx / unreachable /
+  /// malformed payload). When true the UI shows a retry-style
+  /// message; when false the verdict is the server's decision and
+  /// must be trusted as-is.
+  final bool serverError;
+
+  /// Short tag for analytics + Studio audit when [serverError] is
+  /// true. Examples : `function_401`, `function_502`,
+  /// `vision_unreachable`, `network_error`, `invalid_response`.
+  final String? errorCode;
 }
 
 /// Talks to the `analyze-profile-photo` Edge Function + the
@@ -58,19 +86,21 @@ class PhotoModerationRepository {
       final data = res.data;
       if (data is! Map) {
         _log.warn(
-          'analyze-profile-photo unexpected payload (status=${res.status}): $data',
+          'analyze-profile-photo unexpected payload '
+          '(status=${res.status}): $data',
         );
-        return const PhotoModerationVerdict(
-          status: PhotoModerationStatus.pending,
-          rejectReason: 'invalid_response',
-          userMessage: 'Photo en cours de vérification',
-        );
+        return _serverErrorVerdict('invalid_response');
       }
+      // 2xx + Map → the server produced a real verdict. Trust it.
+      // The Edge Function only ever returns `approved` / `rejected`
+      // / `manual_review` in this branch; the `pending` /
+      // `analyzing` transient states never appear in a 2xx body.
       final status = PhotoModerationStatus.fromWire(
         data['status'] as String?,
       );
       final reason = data['reject_reason'] as String?;
-      final msg = data['message'] as String? ?? 'Photo en cours de vérification';
+      final msg = data['message'] as String? ??
+          'Photo en cours de vérification';
       _log.info(
         'verdict status=${status.name} reason=${reason ?? '—'}',
       );
@@ -80,26 +110,48 @@ class PhotoModerationRepository {
         userMessage: msg,
       );
     } on FunctionException catch (e) {
-      // Edge Function returned a non-2xx — keep the photo in
-      // pending so a retry / cron can pick it up; UX keeps showing
-      // the soft "in progress" message.
+      // Edge Function returned a non-2xx. Surface the real outcome
+      // to the user — "Erreur de vérification photo, réessaie plus
+      // tard" — instead of pretending we are still in progress. The
+      // photo row stays at whatever the trigger / Edge Function
+      // already wrote (typically `pending` after the Edge Function's
+      // own rollback on Vision failure); a retry / cron / next user
+      // tap can re-invoke.
+      final code = 'function_${e.status}';
       _log.error(
         'analyze-profile-photo FunctionException status=${e.status} '
-        'reason=${e.reasonPhrase} details=${e.details}',
+        'reason=${e.reasonPhrase} details=${e.details} → $code',
       );
-      return const PhotoModerationVerdict(
-        status: PhotoModerationStatus.pending,
-        rejectReason: 'function_error',
-        userMessage: 'Photo en cours de vérification',
-      );
+      return _serverErrorVerdict(code);
     } catch (e, st) {
-      _log.error('analyze-profile-photo threw — keeping pending', e, st);
-      return const PhotoModerationVerdict(
-        status: PhotoModerationStatus.pending,
-        rejectReason: 'network_error',
-        userMessage: 'Photo en cours de vérification',
+      // Network blip, JSON parse failure, isolate cancellation… The
+      // call did not even reach the function or did not return a
+      // parseable response. Show the same retry message as a server
+      // 5xx — from the user's perspective the failure mode is
+      // identical.
+      _log.error(
+        'analyze-profile-photo threw — surfacing as server error',
+        e,
+        st,
       );
+      return _serverErrorVerdict('network_error');
     }
+  }
+
+  /// Builds the "the server side failed, ask the user to retry"
+  /// verdict shape. status stays `pending` because the photo row's
+  /// state at this point is genuinely unknown to us — but the
+  /// `serverError = true` flag tells callers to treat this as a
+  /// failure mode rather than a legitimate in-progress decision.
+  PhotoModerationVerdict _serverErrorVerdict(String code) {
+    return PhotoModerationVerdict(
+      status: PhotoModerationStatus.pending,
+      rejectReason: code,
+      userMessage:
+          'Erreur de vérification photo, réessaie plus tard',
+      serverError: true,
+      errorCode: code,
+    );
   }
 
   /// Authoritative answer to "can this user launch a date right now,
