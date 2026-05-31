@@ -118,10 +118,27 @@ class _EditPhotosScreenState extends ConsumerState<EditPhotosScreen> {
     setState(() => _busy = true);
     final repo = ref.read(profileRepositoryProvider);
     final removedUrl = profile.photoUrls[index];
-    final next = [...profile.photoUrls]..removeAt(index);
-    await repo.saveProfile(profile.copyWith(photoUrls: next));
+    // Order is critical here. `UserProfile.photoUrls` is NOT persisted
+    // by `saveProfile` — the field is derived at read time from the
+    // `user_photos` rows (cf. `SupabaseProfileRepository.getProfile`).
+    // The previous order (saveProfile -> deletePhoto) therefore did
+    // NOT remove anything from the source of truth on the first call :
+    // saveProfile triggered an internal _refresh which re-SELECTed
+    // user_photos with the row still present, the StreamProvider
+    // re-emitted the same profile, and the grid kept showing the
+    // photo. The user had to tap again to trigger a second cycle —
+    // by which time deletePhoto from the first tap had finally
+    // removed the row, so the second _refresh saw it gone. Hence
+    // the "deux clics pour supprimer" bug.
+    //
+    // Fix : DELETE first (storage + user_photos row), then bust the
+    // profile cache so watchProfile re-emits with the row gone in a
+    // single user gesture. The saveProfile call is dropped — it was
+    // a no-op for photoUrls anyway and re-UPSERTing the profile row
+    // on every photo delete was wasteful.
     await repo.deletePhoto(removedUrl);
     if (!mounted) return;
+    ref.invalidate(currentProfileProvider);
     setState(() => _busy = false);
   }
 
