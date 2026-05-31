@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/utils/age.dart';
 import '../../../../core/utils/logger.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../profile_moderation/data/photo_moderation_repository.dart';
 import '../../data/profile_repository.dart';
 import '../../domain/enums.dart';
 import '../../domain/interest.dart';
@@ -105,6 +106,22 @@ class ProfileSetupController extends StateNotifier<ProfileDraft> {
               .uploadPhoto(state.userId, state.photoBytes!)
               .timeout(_saveTimeout),
         );
+        // ── Photo moderation hook ────────────────────────────────
+        // Onboarding MUST use the exact same pipeline as
+        // `edit_photos_screen` — otherwise the newly inserted
+        // user_photos row would stay `status='pending'` forever and
+        // the find-date gate would refuse the user indefinitely.
+        // Fire-and-forget : the user proceeds with onboarding while
+        // analyze-profile-photo (Google Vision) decides; the gate
+        // will see the verdict the next time it asks
+        // `has_approved_photo()`. Failures inside the moderation
+        // repo are swallowed by the repo (falls back to a `pending`
+        // verdict) — so we never block onboarding completion on a
+        // Vision-side hiccup.
+        final moderation = _ref.read(photoModerationRepositoryProvider);
+        if (moderation != null) {
+          unawaited(moderation.analyzeByStoragePath(photoUrls.last));
+        }
       } catch (e, st) {
         // Photo failures are surfaced but non-fatal: the user can still
         // complete onboarding without a picture (it's optional anyway) so
