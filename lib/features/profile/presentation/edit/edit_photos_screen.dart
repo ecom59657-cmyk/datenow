@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -10,6 +11,8 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../core/utils/extensions.dart';
 import '../../../../l10n/app_localizations.dart';
 import '../../../../shared/widgets/app_scaffold.dart';
+import '../../../profile_moderation/data/photo_moderation_repository.dart';
+import '../../../profile_moderation/domain/photo_moderation_status.dart';
 import '../../../profile_setup/data/profile_repository.dart';
 import '../../../profile_setup/domain/user_profile.dart';
 import '../../../profile_setup/presentation/providers/profile_provider.dart';
@@ -62,6 +65,10 @@ class _EditPhotosScreenState extends ConsumerState<EditPhotosScreen> {
     await repo.saveProfile(
       profile.copyWith(photoUrls: [...profile.photoUrls, url]),
     );
+    // Fire-and-forget moderation pass. UI surfaces only the verdict
+    // — the SnackBar (and the hasApprovedPhoto provider invalidation)
+    // happen inside _moderateAndSurface.
+    unawaited(_moderateAndSurface(url));
     if (!mounted) return;
     setState(() => _busy = false);
   }
@@ -80,8 +87,31 @@ class _EditPhotosScreenState extends ConsumerState<EditPhotosScreen> {
     next[index] = newUrl;
     await repo.saveProfile(profile.copyWith(photoUrls: next));
     await repo.deletePhoto(oldUrl);
+    // Moderation on the new photo — old one was already approved by
+    // grandfather (or by a prior moderation pass) and gets deleted
+    // server-side. The new photo enters the pipeline.
+    unawaited(_moderateAndSurface(newUrl));
     if (!mounted) return;
     setState(() => _busy = false);
+  }
+
+  /// Calls the Edge Function `analyze-profile-photo` for the freshly
+  /// uploaded [storagePath] and surfaces a neutral SnackBar.
+  ///
+  /// On `approved`, also invalidates [hasApprovedPhotoProvider] so the
+  /// next find-date tap immediately sees the new green light.
+  Future<void> _moderateAndSurface(String storagePath) async {
+    final moderationRepo = ref.read(photoModerationRepositoryProvider);
+    if (moderationRepo == null) return;
+    final verdict =
+        await moderationRepo.analyzeByStoragePath(storagePath);
+    if (!mounted) return;
+    context.showSnack(verdict.userMessage);
+    if (verdict.status == PhotoModerationStatus.approved) {
+      // Bust the cached "do I have an approved photo?" so the find-
+      // date gate reads the fresh answer on the very next tap.
+      ref.invalidate(hasApprovedPhotoProvider);
+    }
   }
 
   Future<void> _deletePhoto(UserProfile profile, int index) async {

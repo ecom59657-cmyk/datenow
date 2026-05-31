@@ -12,6 +12,7 @@ import '../../../core/services/location_service.dart';
 import '../../../core/utils/display_name.dart';
 import '../../../core/utils/extensions.dart';
 import '../../../core/utils/logger.dart';
+import '../../profile_moderation/data/photo_moderation_repository.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../shared/widgets/app_button.dart';
 import '../../../shared/widgets/app_scaffold.dart';
@@ -203,54 +204,31 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     }
     _log.info('Profile complete for ${user.id}');
 
-    // 2.5. Photo guard — the reveal is the product payoff; no photo,
-    //      no point matching. Backed server-side too (claim_match raises
-    //      `photo_required`), so a tampered client can't bypass.
+    // 2.5. Approved-photo guard — the reveal is the product payoff,
+    //      and the V1 photo moderation pipeline requires at least one
+    //      `user_photos` row with status='approved' before the user
+    //      can show up to a peer. We bust the provider cache on each
+    //      tap so a freshly-moderated photo (added since the last
+    //      gate evaluation) is picked up immediately.
     //
-    //      We can't trust the cached `currentProfileProvider` value
-    //      alone: the user may have just uploaded a photo during the
-    //      onboarding steps and the stream snapshot we're reading is
-    //      pre-upload. Before blocking the live flow we force a fresh
-    //      fetch from `profiles` + `user_photos`. We only show the
-    //      "Ajoute une photo" sheet if the *server-truth* says no
-    //      photo exists.
-    if (profile.primaryPhotoUrl == null) {
-      _log.info(
-        'cache reports no primary photo — re-fetching profile from Supabase '
-        'before blocking the live flow',
+    //      Backed server-side by the `has_approved_photo()` RPC
+    //      (SECURITY DEFINER, scoped to `auth.uid()`) so a tampered
+    //      client cannot self-affirm by mutating local state. Fail-
+    //      closed on RPC error — better to ask for a photo than to
+    //      let a network blip open the live flow.
+    ref.invalidate(hasApprovedPhotoProvider);
+    final hasApproved =
+        await ref.read(hasApprovedPhotoProvider.future);
+    if (!hasApproved) {
+      _log.warn(
+        'No approved photo for ${user.id} — blocking find date '
+        '(cached photoUrls=${profile.photoUrls.length})',
       );
-      try {
-        final fresh = await ref
-            .read(profileRepositoryProvider)
-            .getProfile(user.id);
-        if (fresh?.primaryPhotoUrl != null) {
-          _log.info(
-            'fresh profile has primary photo — local cache was stale, '
-            'invalidating currentProfileProvider and continuing',
-          );
-          // Nudge the StreamProvider so any other consumer of
-          // currentProfileProvider sees the up-to-date value.
-          ref.invalidate(currentProfileProvider);
-        } else {
-          _log.warn(
-            'fresh profile still has no photo → blocking match '
-            '(server-truth: photoUrls=${fresh?.photoUrls.length ?? 0})',
-          );
-          if (!context.mounted) return;
-          await _showPhotoRequiredSheet(context);
-          return;
-        }
-      } catch (e, st) {
-        // If the refresh itself fails (network / transient), fall back
-        // to the cached truth: cached says no photo, block. This keeps
-        // the existing safety net intact when the refetch is unable to
-        // disprove the cache.
-        _log.error('photo refresh failed — falling back to cache', e, st);
-        if (!context.mounted) return;
-        await _showPhotoRequiredSheet(context);
-        return;
-      }
+      if (!context.mounted) return;
+      await _showPhotoRequiredSheet(context);
+      return;
     }
+    _log.info('Approved photo confirmed — gate cleared');
 
     // 3. Quota — wrapped: a broken quota backend should NOT block the
     //    button. We log and proceed in that case.
