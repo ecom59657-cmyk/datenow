@@ -185,27 +185,50 @@ class _AgoraCallViewState extends ConsumerState<AgoraCallView> {
   /// engine once `AgoraClient.initialize()` returns.
   final AgoraCallController _controller = AgoraCallController._internal();
 
-  /// How long the peer can be absent (no remote stream) mid-call before
-  /// we end gracefully. Generous enough to ride out a real reconnection,
-  /// short enough that a user is never left staring at an empty call.
-  static const _peerAbsentGrace = Duration(seconds: 45);
+  /// Hard cap on how long a "Votre date semble déconnecté" countdown
+  /// can run before the call is force-ended. Was 45 s — testers
+  /// reported the UX felt like an eternity, and the previous banner
+  /// chained "déconnecté → se reconnecte" without any actual
+  /// reconnection event. New rule: a strict, visible 10 s countdown
+  /// is the only signal a peer offline can produce.
+  static const _remoteOfflineGrace = Duration(seconds: 10);
 
-  /// How long we let our own Agora connection stay in the
-  /// `reconnecting` state before we give up and end the call. Without
-  /// this, a definitive network drop would freeze the UI on the
-  /// "Reconnexion en cours…" banner forever — the user has no way out
-  /// other than killing the app, which leaves the `calls` row hot for
-  /// the peer's full 30 s + 45 s grace stack.
-  static const _reconnectAbortGrace = Duration(seconds: 30);
+  /// Hard cap on how long OUR OWN Agora connection can stay in the
+  /// `reconnecting` state before we end the call. Was 30 s. The
+  /// engine itself only counts a few short attempts before giving up,
+  /// so 15 s is a comfortable upper bound while keeping the UI from
+  /// freezing on "Reconnexion en cours…" for half a minute.
+  static const _reconnectAbortGrace = Duration(seconds: 15);
 
   AgoraClient? _client;
   String? _error;
 
-  // Live state for the status banner. UIKit doesn't surface these to the
-  // outside so we track them here from the underlying engine events.
+  // ── Strict call-phase state machine ────────────────────────────
+  //
+  // The banner shown to the user is a pure function of these fields
+  // (see [_resolveBanner]). Each field is set by ONE Agora event —
+  // no derived flag lies about a state Agora did not actually
+  // announce.
+  //
+  //  _joined            true after the first onJoinChannelSuccess.
+  //                     Never flips back to false; the "Connexion au
+  //                     date vidéo…" banner only shows during the
+  //                     initial join (cf. _resolveBanner).
+  //  _hadRemote         latching — true once any peer joins. Drives
+  //                     the "En attente de votre date…" vs "no banner"
+  //                     decision.
+  //  _remoteUid         currently-rendered peer uid, or null when
+  //                     no peer is on the call.
+  //  _selfReconnecting  true ONLY when Agora explicitly emits
+  //                     `connectionStateReconnecting` for OUR client.
+  //                     Was previously named `_reconnecting`; the new
+  //                     name removes the ambiguity with peer-offline.
+  //  _remoteOfflineSecondsLeft  countdown value (10 → 0) shown when
+  //                     the remote went offline. Driven by the
+  //                     1-second ticker [_remoteOfflineCountdownTimer].
   bool _joined = false;
   int _remoteCount = 0;
-  bool _reconnecting = false;
+  bool _selfReconnecting = false;
 
   /// Tracked separately from [_remoteCount] because we render the
   /// REMOTE [AgoraVideoView] ourselves (hand-rolled fullscreen +
@@ -227,8 +250,16 @@ class _AgoraCallViewState extends ConsumerState<AgoraCallView> {
   String? _transientMessage;
   Timer? _transientTimer;
 
-  /// Fires if the peer stays absent past [_peerAbsentGrace].
-  Timer? _peerAbsentTimer;
+  /// 1-second ticker for the remote-offline countdown. Armed on
+  /// onUserOffline (when count drops to 0 and a remote had been
+  /// present), cancelled on onUserJoined of the same uid, decrements
+  /// [_remoteOfflineSecondsLeft] each tick, and fires
+  /// `widget.onLeave()` when the counter hits 0.
+  Timer? _remoteOfflineCountdownTimer;
+
+  /// Drives the banner text "Votre date semble déconnecté. Fin dans
+  /// Ns…" — null when there is no countdown in progress.
+  int? _remoteOfflineSecondsLeft;
 
   /// Fires if we stay in the `reconnecting` connection state past
   /// [_reconnectAbortGrace] — i.e. the local network is gone for good.
@@ -353,7 +384,11 @@ class _AgoraCallViewState extends ConsumerState<AgoraCallView> {
               'localUid=${sc.localUid}',
             );
             if (!mounted) return;
-            _peerAbsentTimer?.cancel();
+            // Differentiate "first peer ever" from "peer back after
+            // an offline countdown" so the flash message is honest —
+            // the brief explicitly asked for "Votre date revient…"
+            // on the rejoin path.
+            final isRejoin = _hadRemote && _remoteUid == null;
             setState(() {
               _remoteCount++;
               _hadRemote = true;
@@ -362,8 +397,14 @@ class _AgoraCallViewState extends ConsumerState<AgoraCallView> {
               // remotes — the most recent join is the one we render.
               _remoteUid = remoteUid;
             });
-            DebugLog.agora('peer joined'); // debug-observer
-            _flashMessage('Votre date a rejoint l\'appel');
+            // Cancel any pending offline countdown — the peer is back.
+            _cancelRemoteOfflineCountdown();
+            DebugLog.agora(isRejoin ? 'peer back' : 'peer joined'); // debug-observer
+            _flashMessage(
+              isRejoin
+                  ? 'Votre date revient…'
+                  : 'Votre date a rejoint l\'appel',
+            );
             _publishDebug();
           },
           onUserOffline: (connection, remoteUid, reason) {
@@ -376,17 +417,12 @@ class _AgoraCallViewState extends ConsumerState<AgoraCallView> {
               _remoteCount = (_remoteCount - 1).clamp(0, 99);
               if (remoteUid == _remoteUid) _remoteUid = null;
             });
-            // Peer gone: give them a grace window to reconnect before
-            // ending the call so a brief drop doesn't kill the date.
+            // Peer gone — start a strict, visible countdown. If they
+            // come back (onUserJoined) before it hits 0 it gets
+            // cancelled and the call continues. Otherwise we end
+            // cleanly via widget.onLeave().
             if (_remoteCount == 0 && _hadRemote) {
-              _flashMessage('Votre date s\'est déconnecté…');
-              _peerAbsentTimer?.cancel();
-              _peerAbsentTimer = Timer(_peerAbsentGrace, () {
-                if (mounted && _remoteCount == 0) {
-                  _log.info('Peer absent past grace — ending call');
-                  widget.onLeave();
-                }
-              });
+              _startRemoteOfflineCountdown();
             }
             _publishDebug();
           },
@@ -453,38 +489,43 @@ class _AgoraCallViewState extends ConsumerState<AgoraCallView> {
               'onConnectionStateChanged — state=$state reason=$reason',
             );
             if (!mounted) return;
+            // ONLY count a true Agora-emitted reconnecting/interrupted
+            // event. The banner "Reconnexion en cours…" must never
+            // fire on a derived guess — that was the build 32 bug
+            // where peer-offline + own-connection-OK still showed
+            // "se reconnecte".
             final reconnecting = state ==
                     rtc.ConnectionStateType.connectionStateReconnecting ||
                 reason ==
                     rtc.ConnectionChangedReasonType
                         .connectionChangedInterrupted;
-            // Count each fresh drop into a reconnecting state + arm
-            // the abort timer that gives up after [_reconnectAbortGrace].
             if (reconnecting && !_wasReconnecting) {
               _reconnectAttempts++;
-              _log.warn('Reconnecting — attempt #$_reconnectAttempts');
+              _log.warn(
+                'Self reconnecting — attempt #$_reconnectAttempts '
+                '(grace ${_reconnectAbortGrace.inSeconds}s)',
+              );
               DebugLog.agora('reconnect attempt #$_reconnectAttempts'); // debug-observer
               _reconnectAbortTimer?.cancel();
               _reconnectAbortTimer = Timer(_reconnectAbortGrace, () {
-                if (!mounted || !_reconnecting) return;
+                if (!mounted || !_selfReconnecting) return;
                 _log.warn(
-                  'Reconnect grace expired '
+                  'Self reconnect grace expired '
                   '(${_reconnectAbortGrace.inSeconds}s) — ending call',
                 );
                 DebugLog.agora('reconnect grace expired'); // debug-observer
                 widget.onLeave();
               });
             }
-            // Successful reconnect → drop the abort timer.
             if (!reconnecting && _wasReconnecting) {
               _log.info(
-                'Connection back from reconnecting — cancelling abort grace',
+                'Self reconnect successful — cancelling abort grace',
               );
               _reconnectAbortTimer?.cancel();
               _reconnectAbortTimer = null;
             }
             _wasReconnecting = reconnecting;
-            setState(() => _reconnecting = reconnecting);
+            setState(() => _selfReconnecting = reconnecting);
             _publishDebug();
           },
           onTokenPrivilegeWillExpire: (connection, token) {
@@ -554,15 +595,64 @@ class _AgoraCallViewState extends ConsumerState<AgoraCallView> {
         AgoraConnectionDebug(
       joined: _joined,
       remoteCount: _remoteCount,
-      reconnecting: _reconnecting,
+      reconnecting: _selfReconnecting,
       reconnectAttempts: _reconnectAttempts,
     );
+  }
+
+  /// Starts the 10-second visible countdown that the banner reads from.
+  /// Cancellable (via [_cancelRemoteOfflineCountdown]) up to the very
+  /// last tick — peer rejoining clears the countdown without ending
+  /// the call.
+  void _startRemoteOfflineCountdown() {
+    _remoteOfflineCountdownTimer?.cancel();
+    _log.info(
+      'remote-offline countdown START — '
+      '${_remoteOfflineGrace.inSeconds}s before auto-end',
+    );
+    DebugLog.agora('remote offline countdown 10s'); // debug-observer
+    setState(() {
+      _remoteOfflineSecondsLeft = _remoteOfflineGrace.inSeconds;
+    });
+    _remoteOfflineCountdownTimer = Timer.periodic(
+      const Duration(seconds: 1),
+      (timer) {
+        if (!mounted) {
+          timer.cancel();
+          return;
+        }
+        final remaining = (_remoteOfflineSecondsLeft ?? 0) - 1;
+        if (remaining <= 0) {
+          timer.cancel();
+          _remoteOfflineCountdownTimer = null;
+          setState(() => _remoteOfflineSecondsLeft = 0);
+          _log.info(
+            'remote-offline countdown 0 — ending call (trigger=remote_timeout)',
+          );
+          DebugLog.agora('remote offline countdown 0 → ending'); // debug-observer
+          widget.onLeave();
+          return;
+        }
+        setState(() => _remoteOfflineSecondsLeft = remaining);
+      },
+    );
+  }
+
+  /// Stops the countdown without ending the call — used when the peer
+  /// rejoins (onUserJoined) before the timer hits 0.
+  void _cancelRemoteOfflineCountdown() {
+    if (_remoteOfflineCountdownTimer == null) return;
+    _log.info('remote-offline countdown CANCEL — peer back');
+    DebugLog.agora('remote offline countdown cancelled'); // debug-observer
+    _remoteOfflineCountdownTimer?.cancel();
+    _remoteOfflineCountdownTimer = null;
+    setState(() => _remoteOfflineSecondsLeft = null);
   }
 
   @override
   void dispose() {
     _transientTimer?.cancel();
-    _peerAbsentTimer?.cancel();
+    _remoteOfflineCountdownTimer?.cancel();
     _reconnectAbortTimer?.cancel();
     ref.read(agoraConnectionDebugProvider.notifier).state =
         AgoraConnectionDebug.none;
@@ -702,14 +792,36 @@ class _AgoraCallViewState extends ConsumerState<AgoraCallView> {
   /// A transient message (peer joined, mic/cam on) wins over the steady
   /// lifecycle banners so the most recent event is always visible.
   String? _resolveBanner() {
+    // Strict precedence — derived from explicit Agora events only.
+    // No banner is ever shown for a state Agora did not announce.
+    //
+    // 1. Short-lived flash (peer joined / mic active / cam active)
+    //    wins so the most recent event is always visible.
     if (_transientMessage != null) return _transientMessage;
-    if (_reconnecting) return 'Reconnexion en cours…';
-    if (!_joined) return 'Connexion au date vidéo…';
-    if (_remoteCount == 0) {
-      return _hadRemote
-          ? 'Votre date se reconnecte…'
-          : 'En attente de votre date…';
+    // 2. OUR OWN connection is reconnecting — Agora has explicitly
+    //    emitted `connectionStateReconnecting`. Distinct from
+    //    "peer offline".
+    if (_selfReconnecting) return 'Reconnexion en cours…';
+    // 3. Peer went offline and the 10 s countdown is in progress.
+    //    The banner counts down each second so the user knows
+    //    exactly when the call will end. No misleading "se reconnecte"
+    //    message — peer offline is peer offline.
+    final offlineLeft = _remoteOfflineSecondsLeft;
+    if (offlineLeft != null) {
+      if (offlineLeft <= 0) {
+        return 'Fin de l\'appel…';
+      }
+      return 'Votre date semble déconnecté. Fin dans ${offlineLeft}s…';
     }
+    // 4. Initial join screen — ONLY while we are not yet in the
+    //    channel AND no peer has ever been seen. Once `_hadRemote`
+    //    latches true the call is officially "started" and this
+    //    banner is forbidden (was a reported build 32 bug: the
+    //    banner re-appeared after a remote drop).
+    if (!_joined && !_hadRemote) return 'Connexion au date vidéo…';
+    // 5. We are in the channel but the peer has not joined yet.
+    if (!_hadRemote) return 'En attente de votre date…';
+    // 6. Happy path — joined, peer present, no countdown. No banner.
     return null;
   }
 }
