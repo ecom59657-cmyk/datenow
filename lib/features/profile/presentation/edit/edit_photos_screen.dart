@@ -9,6 +9,7 @@ import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/utils/extensions.dart';
+import '../../../../core/utils/logger.dart';
 import '../../../../l10n/app_localizations.dart';
 import '../../../../shared/widgets/app_scaffold.dart';
 import '../../../profile_moderation/data/photo_moderation_repository.dart';
@@ -30,15 +31,31 @@ class EditPhotosScreen extends ConsumerStatefulWidget {
 }
 
 class _EditPhotosScreenState extends ConsumerState<EditPhotosScreen> {
+  static const _log = AppLogger('EditPhotos');
+
   final _picker = ImagePicker();
-  bool _busy = false;
+
+  /// Tinder/Hinge-style optimistic queue. Every photo the user picks
+  /// is added here IMMEDIATELY (before the storage upload even starts)
+  /// so the grid shows a tile with a spinner overlay in < 200 ms
+  /// instead of waiting 2–4 s for the upload + DB chain.
+  ///
+  /// Entries are keyed by a monotonic counter so the upload completion
+  /// removes the exact one it owns (multiple parallel uploads are
+  /// supported — the user can add several photos rapidly).
+  final List<_OptimisticPhoto> _pending = [];
+  int _pendingCounter = 0;
 
   Future<Uint8List?> _pickBytes() async {
     try {
       final picked = await _picker.pickImage(
         source: ImageSource.gallery,
-        maxWidth: 1600,
-        imageQuality: 88,
+        // 1280px wide is enough for any iPhone display + the post-call
+        // reveal full-bleed view; the 1600px upper bound shipped ~2x the
+        // bytes of useful pixels. Quality 82 is visually identical to 88
+        // on JPEG selfies but saves ~20% size.
+        maxWidth: 1280,
+        imageQuality: 82,
       );
       if (picked == null) return null;
       return picked.readAsBytes();
@@ -49,37 +66,59 @@ class _EditPhotosScreenState extends ConsumerState<EditPhotosScreen> {
   }
 
   Future<void> _addPhoto(UserProfile profile) async {
-    if (profile.photoUrls.length >= UserProfile.maxPhotos) {
+    // Cap counts real + pending so a user spamming the add button can
+    // not queue more than maxPhotos optimistic tiles.
+    if (profile.photoUrls.length + _pending.length >=
+        UserProfile.maxPhotos) {
       final l10n = AppLocalizations.of(context);
       context.showSnack(l10n.photosMaxReached(UserProfile.maxPhotos));
       return;
     }
-    setState(() => _busy = true);
     final bytes = await _pickBytes();
-    if (bytes == null) {
-      setState(() => _busy = false);
-      return;
+    if (bytes == null) return;
+
+    // ── Optimistic insert (< 200 ms after pick) ───────────────────
+    // Show the tile immediately with a spinner overlay. Upload +
+    // moderation happen asynchronously; the UI never blocks and the
+    // add button stays enabled so the user can queue another photo.
+    final key = ++_pendingCounter;
+    setState(() {
+      _pending.add(_OptimisticPhoto(key: key, bytes: bytes));
+    });
+
+    try {
+      final repo = ref.read(profileRepositoryProvider);
+      final url = await repo.uploadPhoto(profile.userId, bytes);
+      await repo.saveProfile(
+        profile.copyWith(photoUrls: [...profile.photoUrls, url]),
+      );
+      // Real tile is now in profile.photoUrls — the StreamProvider
+      // emission already pushed it via _refresh inside saveProfile.
+      // Remove the optimistic ; in the same frame the real tile
+      // replaces it (status will be `pending` until the Edge Function
+      // returns, so the overlay shifts seamlessly from "Analyse…" to
+      // "En vérification…" without a blank gap).
+      if (!mounted) return;
+      setState(() => _pending.removeWhere((p) => p.key == key));
+      // Trigger moderation (also invalidates myPhotoStatusesProvider
+      // so the new tile's overlay reflects the verdict on the next
+      // frame after Vision returns).
+      unawaited(_moderateAndSurface(url));
+    } catch (e, st) {
+      _log.error(
+        'upload failed for optimistic key=$key — rolling back',
+        e,
+        st,
+      );
+      if (!mounted) return;
+      setState(() => _pending.removeWhere((p) => p.key == key));
+      context.showSnack('Échec upload, réessaie');
     }
-    final repo = ref.read(profileRepositoryProvider);
-    final url = await repo.uploadPhoto(profile.userId, bytes);
-    await repo.saveProfile(
-      profile.copyWith(photoUrls: [...profile.photoUrls, url]),
-    );
-    // Fire-and-forget moderation pass. UI surfaces only the verdict
-    // — the SnackBar (and the hasApprovedPhoto provider invalidation)
-    // happen inside _moderateAndSurface.
-    unawaited(_moderateAndSurface(url));
-    if (!mounted) return;
-    setState(() => _busy = false);
   }
 
   Future<void> _replacePhoto(UserProfile profile, int index) async {
-    setState(() => _busy = true);
     final bytes = await _pickBytes();
-    if (bytes == null) {
-      setState(() => _busy = false);
-      return;
-    }
+    if (bytes == null) return;
     final repo = ref.read(profileRepositoryProvider);
     final newUrl = await repo.uploadPhoto(profile.userId, bytes);
     final oldUrl = profile.photoUrls[index];
@@ -91,8 +130,6 @@ class _EditPhotosScreenState extends ConsumerState<EditPhotosScreen> {
     // grandfather (or by a prior moderation pass) and gets deleted
     // server-side. The new photo enters the pipeline.
     unawaited(_moderateAndSurface(newUrl));
-    if (!mounted) return;
-    setState(() => _busy = false);
   }
 
   /// Calls the Edge Function `analyze-profile-photo` for the freshly
@@ -121,7 +158,6 @@ class _EditPhotosScreenState extends ConsumerState<EditPhotosScreen> {
   }
 
   Future<void> _deletePhoto(UserProfile profile, int index) async {
-    setState(() => _busy = true);
     final repo = ref.read(profileRepositoryProvider);
     final removedUrl = profile.photoUrls[index];
     // Order is critical here. `UserProfile.photoUrls` is NOT persisted
@@ -158,7 +194,6 @@ class _EditPhotosScreenState extends ConsumerState<EditPhotosScreen> {
     // lingers as a stale "rejected" or "pending" badge for the row
     // that does not exist anymore.
     ref.invalidate(myPhotoStatusesProvider);
-    setState(() => _busy = false);
   }
 
   Future<void> _openMenu(UserProfile profile, int index) async {
@@ -246,7 +281,7 @@ class _EditPhotosScreenState extends ConsumerState<EditPhotosScreen> {
               const SizedBox(height: AppSpacing.md),
               _Grid(
                 profile: profile,
-                busy: _busy,
+                pending: _pending,
                 onAdd: () => _addPhoto(profile),
                 onTapPhoto: (i) => _openMenu(profile, i),
               ),
@@ -270,16 +305,30 @@ class _EditPhotosScreenState extends ConsumerState<EditPhotosScreen> {
 
 enum _PhotoAction { replace, delete }
 
+/// One in-flight optimistic photo : the bytes the user just picked,
+/// rendered locally BEFORE the storage upload completes. Replaced by
+/// the real DB-backed tile once `repo.saveProfile` returns and
+/// `currentProfileProvider` re-emits the profile with the new URL in
+/// `photoUrls`.
+class _OptimisticPhoto {
+  const _OptimisticPhoto({required this.key, required this.bytes});
+
+  /// Monotonic key so a parallel upload (user spammed the add button)
+  /// can remove its own entry without confusing the order.
+  final int key;
+  final Uint8List bytes;
+}
+
 class _Grid extends ConsumerWidget {
   const _Grid({
     required this.profile,
-    required this.busy,
+    required this.pending,
     required this.onAdd,
     required this.onTapPhoto,
   });
 
   final UserProfile profile;
-  final bool busy;
+  final List<_OptimisticPhoto> pending;
   final VoidCallback onAdd;
   final ValueChanged<int> onTapPhoto;
 
@@ -293,9 +342,20 @@ class _Grid extends ConsumerWidget {
     final statuses = ref.watch(myPhotoStatusesProvider).asData?.value ??
         const <String, PhotoModerationStatus>{};
 
-    final count = profile.photoUrls.length;
-    final hasAddSlot = count < UserProfile.maxPhotos;
-    final total = count + (hasAddSlot ? 1 : 0);
+    final realCount = profile.photoUrls.length;
+    final pendingCount = pending.length;
+    // Optimistic tiles count toward the maxPhotos cap so the add slot
+    // disappears as soon as the user reaches the limit, even while
+    // uploads are still in flight.
+    final hasAddSlot =
+        (realCount + pendingCount) < UserProfile.maxPhotos;
+    // Slot order in the grid : real tiles first, then optimistic
+    // tiles in-flight, then the add slot if any. This matches how
+    // Tinder / Hinge lay out their photo grids (recently-added stays
+    // at the end, no shuffle), and means a real tile that materialises
+    // takes the next slot in profile.photoUrls — no reflow of the
+    // already-laid-out tiles.
+    final total = realCount + pendingCount + (hasAddSlot ? 1 : 0);
 
     return GridView.builder(
       shrinkWrap: true,
@@ -307,12 +367,22 @@ class _Grid extends ConsumerWidget {
         mainAxisSpacing: 10,
       ),
       itemBuilder: (context, i) {
-        if (i == count) {
+        // 3. Add slot (last when present).
+        if (hasAddSlot && i == realCount + pendingCount) {
           return PhotoTile.add(
-            onTap: busy ? () {} : onAdd,
+            onTap: onAdd,
             label: AppLocalizations.of(context).photosAddCta,
           );
         }
+        // 2. Optimistic tiles (rendered before the upload completes).
+        if (i >= realCount) {
+          final p = pending[i - realCount];
+          return PhotoTile.optimistic(
+            key: ValueKey('optimistic-${p.key}'),
+            bytes: p.bytes,
+          );
+        }
+        // 1. Real DB-backed tiles.
         return bytesAsync.when(
           loading: () => const PhotoTile.loading(),
           error: (_, _) => PhotoTile.add(onTap: () => onTapPhoto(i)),

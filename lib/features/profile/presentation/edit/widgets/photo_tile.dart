@@ -26,7 +26,8 @@ class PhotoTile extends StatelessWidget {
   const PhotoTile.add({super.key, required this.onTap, this.label})
       : bytes = null,
         loading = false,
-        status = null;
+        status = null,
+        _isUploading = false;
 
   const PhotoTile.filled({
     super.key,
@@ -34,14 +35,31 @@ class PhotoTile extends StatelessWidget {
     required this.onTap,
     this.status,
   })  : label = null,
-        loading = false;
+        loading = false,
+        _isUploading = false;
 
   const PhotoTile.loading({super.key})
       : bytes = null,
         onTap = null,
         label = null,
         loading = true,
-        status = null;
+        status = null,
+        _isUploading = false;
+
+  /// Tinder/Hinge-style optimistic tile : rendered the instant the
+  /// user picks a photo (typically <200 ms after pick), BEFORE the
+  /// upload + insert + Edge Function chain has finished. Reuses the
+  /// picked bytes locally so no storage round-trip is on the critical
+  /// rendering path. Visually : full-colour image with a subtle dark
+  /// wash, a centered spinner, and an "Analyse…" badge at the bottom.
+  /// The menu trigger is intentionally hidden — a half-uploaded photo
+  /// cannot be deleted or replaced.
+  const PhotoTile.optimistic({super.key, required Uint8List this.bytes})
+      : onTap = null,
+        label = null,
+        loading = false,
+        status = null,
+        _isUploading = true;
 
   final Uint8List? bytes;
   final VoidCallback? onTap;
@@ -54,6 +72,10 @@ class PhotoTile extends StatelessWidget {
   /// them to `approved`, but the UI must not crash if the status
   /// fetch failed and we got `null`).
   final PhotoModerationStatus? status;
+
+  /// True for the .optimistic ctor. Drives the upload-time visuals
+  /// (centered spinner + "Analyse…" badge + hidden menu trigger).
+  final bool _isUploading;
 
   bool get _isAdd => bytes == null && !loading;
 
@@ -117,20 +139,24 @@ class PhotoTile extends StatelessWidget {
               _imageWithStatusOverlay(),
               // Menu trigger stays on top of any overlay so the user
               // can always tap it (re-upload via "Replace", or delete).
-              Positioned(
-                top: 6,
-                right: 6,
-                child: Container(
-                  width: 28,
-                  height: 28,
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.55),
-                    shape: BoxShape.circle,
+              // Hidden for optimistic tiles — a half-uploaded photo
+              // has no row in user_photos yet, so delete / replace
+              // would refer to nothing.
+              if (!_isUploading)
+                Positioned(
+                  top: 6,
+                  right: 6,
+                  child: Container(
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.55),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.more_horiz_rounded,
+                        size: 18, color: Colors.white),
                   ),
-                  child: const Icon(Icons.more_horiz_rounded,
-                      size: 18, color: Colors.white),
                 ),
-              ),
               // Status badge floats at the bottom, OVER any overlay
               // wash, never under the menu trigger.
               if (_statusBadge() != null)
@@ -148,6 +174,10 @@ class PhotoTile extends StatelessWidget {
   }
 
   /// Renders the image with the right colour treatment :
+  ///   * optimistic (uploading)               → subtle dark wash + centred
+  ///                                              white spinner so the
+  ///                                              user instantly sees the
+  ///                                              tile is in flight
   ///   * normal (approved / null)              → straight Image.memory
   ///   * pending / analyzing / manual_review   → straight Image.memory
   ///                                              (no greyscale — user
@@ -155,6 +185,30 @@ class PhotoTile extends StatelessWidget {
   ///   * rejected                              → greyscale + dark wash
   Widget _imageWithStatusOverlay() {
     final img = Image.memory(bytes!, fit: BoxFit.cover);
+    if (_isUploading) {
+      return Stack(fit: StackFit.expand, children: [
+        ColorFiltered(
+          // Slight darken so the white spinner reads against light
+          // photos. Does NOT use BlendMode.saturation so the user
+          // still recognises the photo they just picked.
+          colorFilter: ColorFilter.mode(
+            Colors.black.withValues(alpha: 0.30),
+            BlendMode.darken,
+          ),
+          child: img,
+        ),
+        const Center(
+          child: SizedBox(
+            width: 28,
+            height: 28,
+            child: CircularProgressIndicator(
+              strokeWidth: 2.5,
+              valueColor: AlwaysStoppedAnimation(Colors.white),
+            ),
+          ),
+        ),
+      ]);
+    }
     if (status == PhotoModerationStatus.rejected) {
       return Stack(fit: StackFit.expand, children: [
         ColorFiltered(
@@ -178,6 +232,16 @@ class PhotoTile extends StatelessWidget {
   /// The status badge widget for the current [status], or `null` when
   /// no badge should render (approved or unknown).
   Widget? _statusBadge() {
+    // Optimistic upload — wording matches the brief ("Analyse…"),
+    // distinct from the server-side "En vérification…" so the user
+    // can intuit the flow : upload first, then server check.
+    if (_isUploading) {
+      return _StatusBadge(
+        label: 'Analyse…',
+        background: Colors.black.withValues(alpha: 0.65),
+        icon: Icons.cloud_upload_rounded,
+      );
+    }
     switch (status) {
       case null:
       case PhotoModerationStatus.approved:
