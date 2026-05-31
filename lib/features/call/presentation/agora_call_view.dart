@@ -199,6 +199,14 @@ class _AgoraCallViewState extends ConsumerState<AgoraCallView> {
   int _remoteCount = 0;
   bool _reconnecting = false;
 
+  /// Tracked separately from [_remoteCount] because we render the
+  /// REMOTE [AgoraVideoView] ourselves (hand-rolled fullscreen +
+  /// top-right PIP) instead of going through `AgoraVideoViewer` /
+  /// `OneToOneLayout`. The UIKit layouts hard-code their own PIP
+  /// position which collided with this app's HUD chrome — see
+  /// build() for the rationale.
+  int? _remoteUid;
+
   /// True once at least one remote has ever joined — distinguishes
   /// "still waiting for the date" from "the date dropped".
   bool _hadRemote = false;
@@ -334,6 +342,10 @@ class _AgoraCallViewState extends ConsumerState<AgoraCallView> {
             setState(() {
               _remoteCount++;
               _hadRemote = true;
+              // Promote this uid to the fullscreen feed. 1:1 by
+              // construction so we never need to pick between several
+              // remotes — the most recent join is the one we render.
+              _remoteUid = remoteUid;
             });
             DebugLog.agora('peer joined'); // debug-observer
             _flashMessage('Votre date a rejoint l\'appel');
@@ -345,8 +357,10 @@ class _AgoraCallViewState extends ConsumerState<AgoraCallView> {
             );
             if (!mounted) return;
             DebugLog.agora('peer left'); // debug-observer
-            setState(() =>
-                _remoteCount = (_remoteCount - 1).clamp(0, 99));
+            setState(() {
+              _remoteCount = (_remoteCount - 1).clamp(0, 99);
+              if (remoteUid == _remoteUid) _remoteUid = null;
+            });
             // Peer gone: give them a grace window to reconnect before
             // ending the call so a brief drop doesn't kill the date.
             if (_remoteCount == 0 && _hadRemote) {
@@ -525,38 +539,38 @@ class _AgoraCallViewState extends ConsumerState<AgoraCallView> {
     }
     final banner = _resolveBanner();
 
+    // Premium FaceTime-style layer order (bottom → top):
+    //
+    //   0. Fullscreen video — REMOTE if a peer is online, otherwise
+    //      LOCAL self as the waiting placeholder. Hand-rolled with
+    //      AgoraVideoView + VideoViewController so the PIP geometry
+    //      below is ours, not agora_uikit's hard-coded
+    //      `Alignment.topRight + EdgeInsets.only(top: 8)` that
+    //      collided with CallScreen's top HUD.
+    //   1. Mystery blur — sigma-15 BackdropFilter over the fullscreen
+    //      video, never the PIP. The product concept (peer blurred
+    //      until post-call reveal) is preserved. The LOCAL PIP sits
+    //      ABOVE this layer so the user sees themselves sharply — the
+    //      FaceTime / Tinder Live UX (hair check, framing) without
+    //      compromising the reveal moment.
+    //   2. Local PIP — top-right, safe-area aware (top = padding +
+    //      ~60 dp = clears CallScreen's HUD pills with breathing
+    //      room), rounded corners + soft shadow, switch-camera icon
+    //      tucked into its own bottom-right. Only mounted once a
+    //      remote is present (otherwise local is already fullscreen).
+    //   3. Status banner — transient top-center pill (e.g. "Caméra
+    //      active"). Wins on top so the most recent event is the
+    //      most visible.
+    //   4. Blur caption — the permanent "Caméra floutée jusqu'à la
+    //      fin du date" tag near the bottom. Mounted last so it
+    //      never gets eaten by the blur on the layer below.
+    final remoteUid = _remoteUid;
     return Stack(
       children: [
-        // 1:1 video layout — the dating room has exactly two
-        // participants (caller + callee). `Layout.oneToOne` puts the
-        // REMOTE peer in fullscreen and the LOCAL self in a small
-        // rounded top-right PIP (~20%h × 33%w, see
-        // `agora_uikit/.../one_to_one_layout.dart:78-152`), which is the
-        // correct semantics for a date.
-        //
-        // Was `Layout.floating` — that variant always promoted the
-        // FIRST joiner (us) to fullscreen and pushed every subsequent
-        // user into a 20%-of-screen-height scrollable PIP strip
-        // anchored at the TOP of the screen. Combined with this
-        // file's `BackdropFilter` (sigma-15 blur over the whole
-        // viewer) and the parent CallScreen's top chrome (timer pill
-        // + EN DIRECT pill sitting in the same vertical band), the
-        // remote PIP became completely indistinguishable from a
-        // blurred glyph at the very top — the symptom users reported
-        // was "I only see my own (blurred) camera, no peer".
-        AgoraVideoViewer(
-          client: c,
-          layoutType: Layout.oneToOne,
-          showAVState: false,
-          showNumberOfUsers: false,
-          enableHostControls: false,
-        ),
+        // 0. Fullscreen video.
+        Positioned.fill(child: _buildFullscreenVideo(c, remoteUid)),
 
-        // Mystery blur — the heart of the DateNow product. A sigma-15
-        // BackdropFilter sits over the entire video for the whole call.
-        // There is intentionally NO in-call toggle: the blur lifts only
-        // at the post-call reveal. Placed below the controls so the
-        // mute / camera / end buttons stay sharp and tappable.
+        // 1. Mystery blur — covers ONLY the fullscreen video layer.
         Positioned.fill(
           child: ClipRect(
             child: BackdropFilter(
@@ -566,14 +580,15 @@ class _AgoraCallViewState extends ConsumerState<AgoraCallView> {
           ),
         ),
 
-        // NOTE: `agora_uikit`'s `AgoraVideoButtons` are intentionally
-        // NOT mounted here. They render a large default chrome at the
-        // bottom-center that fights with CallScreen's own footer and
-        // hides tappable areas on iPhone. CallScreen draws its own
-        // compact button row driven by [AgoraCallController].
+        // 2. Local PIP (only when a remote is on the call — otherwise
+        //    the local is already fullscreen as the waiting view).
+        if (remoteUid != null)
+          _LocalPip(
+            engine: c.sessionController.value.engine!,
+            onSwitchCamera: () => _controller.switchCamera(),
+          ),
 
-        // Permanent caption so the blur reads as a deliberate feature,
-        // not a broken stream.
+        // 3. Permanent caption that frames the blur as deliberate UX.
         const Positioned(
           bottom: 130,
           left: 0,
@@ -581,16 +596,56 @@ class _AgoraCallViewState extends ConsumerState<AgoraCallView> {
           child: Center(child: _BlurCaption()),
         ),
 
+        // 4. Transient status banner (peer joined, mic active, …).
         if (banner != null)
           Positioned(
-            top: 100,
+            top: MediaQuery.of(context).padding.top + 70,
             left: 0,
             right: 0,
-            child: Center(
-              child: _StatusBanner(text: banner),
-            ),
+            child: Center(child: _StatusBanner(text: banner)),
           ),
+
+        // NOTE: agora_uikit's `AgoraVideoButtons` are intentionally NOT
+        // mounted here. CallScreen draws its own compact button row
+        // driven by [AgoraCallController] so the chrome stays inside a
+        // single Stack and the tap targets don't fight.
       ],
+    );
+  }
+
+  /// The bottom-most video layer. Renders the REMOTE peer fullscreen
+  /// when one is online, otherwise the LOCAL self so the user is not
+  /// staring at a black hole while the peer connects. Both branches
+  /// use the underlying `agora_rtc_engine` 6.x VideoViewController API
+  /// directly — see the build() rationale for why we sidestepped
+  /// `AgoraVideoViewer` / `OneToOneLayout`.
+  Widget _buildFullscreenVideo(AgoraClient client, int? remoteUid) {
+    final engine = client.sessionController.value.engine;
+    if (engine == null) {
+      return Container(color: AppColors.background);
+    }
+    if (remoteUid != null) {
+      return rtc.AgoraVideoView(
+        controller: rtc.VideoViewController.remote(
+          rtcEngine: engine,
+          // `renderModeHidden` = cover (crop excess) — the standard
+          // for fullscreen video so we never get black letterbox bars.
+          canvas: rtc.VideoCanvas(
+            uid: remoteUid,
+            renderMode: rtc.RenderModeType.renderModeHidden,
+          ),
+          connection: rtc.RtcConnection(channelId: widget.channelName),
+        ),
+      );
+    }
+    return rtc.AgoraVideoView(
+      controller: rtc.VideoViewController(
+        rtcEngine: engine,
+        canvas: const rtc.VideoCanvas(
+          uid: 0,
+          renderMode: rtc.RenderModeType.renderModeHidden,
+        ),
+      ),
     );
   }
 
@@ -609,6 +664,134 @@ class _AgoraCallViewState extends ConsumerState<AgoraCallView> {
           : 'En attente de votre date…';
     }
     return null;
+  }
+}
+
+/// Premium top-right PIP showing the LOCAL self camera.
+///
+/// Geometry rationale :
+///
+/// * `top = MediaQuery.padding.top + 60` — `padding.top` is the device
+///   safe area (notch / Dynamic Island / status bar), and 60 dp leaves
+///   the CallScreen's HUD pills (~34 dp tall + 12 dp top padding) with
+///   ~14 dp of breathing room. Verified across iPhone SE (safeTop=20),
+///   iPhone 15 (47), iPhone 15 Pro Max (59) — the PIP always clears
+///   the HUD.
+/// * `right = 16` — matches the bottom control bar's horizontal margin
+///   so the right edges line up vertically on tall devices.
+/// * `96 × 152` — close to FaceTime's PIP proportions (portrait 0.63
+///   ratio). Slightly under the 110 dp wide / 180 dp tall upper bound
+///   in the brief so it never crowds even iPhone SE width (320 dp).
+/// * `BorderRadius.circular(22)` — matches iOS continuous-corner feel.
+/// * Soft shadow `(blur 24, offset y=8, black α=0.35)` — lifts the PIP
+///   off the blurred remote without a hard line.
+///
+/// Sits **above** the BackdropFilter in build()'s Stack, so the user
+/// sees themselves *sharply* even though the remote is blurred — that's
+/// the FaceTime / Tinder Live aesthetic and crucially preserves the
+/// DateNow "reveal at post-call" concept (it's the PEER that stays
+/// hidden, not the self).
+///
+/// The switch-camera affordance lives inside the PIP at its
+/// bottom-right corner — a one-tap shortcut to flip front/rear without
+/// reaching down to the bottom control bar. The same callback is also
+/// wired on the bottom row, so both gestures work.
+class _LocalPip extends StatelessWidget {
+  const _LocalPip({
+    required this.engine,
+    required this.onSwitchCamera,
+  });
+
+  final rtc.RtcEngine engine;
+  final VoidCallback onSwitchCamera;
+
+  static const double _width = 96;
+  static const double _height = 152;
+  static const double _radius = 22;
+  static const double _rightInset = 16;
+  static const double _topOffsetBelowHud = 60;
+
+  @override
+  Widget build(BuildContext context) {
+    final safeTop = MediaQuery.of(context).padding.top;
+    return Positioned(
+      top: safeTop + _topOffsetBelowHud,
+      right: _rightInset,
+      child: SizedBox(
+        width: _width,
+        height: _height,
+        child: Stack(
+          children: [
+            // Drop shadow lives on the OUTER container; the inner
+            // ClipRRect can then clip the AgoraVideoView cleanly
+            // without leaking the shadow through the rounded corners.
+            DecoratedBox(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(_radius),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.35),
+                    blurRadius: 24,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(_radius),
+                child: SizedBox.expand(
+                  child: rtc.AgoraVideoView(
+                    controller: rtc.VideoViewController(
+                      rtcEngine: engine,
+                      canvas: const rtc.VideoCanvas(
+                        uid: 0,
+                        // Cover (crop excess) so the self view fills
+                        // the PIP edge-to-edge without letterbox bars.
+                        renderMode: rtc.RenderModeType.renderModeHidden,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            // Switch-camera affordance, tucked into the PIP's
+            // bottom-right corner. 28 dp pill, dark translucent with a
+            // thin white border for iOS-native feel. Sits on top of
+            // the ClipRRect (inside the Stack) so the tap surface is
+            // a regular widget — no GestureDetector behind clipped
+            // pixels.
+            Positioned(
+              right: 6,
+              bottom: 6,
+              child: Material(
+                color: Colors.transparent,
+                shape: const CircleBorder(),
+                child: InkWell(
+                  onTap: onSwitchCamera,
+                  customBorder: const CircleBorder(),
+                  child: Container(
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.black.withValues(alpha: 0.55),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.25),
+                      ),
+                    ),
+                    alignment: Alignment.center,
+                    child: const Icon(
+                      Icons.cameraswitch_rounded,
+                      color: Colors.white,
+                      size: 14,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

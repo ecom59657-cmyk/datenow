@@ -14,8 +14,6 @@ import '../../../core/config/app_config.dart';
 import '../../../core/debug/debug_observer.dart';
 import '../../../core/utils/extensions.dart';
 import '../../../core/utils/logger.dart';
-import '../../../core/utils/profile_format.dart';
-import '../../../l10n/app_localizations.dart';
 import '../../../shared/widgets/app_button.dart';
 import '../../auth/presentation/providers/auth_provider.dart';
 import '../../matching/presentation/providers/active_match_provider.dart';
@@ -328,7 +326,6 @@ class _CallScreenState extends ConsumerState<CallScreen> {
     final match = ref.watch(activeMatchProvider);
     final candidate = match?.candidate;
     final name = candidate?.firstName ?? 'Anonymous';
-    final age = candidate?.age;
 
     // Pre-call: a calm, branded connecting screen — no abrupt black flash,
     // no HUD over an empty video surface.
@@ -389,7 +386,6 @@ class _CallScreenState extends ConsumerState<CallScreen> {
                   alignment: Alignment.topCenter,
                   child: _Header(
                     name: name,
-                    age: age,
                     remaining: _remaining,
                   ),
                 ),
@@ -451,24 +447,24 @@ class _NullListenable extends Listenable {
 class _Header extends StatelessWidget {
   const _Header({
     required this.name,
-    required this.age,
     required this.remaining,
   });
 
   final String name;
-  final int? age;
   final Duration remaining;
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    final peerLabel =
-        formatProfileNameAge(l10n, firstName: name, age: age);
+    // Premium row alignment — peer pill grows naturally with the
+    // firstName (no age, no ellipsis) but its growth is capped so a
+    // long name never crowds the timer pill in the center. Tight
+    // gaps (8 dp) between the three pills mirror iOS native HUDs
+    // (e.g. FaceTime "1:23 • Apple ID • End").
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Flexible(child: _peerPill(peerLabel)),
+        Flexible(child: _peerPill(name)),
         const SizedBox(width: AppSpacing.sm),
         _timerPill(),
         const SizedBox(width: AppSpacing.sm),
@@ -477,32 +473,45 @@ class _Header extends StatelessWidget {
     );
   }
 
-  Widget _peerPill(String label) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.45),
-        borderRadius: AppRadius.brPill,
-        border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.person_rounded, size: 14, color: Colors.white),
-          const SizedBox(width: 5),
-          Flexible(
-            child: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              softWrap: false,
-              style: AppTypography.caption.copyWith(
-                color: Colors.white,
-                fontWeight: FontWeight.w700,
+  /// Glass-morphism pill showing the peer's first name only — never
+  /// the age (the brief explicitly asked for "prénom uniquement" so
+  /// the HUD stays narrow + iOS-native).
+  ///
+  /// `ConstrainedBox(maxWidth: 168)` is a soft cap : the pill grows
+  /// with normal-length first names (most are < 12 chars and fit
+  /// comfortably), and only when a peer happens to have an unusually
+  /// long name does the text degrade to an ellipsis — preferring
+  /// truncation over crashing into the timer pill.
+  Widget _peerPill(String firstName) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 168),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.45),
+          borderRadius: AppRadius.brPill,
+          border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.person_rounded, size: 14, color: Colors.white),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                firstName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                softWrap: false,
+                style: AppTypography.caption.copyWith(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.1,
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
