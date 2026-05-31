@@ -190,6 +190,14 @@ class _AgoraCallViewState extends ConsumerState<AgoraCallView> {
   /// short enough that a user is never left staring at an empty call.
   static const _peerAbsentGrace = Duration(seconds: 45);
 
+  /// How long we let our own Agora connection stay in the
+  /// `reconnecting` state before we give up and end the call. Without
+  /// this, a definitive network drop would freeze the UI on the
+  /// "Reconnexion en cours…" banner forever — the user has no way out
+  /// other than killing the app, which leaves the `calls` row hot for
+  /// the peer's full 30 s + 45 s grace stack.
+  static const _reconnectAbortGrace = Duration(seconds: 30);
+
   AgoraClient? _client;
   String? _error;
 
@@ -221,6 +229,13 @@ class _AgoraCallViewState extends ConsumerState<AgoraCallView> {
 
   /// Fires if the peer stays absent past [_peerAbsentGrace].
   Timer? _peerAbsentTimer;
+
+  /// Fires if we stay in the `reconnecting` connection state past
+  /// [_reconnectAbortGrace] — i.e. the local network is gone for good.
+  /// On expiry we call `widget.onLeave()` so CallScreen ends the call
+  /// cleanly (Supabase status, presence reset, post-call navigation)
+  /// instead of leaving the user staring at "Reconnexion en cours…".
+  Timer? _reconnectAbortTimer;
 
   @override
   void initState() {
@@ -443,18 +458,49 @@ class _AgoraCallViewState extends ConsumerState<AgoraCallView> {
                 reason ==
                     rtc.ConnectionChangedReasonType
                         .connectionChangedInterrupted;
-            // Count each fresh drop into a reconnecting state.
+            // Count each fresh drop into a reconnecting state + arm
+            // the abort timer that gives up after [_reconnectAbortGrace].
             if (reconnecting && !_wasReconnecting) {
               _reconnectAttempts++;
               _log.warn('Reconnecting — attempt #$_reconnectAttempts');
               DebugLog.agora('reconnect attempt #$_reconnectAttempts'); // debug-observer
+              _reconnectAbortTimer?.cancel();
+              _reconnectAbortTimer = Timer(_reconnectAbortGrace, () {
+                if (!mounted || !_reconnecting) return;
+                _log.warn(
+                  'Reconnect grace expired '
+                  '(${_reconnectAbortGrace.inSeconds}s) — ending call',
+                );
+                DebugLog.agora('reconnect grace expired'); // debug-observer
+                widget.onLeave();
+              });
+            }
+            // Successful reconnect → drop the abort timer.
+            if (!reconnecting && _wasReconnecting) {
+              _log.info(
+                'Connection back from reconnecting — cancelling abort grace',
+              );
+              _reconnectAbortTimer?.cancel();
+              _reconnectAbortTimer = null;
             }
             _wasReconnecting = reconnecting;
             setState(() => _reconnecting = reconnecting);
             _publishDebug();
           },
           onTokenPrivilegeWillExpire: (connection, token) {
-            _log.warn('onTokenPrivilegeWillExpire — channel=${connection.channelId}');
+            // Token TTL is 15 min server-side (see
+            // supabase/functions/generate-agora-token/index.ts:28).
+            // Call cap is `AppConfig.maxCallDuration` (5 min today).
+            // The 3× safety margin means a fresh token always outlives
+            // the longest possible call — we log + carry on. If the
+            // call cap is ever raised above ~12 min, this handler must
+            // be upgraded to fetch a fresh token via
+            // `agoraTokenRepositoryProvider.fetchToken` and feed it to
+            // `engine.renewToken(...)` before the privilege expires.
+            _log.warn(
+              'onTokenPrivilegeWillExpire — channel=${connection.channelId} '
+              '(no auto-renew; current call cap << 15 min token TTL)',
+            );
           },
           onError: (err, msg) {
             _log.warn('onError — code=$err msg=$msg');
@@ -517,6 +563,7 @@ class _AgoraCallViewState extends ConsumerState<AgoraCallView> {
   void dispose() {
     _transientTimer?.cancel();
     _peerAbsentTimer?.cancel();
+    _reconnectAbortTimer?.cancel();
     ref.read(agoraConnectionDebugProvider.notifier).state =
         AgoraConnectionDebug.none;
     // Belt-and-suspenders: if the parent navigated without calling

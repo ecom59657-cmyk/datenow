@@ -47,7 +47,8 @@ class CallScreen extends ConsumerStatefulWidget {
 /// never appears as an abrupt black flash.
 enum _PreCall { opening, waitingPeer, joining, live }
 
-class _CallScreenState extends ConsumerState<CallScreen> {
+class _CallScreenState extends ConsumerState<CallScreen>
+    with WidgetsBindingObserver {
   static const _log = AppLogger('Call');
 
   /// Max time to wait for the peer's ready flag before joining anyway —
@@ -57,6 +58,18 @@ class _CallScreenState extends ConsumerState<CallScreen> {
   /// Length of the closing "Connexion du date…" flourish before the
   /// video mounts.
   static const _joiningFlourish = Duration(milliseconds: 1300);
+
+  /// Tolerance window for `AppLifecycleState.paused` before we end the
+  /// call. Short backgrounding (user checks a notification, swipes to
+  /// the App Switcher and back) is forgiven; staying backgrounded
+  /// past this terminates the date cleanly so the peer is not held
+  /// in a half-live call.
+  ///
+  /// Short enough that the peer never waits more than `paused +
+  /// _pauseGrace + Agora server timeout` seconds before they see the
+  /// `ended` flip. Long enough that a glance at another app does not
+  /// cost the date.
+  static const _pauseGrace = Duration(seconds: 30);
 
   /// Countdown anchor. Seeded with the local clock so the timer ticks
   /// from the moment the screen mounts, then overwritten with the call
@@ -86,9 +99,15 @@ class _CallScreenState extends ConsumerState<CallScreen> {
   bool _ending = false;
   bool _bootstrapFailed = false;
 
+  /// Armed on `AppLifecycleState.paused` — see [_pauseGrace]. If
+  /// `resumed` fires before this expires, the call survives the
+  /// backgrounding; otherwise the call is ended best-effort.
+  Timer? _pauseGraceTimer;
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _start = DateTime.now();
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -99,6 +118,47 @@ class _CallScreenState extends ConsumerState<CallScreen> {
       ref.read(precallStateProvider.notifier).state = 'opening';
       _bootstrap();
     });
+  }
+
+  /// Lifecycle robustness for the call surface.
+  ///
+  /// * `paused`   → arm [_pauseGraceTimer]. If still paused after
+  ///                [_pauseGrace] we end the call so the peer is not
+  ///                hung in a half-live state. Short backgrounding
+  ///                (notification, App Switcher peek) is forgiven.
+  /// * `resumed`  → cancel any pending grace.
+  /// * `detached` → process is going away; end best-effort
+  ///                synchronously. dispose() may not run before iOS
+  ///                kills the isolate, so this is our last chance to
+  ///                signal end-of-call to the peer.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (_ending) return;
+    _log.info('Lifecycle=${state.name} during call (ending=$_ending)');
+    switch (state) {
+      case AppLifecycleState.paused:
+        _pauseGraceTimer?.cancel();
+        _pauseGraceTimer = Timer(_pauseGrace, () {
+          if (!mounted || _ending) return;
+          _log.info(
+            'Pause grace expired (${_pauseGrace.inSeconds}s) — ending call',
+          );
+          unawaited(_endCall());
+        });
+      case AppLifecycleState.resumed:
+        if (_pauseGraceTimer != null) {
+          _log.info('App resumed — cancelling pause grace');
+          _pauseGraceTimer?.cancel();
+          _pauseGraceTimer = null;
+        }
+      case AppLifecycleState.detached:
+        _log.info('Lifecycle=detached during call — ending best-effort');
+        unawaited(_endCall());
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.hidden:
+        // Transient (call modal opening, focus loss, …) — ignore.
+        break;
+    }
   }
 
   Future<void> _bootstrap() async {
@@ -274,8 +334,13 @@ class _CallScreenState extends ConsumerState<CallScreen> {
   Future<void> _endCall({bool remote = false}) async {
     if (_ending) return;
     _ending = true;
+    _pauseGraceTimer?.cancel();
     if (!mounted) return;
-    _log.info(remote ? 'Call ended remotely' : 'Call ended locally');
+    _log.info(
+      'endCall requested — '
+      'trigger=${remote ? "remote-peer-ended" : "local"} '
+      'callId=${_callId ?? "∅"} selfId=${_selfUserId ?? "∅"}',
+    );
 
     // 1. Hard-stop the Agora engine BEFORE we navigate. Without this,
     //    `release()` runs asynchronously from AgoraCallView's dispose
@@ -299,6 +364,7 @@ class _CallScreenState extends ConsumerState<CallScreen> {
       if (repo != null) {
         try {
           await repo.end(callId: _callId!, byUserId: _selfUserId!);
+          _log.info('Call status flipped to ended in Supabase');
         } catch (e, st) {
           _log.error('Could not flip call to ended in Supabase', e, st);
         }
@@ -309,14 +375,17 @@ class _CallScreenState extends ConsumerState<CallScreen> {
     ref.read(precallStateProvider.notifier).state = 'ended';
     DebugObserver.instance.markEnded(); // debug-observer
     if (!mounted) return;
+    _log.info('Navigating to post-call screen');
     context.pushReplacementNamed(AppRoute.postCall.name);
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _ticker?.cancel();
     _peerReadyTimer?.cancel();
     _joiningTimer?.cancel();
+    _pauseGraceTimer?.cancel();
     _sessionSub?.cancel();
     super.dispose();
   }
