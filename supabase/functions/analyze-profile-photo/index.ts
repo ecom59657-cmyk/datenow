@@ -18,7 +18,7 @@
 //   8. If manual_review : INSERT moderation_queue for human review
 //   9. 200 { status, reject_reason?, message }
 //
-// Decision rules (V1, conservative):
+// Decision rules (V1.1, dating-app calibrated):
 //   REJECT (auto):
 //     - SafeSearch.adult     ∈ {LIKELY, VERY_LIKELY}     → nsfw
 //     - SafeSearch.violence  ∈ {LIKELY, VERY_LIKELY}     → violence
@@ -27,10 +27,16 @@
 //     - face count           ==  0                       → no_face
 //     - face count           >   1                       → multiple_faces
 //   MANUAL_REVIEW:
-//     - SafeSearch.racy      ==  LIKELY                  → borderline_suggestive
 //     - SafeSearch.medical   ∈ {LIKELY, VERY_LIKELY}     → medical_content
 //     - face detectionConfidence < 0.7 (low-quality face) → low_confidence_face
 //   APPROVED otherwise.
+//
+//   Note (2026-06-01) : the `racy = LIKELY → manual_review` gate
+//   was dropped after a TestFlight audit showed Google Vision flags
+//   ordinary beach / V-neck / casual selfies as racy=LIKELY. The
+//   VERY_LIKELY hard-reject is enough for genuinely sexual content;
+//   the manual_review queue is now reserved for medical / low-quality
+//   face cases.
 //
 // Required secret: GOOGLE_VISION_API_KEY (Cloud Vision API enabled
 // on the linked GCP project). Set via `supabase secrets set`.
@@ -107,7 +113,23 @@ function decide(input: VisionDecisionInput): Verdict {
   if (input.faceCount  >  1)                  return { status: "rejected", reason: "multiple_faces" };
 
   // ── Manual review (doubtful) ──────────────────────────────────
-  if (atLeast(input.racy,    "LIKELY"))       return { status: "manual_review", reason: "borderline_suggestive", queue: true };
+  //
+  // The `racy === LIKELY` gate was dropped on 2026-06-01. SQL audit
+  // of the four-photo TestFlight session showed a clean conforming
+  // selfie classified as manual_review with :
+  //   adult           = VERY_UNLIKELY
+  //   racy            = LIKELY           ← the only flag
+  //   face_count      = 1
+  //   top_face_conf   = 0.988
+  // Google Vision's `racy` detector is well known to over-fire on
+  // perfectly normal dating-app shots — V-neck tops, beach selfies,
+  // gym-wear, bare shoulders — so the LIKELY threshold was
+  // generating false positives for the very category of photos the
+  // product is designed to accept. The VERY_LIKELY hard-reject above
+  // remains in place (suggestive_strong) — that catches the
+  // genuinely sexual content the user spec listed as auto-refuse.
+  // The medical + low-confidence-face manual_review gates are kept
+  // unchanged.
   if (atLeast(input.medical, "LIKELY"))       return { status: "manual_review", reason: "medical_content",       queue: true };
   if (input.topFaceConfidence < 0.7)          return { status: "manual_review", reason: "low_confidence_face",   queue: true };
 
