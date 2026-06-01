@@ -496,14 +496,6 @@ class _DebugDateNowScreenState extends ConsumerState<DebugDateNowScreen> {
                 onTap: _copySessionSummary,
               ),
               _ActionChip(label: 'Force leaveQueue', onTap: _forceLeaveQueue),
-              // TEMP — manual entry point for Phase 4 Didit QA. Remove
-              // once Phase 5 wires the screen into the normal funnel.
-              _ActionChip(
-                label: 'QA · /identity',
-                onTap: () => context.pushNamed(
-                  AppRoute.identityVerification.name,
-                ),
-              ),
               if (c != null)
                 _ActionChip(label: 'Reset ma décision', onTap: _resetMyReveal),
               if (c != null)

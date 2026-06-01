@@ -57,6 +57,10 @@ PODS:
     - GoogleUtilities/Environment (~> 8.0)
     - GoogleUtilities/UserDefaults (~> 8.0)
     - PromisesObjC (~> 2.4)
+  - didit_sdk (4.0.2):
+    - DiditSDK/Core (~> 4.0)
+    - Flutter
+  - DiditSDK/Core (4.0.2)
   - Firebase/CoreOnly (11.15.0):
     - FirebaseCore (~> 11.15.0)
   - Firebase/Messaging (11.15.0):
@@ -169,6 +173,8 @@ DEPENDENCIES:
   - agora_rtm (from `.symlinks/plugins/agora_rtm/ios`)
   - agora_uikit (from `.symlinks/plugins/agora_uikit/ios`)
   - app_links (from `.symlinks/plugins/app_links/ios`)
+  - didit_sdk (from `.symlinks/plugins/didit_sdk/ios`)
+  - DiditSDK/Core (from `https://raw.githubusercontent.com/didit-protocol/sdk-ios/main/DiditSDK.podspec`)
   - firebase_core (from `.symlinks/plugins/firebase_core/ios`)
   - firebase_messaging (from `.symlinks/plugins/firebase_messaging/ios`)
   - Flutter (from `Flutter`)
@@ -212,6 +218,10 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/agora_uikit/ios"
   app_links:
     :path: ".symlinks/plugins/app_links/ios"
+  didit_sdk:
+    :path: ".symlinks/plugins/didit_sdk/ios"
+  DiditSDK:
+    :podspec: https://raw.githubusercontent.com/didit-protocol/sdk-ios/main/DiditSDK.podspec
   firebase_core:
     :path: ".symlinks/plugins/firebase_core/ios"
   firebase_messaging:
@@ -249,6 +259,8 @@ SPEC CHECKSUMS:
   app_links: a754cbec3c255bd4bbb4d236ecc06f28cd9a7ce8
   AppAuth: d4f13a8fe0baf391b2108511793e4b479691fb73
   AppCheckCore: cc8fd0a3a230ddd401f326489c99990b013f0c4f
+  didit_sdk: b442e4b8cdf19bbbb8872805569e0591e908cb79
+  DiditSDK: 07fc2a1b506f06ba6287076e4dc0f6594b2039da
   Firebase: d99ac19b909cd2c548339c2241ecd0d1599ab02e
   firebase_core: 995454a784ff288be5689b796deb9e9fa3601818
   firebase_messaging: f4a41dd102ac18b840eba3f39d67e77922d3f707
@@ -275,6 +287,6 @@ SPEC CHECKSUMS:
   sqflite_darwin: 20b2a3a3b70e43edae938624ce550a3cbf66a3d0
   url_launcher_ios: 7a95fa5b60cc718a708b8f2966718e93db0cef1b
 
-PODFILE CHECKSUM: 0ad51f6e7dbaf1bc3ead8f1274c72aafb1eaa224
+PODFILE CHECKSUM: 3cd748ebe9721e68cfb8bad46638e305ff09ffdd
 
 COCOAPODS: 1.16.2
