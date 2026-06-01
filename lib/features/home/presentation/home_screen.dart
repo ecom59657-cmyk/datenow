@@ -243,22 +243,54 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     }
     _log.info('Approved photo confirmed — gate cleared');
 
-    // 2.6. Identity gate — Phase 5 of the Didit rollout.
-    //      Mirrors the photo gate above: we invalidate the provider on
-    //      every tap so a freshly-landed Didit webhook (which UPDATES
-    //      `profiles.identity_verified` server-side) is picked up
-    //      immediately rather than after the user closes / reopens
-    //      the app. Backed by the SECURITY DEFINER RPC
-    //      `has_verified_identity()` so a tampered client cannot
-    //      self-affirm. Fail-closed on RPC error.
+    // 2.6. Identity gate — Phase 5 + final-build strictness.
     //
-    //      The gate respects [FeatureFlags.requireIdentityVerification]
-    //      — default ON, can be flipped via `.env IDENTITY_GATE=false`
-    //      as an emergency fuse if Phase 2's webhook field-paths turn
-    //      out to be wrong on real sandbox traffic.
+    //      Two paths controlled by [FeatureFlags.allowGrandfatherBypass]
+    //      (default false, see feature_flags.dart for the rationale) :
+    //
+    //        STRICT (default, production builds)
+    //          Uses [isDiditVerifiedProvider] — true ONLY when the
+    //          user has a real `identity_verifications` row with
+    //          `status='approved'`. Grandfather accounts (Phase 1
+    //          migration leftovers) are BLOCKED here. This is the
+    //          "every user must have gone through Didit" stance the
+    //          product spec mandates for the final build.
+    //
+    //        LENIENT (`ALLOW_GRANDFATHER_BYPASS=true` in .env)
+    //          Falls back to the original `has_verified_identity()`
+    //          RPC which accepts grandfather. Used by the dev /
+    //          QA team so their pre-Didit accounts can keep
+    //          working through the matching flow during daily
+    //          development.
+    //
+    //      Whole block is gated by
+    //      [FeatureFlags.requireIdentityVerification] — flip
+    //      `IDENTITY_GATE=false` in .env to fully disarm the gate
+    //      (emergency fuse).
+    //
+    //      Note : like every other Flutter-side gate in this file,
+    //      a tampered client can technically bypass this. Real
+    //      server-side enforcement would require checking
+    //      identity_verified in the matching RPCs themselves, which
+    //      is explicitly out of scope per the current product spec.
     if (FeatureFlags.requireIdentityVerification) {
-      ref.invalidate(hasVerifiedIdentityProvider);
-      final verified = await ref.read(hasVerifiedIdentityProvider.future);
+      bool verified;
+      if (FeatureFlags.allowGrandfatherBypass) {
+        // Lenient path — invalidate the RPC provider so a freshly
+        // landed webhook flips the gate without an app restart.
+        ref.invalidate(hasVerifiedIdentityProvider);
+        verified = await ref.read(hasVerifiedIdentityProvider.future);
+        _log.info(
+          'Identity gate (lenient/grandfather-bypass) → verified=$verified',
+        );
+      } else {
+        // Strict path — derived from the realtime stream of
+        // `identity_verifications`. No async work, no RPC round
+        // trip ; the provider re-evaluates synchronously when the
+        // stream emits.
+        verified = ref.read(isDiditVerifiedProvider);
+        _log.info('Identity gate (strict/didit-only) → verified=$verified');
+      }
       if (!verified) {
         _log.warn(
           'Identity not verified for ${user.id} — blocking find date',
@@ -494,16 +526,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
               ),
               const SizedBox(height: AppSpacing.lg),
               Text(
-                'Vérifie ton identité', // TODO(i18n-identity)
+                'Vérification d\'identité requise', // TODO(i18n-identity)
                 textAlign: TextAlign.center,
                 style: AppTypography.h2,
               ),
               const SizedBox(height: AppSpacing.sm),
               Text(
                 // TODO(i18n-identity)
-                'DateNow vérifie ton âge et ton identité avant de lancer un date — '
-                'pour la sécurité de tous. Cela prend environ 2 minutes : pièce '
-                'd\'identité + selfie.',
+                'Pour protéger la communauté DateNow, vérifie ton '
+                'identité avant de lancer une rencontre.',
                 textAlign: TextAlign.center,
                 style: AppTypography.body
                     .copyWith(color: AppColors.textSecondary),

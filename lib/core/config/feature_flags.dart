@@ -64,6 +64,34 @@ class FeatureFlags {
     return raw != 'false' && raw != '0' && raw != 'no';
   }
 
+  /// QA bypass : when `true`, the find-date hard gate accepts
+  /// **grandfather** accounts (identity_provider='grandfather' from
+  /// the Phase 1 migration) via the lenient `has_verified_identity()`
+  /// RPC. When `false` (the production default), the gate uses the
+  /// stricter [isDiditVerifiedProvider] which requires a *real*
+  /// Didit-approved row in `identity_verifications`.
+  ///
+  /// Default **OFF**. Final TestFlight / production builds should
+  /// NEVER ship with this `true` — the whole point of the Didit
+  /// rollout is to retire the grandfather grace and require KYC
+  /// for every user before they can launch a date.
+  ///
+  /// Override in `.env` for the dev team's daily work :
+  ///
+  ///     ALLOW_GRANDFATHER_BYPASS=true
+  ///
+  /// Note : this flag has **no effect** on the UX surfaces (Home
+  /// nudge, Profile banner, Settings tile) — those keep using
+  /// [isDiditVerifiedProvider] so grandfather users always SEE the
+  /// "Verify now" prompts. The flag only relaxes the *blocking*
+  /// behaviour of the Find-date CTA.
+  static bool get allowGrandfatherBypass {
+    final raw = (dotenv.env['ALLOW_GRANDFATHER_BYPASS'] ?? '')
+        .trim()
+        .toLowerCase();
+    return raw == 'true' || raw == '1' || raw == 'yes';
+  }
+
   /// Internal — reads `.env` value, accepts `true` / `1` / `yes`
   /// (case-insensitive). Anything else returns `false`. Mirrors the
   /// helper in [Env] so a future caller can read either class through
