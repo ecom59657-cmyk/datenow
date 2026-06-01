@@ -35,7 +35,11 @@ android {
 
     defaultConfig {
         applicationId = "com.datenow.app"
-        minSdk = flutter.minSdkVersion
+        // didit_sdk (Phase 6) requires API 23+ (Android 6.0
+        // Marshmallow). Flutter's default minSdkVersion can be lower
+        // depending on SDK version, so we hard-pin to 23 here to be
+        // explicit and guard against accidental regressions.
+        minSdk = maxOf(23, flutter.minSdkVersion)
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName

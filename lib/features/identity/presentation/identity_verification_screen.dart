@@ -1,17 +1,16 @@
 // =============================================================================
-// DateNow — IdentityVerificationScreen  (Phase 4 of the Didit rollout)
+// DateNow — IdentityVerificationScreen  (Phase 4 + Phase 6 of the Didit rollout)
 //
-// Standalone screen reachable at `/identity` for manual QA. Not yet
-// wired into onboarding nor into the find-date gate — both ship in
-// Phases 5-6. The route exists so the team can :
+// Phase 6 swap : the user no longer leaves DateNow for Safari. We
+// install the official didit_sdk plugin (verified publisher didit.me
+// on pub.dev) and call DiditSdk.startVerification(token). The
+// verification UI runs in-app and the SDK returns a sealed
+// VerificationResult we switch on for immediate UX feedback. The
+// Didit webhook remains the authoritative source of truth — it
+// lands on Supabase, updates the identity_verifications row, and
+// the Realtime stream rebuilds the screen automatically.
 //
-//   * tap "Vérifier" → see a real Didit session URL open in Safari,
-//   * complete the sandbox flow on the actual hosted page,
-//   * watch this screen flip status live (Realtime → webhook UPDATE),
-//   * confirm `profiles.identity_verified` flips server-side in SQL.
-//
-// Visual states driven by `latestIdentityVerificationProvider` :
-//
+// Visual states driven by latestIdentityVerificationProvider :
 //   - null            → "À démarrer"        + CTA "Vérifier mon identité"
 //   - pending         → "Vérification en cours" + CTA "Reprendre"
 //   - inReview        → "Vérification en cours…" + loader, no CTA
@@ -20,18 +19,16 @@
 //   - expired         → "Session expirée"      + CTA "Recommencer"
 //
 // Background → foreground robustness :
-//   When the user taps "Vérifier" we launch the Didit URL via
-//   `url_launcher` with `LaunchMode.externalApplication` — opens the
-//   default browser (Safari). When the user comes back from the
-//   browser (deep link `datenow://didit/return` OR the iOS back gesture
-//   on the Safari overlay), this screen is still mounted. Supabase
-//   Realtime usually re-syncs on its own, but to be safe we invalidate
-//   the stream provider on `AppLifecycleState.resumed`.
+//   The SDK runs in-app, so the user does NOT leave DateNow during
+//   the flow. The WidgetsBindingObserver is kept anyway — on iOS the
+//   SDK may briefly background us for permission prompts, and on
+//   Android for system dialogs. Invalidating the stream on resumed
+//   is a cheap belt-and-suspenders.
 // =============================================================================
 
+import 'package:didit_sdk/sdk_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
@@ -87,7 +84,7 @@ class _IdentityVerificationScreenState
     ref.invalidate(latestIdentityVerificationProvider(userId));
   }
 
-  Future<void> _onPrimaryAction({String? reuseUrl}) async {
+  Future<void> _onPrimaryAction({String? reuseToken}) async {
     if (_creating) return;
 
     final messenger = ScaffoldMessenger.of(context);
@@ -101,12 +98,12 @@ class _IdentityVerificationScreenState
 
     setState(() => _creating = true);
     try {
-      // 1. If we already have a URL from a still-open session, reuse
-      //    it. Avoids hitting the Edge Function (and Didit quota) when
-      //    the user is just returning to finish a started session.
-      if (reuseUrl != null) {
-        _log.info('reusing existing session URL');
-        await _launch(reuseUrl, messenger);
+      // 1. If we already have a token from a still-open session, reuse
+      //    it. Avoids hitting the Edge Function (and the Didit quota)
+      //    when the user is just returning to finish a started session.
+      if (reuseToken != null) {
+        _log.info('reusing existing session token');
+        await _runSdk(reuseToken, messenger);
         return;
       }
 
@@ -115,9 +112,9 @@ class _IdentityVerificationScreenState
       if (!mounted) return;
 
       switch (result) {
-        case IdentitySessionReady(:final sessionUrl, :final reused):
-          _log.info('createSession → ready (reused=$reused)');
-          await _launch(sessionUrl, messenger);
+        case IdentitySessionReady(:final sessionToken, :final reused):
+          _log.info('createSession → ready (reused=$reused), launching SDK');
+          await _runSdk(sessionToken, messenger);
         case IdentityAlreadyVerified():
           _log.info('createSession → already verified, no flow needed');
           messenger.showSnackBar(const SnackBar(
@@ -132,25 +129,57 @@ class _IdentityVerificationScreenState
     }
   }
 
-  Future<void> _launch(String url, ScaffoldMessengerState messenger) async {
-    final uri = Uri.tryParse(url);
-    if (uri == null) {
-      _log.warn('invalid session URL: $url');
+  /// Hands the session token to the native didit_sdk plugin. The
+  /// plugin opens its own in-app verification UI (camera, document
+  /// scan, selfie, liveness) and returns a sealed [VerificationResult]
+  /// we switch on for IMMEDIATE UX feedback. The authoritative state
+  /// transition (status flip to approved/rejected) is driven by the
+  /// Didit webhook landing on Supabase and emitted through the
+  /// realtime stream the screen already watches.
+  ///
+  /// All three result branches surface a brief SnackBar so the user
+  /// always gets confirmation that their tap had an effect — even
+  /// if the realtime UPDATE takes a few seconds to follow.
+  Future<void> _runSdk(
+    String sessionToken,
+    ScaffoldMessengerState messenger,
+  ) async {
+    try {
+      _log.info('SDK startVerification — running in-app UI');
+      final result = await DiditSdk.startVerification(sessionToken);
+      if (!mounted) return;
+
+      switch (result) {
+        case VerificationCompleted(:final session):
+          // The SDK only tells us the *immediate* status. The webhook
+          // is the source of truth — but surfacing the SDK status
+          // gives the user a snappy "received your submission" beat
+          // while the Realtime stream catches up (typically 1-5 s).
+          _log.info(
+            'SDK → completed status=${session.status} '
+            'sessionId=${session.sessionId}',
+          );
+          messenger.showSnackBar(const SnackBar(
+            content: Text('Vérification envoyée, traitement en cours…'),
+          ));
+        case VerificationCancelled():
+          _log.info('SDK → cancelled by user');
+          messenger.showSnackBar(const SnackBar(
+            content: Text('Vérification annulée.'),
+          ));
+        case VerificationFailed(:final error):
+          _log.warn('SDK → failed type=${error.type} message=${error.message}');
+          messenger.showSnackBar(const SnackBar(
+            content: Text(
+              'Erreur durant la vérification, réessaie dans un instant.',
+            ),
+          ));
+      }
+    } catch (e, st) {
+      _log.error('SDK startVerification threw', e, st);
+      if (!mounted) return;
       messenger.showSnackBar(const SnackBar(
-        content: Text('URL de vérification invalide.'),
-      ));
-      return;
-    }
-    // External browser — Didit's hosted flow needs cookies + camera
-    // access that an in-app WebView can't always grant cleanly. Safari
-    // / Chrome handle both. The return path is the
-    // `datenow://didit/return` deep link declared in the Edge Function
-    // callback URL.
-    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
-    if (!ok) {
-      _log.warn('launchUrl returned false for $url');
-      messenger.showSnackBar(const SnackBar(
-        content: Text('Impossible d\'ouvrir la page de vérification.'),
+        content: Text('Erreur durant la vérification, réessaie plus tard.'),
       ));
     }
   }
@@ -206,8 +235,8 @@ class _IdentityVerificationScreenState
                 status: status,
                 creating: _creating,
                 onPressed: () => _onPrimaryAction(
-                  reuseUrl: status == IdentityVerificationStatus.pending
-                      ? row?.sessionUrl
+                  reuseToken: status == IdentityVerificationStatus.pending
+                      ? row?.sessionToken
                       : null,
                 ),
               ),

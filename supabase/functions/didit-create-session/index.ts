@@ -1,35 +1,42 @@
 // =============================================================================
-// DateNow — didit-create-session  (Phase 2 of the Didit rollout)
+// DateNow — didit-create-session  (Phase 2 + Phase 6 of the Didit rollout)
 //
-// Called by the Flutter onboarding step when the user taps "Commencer
-// la vérification". Hits Didit V3 to spin up a hosted verification
-// session, persists the audit row, and returns the URL the Flutter
-// WebView must open.
+// Called by the Flutter screen when the user taps "Vérifier mon
+// identité". Hits Didit V3 to spin up a verification session, persists
+// the audit row, and returns the session_token the Flutter app passes
+// to the native didit_sdk plugin.
 //
 // HTTP contract
 //   POST /functions/v1/didit-create-session
 //     headers : Authorization: Bearer <supabase_user_jwt>
 //     body    : (none)
 //
-//   200 OK   : { session_id, session_url, expires_at, status }
-//              status = "pending" for a fresh session
-//              status = "reused"  if a still-open session exists
-//              status = "approved" if already verified (no-op)
+//   200 OK   : { session_id, session_token, session_url, expires_at, status }
+//              status = "pending"  fresh session
+//              status = "reused"   existing open session
+//              status = "approved" already verified (no-op)
 //   401      : not signed in
 //   500      : misconfiguration (missing secrets) or db_insert_failed
 //   502      : Didit unreachable / returned non-2xx / malformed
 //
 // Idempotency
-//   Before creating, we look up any existing `identity_verifications`
-//   row in {pending, in_review, approved} for the caller. If one
-//   exists, we return its existing URL / status — never spin up a
-//   duplicate Didit session (each session costs API quota).
+//   Looks up any existing `identity_verifications` row in {pending,
+//   in_review, approved}. If one exists, returns its existing
+//   token / status — never spins up a duplicate Didit session.
 //
-// Privacy
-//   The `session_token` returned by Didit is stored ONLY in the
-//   `raw_payload` JSONB column (RLS-protected, owner-readable). The
-//   Flutter response surfaces just `session_id` + `session_url` —
-//   the token never reaches the client.
+// Phase 6 security note — session_token exposure
+//   Earlier Phase 2 kept the `session_token` server-side only. The
+//   migration to the native didit_sdk plugin (Phase 6) requires the
+//   client to receive the token because `DiditSdk.startVerification`
+//   takes it as its only argument. The token :
+//     * is bound to ONE user's ONE verification session
+//     * expires in ~30 min (no longer than SESSION_TTL_MS)
+//     * cannot be used to create other sessions / read other users
+//     * cannot be used to read or rotate the API key
+//   Returning it to the authenticated caller is the documented
+//   integration pattern, so the trade-off is acceptable. The
+//   `session_url` is still surfaced as a fallback (for debug builds
+//   or for future re-introduction of the hosted-URL path).
 //
 // Secrets required (set with `supabase secrets set …`):
 //   DIDIT_API_KEY              — x-api-key header on Didit V3 calls
@@ -74,8 +81,9 @@ function json(body: unknown, status = 200): Response {
 
 console.log(
   `[Didit][INFO] boot didit-create-session — api_key=${
-    DIDIT_API_KEY ? "set" : "MISSING"
-  } service_role=${SUPABASE_SERVICE_ROLE ? "set" : "MISSING"}`,
+    DIDIT_API_KEY ? `set (${DIDIT_API_KEY.length} chars)` : "MISSING"
+  } service_role=${SUPABASE_SERVICE_ROLE ? "set" : "MISSING"} ` +
+  `endpoint=${DIDIT_CREATE_SESSION_URL} workflow=${WORKFLOW_ID.slice(0, 8)}…`,
 );
 
 serve(async (req) => {
@@ -119,17 +127,19 @@ serve(async (req) => {
       console.log(`[Didit][INFO] already verified user=${userId} — no-op`);
       return json({ status: "approved", already_verified: true });
     }
-    const existingUrl = row?.raw_payload?.url as string | undefined;
-    if (existingUrl) {
+    const existingUrl   = row?.raw_payload?.url            as string | undefined;
+    const existingToken = row?.raw_payload?.session_token  as string | undefined;
+    if (existingUrl && existingToken) {
       console.log(
         `[Didit][INFO] reusing open session user=${userId} ` +
         `session=${row.external_session_id} status=${row.status}`,
       );
       return json({
-        session_id:  row.external_session_id,
-        session_url: existingUrl,
-        status:      "reused",
-        expires_at:  new Date(Date.now() + SESSION_TTL_MS).toISOString(),
+        session_id:    row.external_session_id,
+        session_token: existingToken,
+        session_url:   existingUrl,
+        status:        "reused",
+        expires_at:    new Date(Date.now() + SESSION_TTL_MS).toISOString(),
       });
     }
     // existing open row but URL missing — fall through and create a
@@ -176,10 +186,6 @@ serve(async (req) => {
         metadata: {
           source:      "datenow",
           environment: "sandbox",
-          // TODO(didit-prod) : flip to "production" when we move
-          // off the Didit sandbox workflow. Single line change here
-          // + workflow_id swap (the production workflow has a
-          // different UUID).
         },
       }),
     });
@@ -197,16 +203,26 @@ serve(async (req) => {
     return json({ error: "didit_failed", upstream: diditResp.status }, 502);
   }
 
-  const diditData = await diditResp.json();
+  let diditData: any;
+  try {
+    diditData = await diditResp.json();
+  } catch (e) {
+    console.error(`[Didit][ERROR] response not JSON user=${userId}`);
+    return json({ error: "didit_invalid_response" }, 502);
+  }
   // V3 response confirmed in the brief :
   //   session_id, session_number, session_token, url, vendor_data,
   //   metadata, status ("Not Started"), callback, workflow_id,
   //   workflow_version
-  const sessionId  = diditData?.session_id as string  | undefined;
-  const sessionUrl = diditData?.url        as string  | undefined;
-  const rawStatus  = diditData?.status     as string  | undefined;
+  const sessionId    = diditData?.session_id    as string | undefined;
+  const sessionToken = diditData?.session_token as string | undefined;
+  const sessionUrl   = diditData?.url           as string | undefined;
+  const rawStatus    = diditData?.status        as string | undefined;
 
-  if (!sessionId || !sessionUrl) {
+  // session_token is the only mandatory field for the native SDK
+  // (Phase 6) ; session_url is the fallback for the hosted flow.
+  // session_id is needed to correlate the eventual webhook.
+  if (!sessionId || !sessionToken || !sessionUrl) {
     console.error(
       `[Didit][ERROR] invalid Didit response user=${userId} ` +
       `payload=${JSON.stringify(diditData).slice(0, 300)}`,
@@ -241,11 +257,15 @@ serve(async (req) => {
     return json({ error: "db_insert_failed" }, 500);
   }
 
-  // ── 7. Safe response to client ───────────────────────────────
+  // ── 7. Response to client ────────────────────────────────────
+  // session_token is the only field the native SDK needs to start
+  // the verification (Phase 6). session_url + session_id are
+  // returned for fallback / debug / analytics.
   return json({
-    session_id:  sessionId,
-    session_url: sessionUrl,
-    expires_at:  new Date(Date.now() + SESSION_TTL_MS).toISOString(),
-    status:      "pending",
+    session_id:    sessionId,
+    session_token: sessionToken,
+    session_url:   sessionUrl,
+    expires_at:    new Date(Date.now() + SESSION_TTL_MS).toISOString(),
+    status:        "pending",
   });
 });

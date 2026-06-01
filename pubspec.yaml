@@ -48,7 +48,15 @@ dependencies:
   agora_uikit: ^1.3.10
   agora_rtc_engine: ">=6.3.0 <6.5.0"
   permission_handler: ^11.3.1
-  url_launcher: ^6.3.0
+
+  # Native Didit identity verification SDK — wraps the iOS Swift +
+  # Android Kotlin SDKs in a unified Dart API. Replaced url_launcher
+  # in Phase 6 of the identity rollout : the user no longer leaves
+  # DateNow for Safari, the SDK opens its own in-app verification UI
+  # (camera, document scan, selfie, liveness). Core variant (no NFC)
+  # — keeps iOS min at 13.0 and avoids the Apple NFC review video
+  # ceremony.
+  didit_sdk: ^4.0.2
 
   # Geolocation — phase 1.1 of the matching refactor. Wraps the
   # platform geolocator + permission flow. We only fetch a coarse

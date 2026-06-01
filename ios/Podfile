@@ -4,6 +4,19 @@ platform :ios, '15.1'
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
 
+# Didit SDK variant selector (Phase 6) — install the Core pod
+# (DiditSDK/Core) instead of the Full pod (DiditSDK with NFC). Core
+# supports iOS 13.0+ and skips the NFC capability entirely, which
+# means :
+#   - no Apple NFC review video required at submission,
+#   - no `com.apple.developer.nfc.readersession.iso7816.select-identifiers`
+#     in Info.plist,
+#   - no `Near Field Communication Tag Reading` capability in Xcode,
+#   - smaller binary, faster build.
+# The didit_sdk Flutter plugin honours this env var at pod install
+# time. Default would be `true` → Full SDK with NFC.
+ENV['DIDIT_SDK_IOS_NFC_ENABLED'] = 'false'
+
 project 'Runner', {
   'Debug' => :debug,
   'Profile' => :release,

@@ -24,13 +24,27 @@ sealed class IdentitySessionResult {
 class IdentitySessionReady extends IdentitySessionResult {
   const IdentitySessionReady({
     required this.sessionId,
+    required this.sessionToken,
     required this.sessionUrl,
     required this.expiresAt,
     required this.reused,
   });
 
   final String sessionId;
+
+  /// Short-lived (~30 min) token bound to ONE user's ONE verification
+  /// session. Passed to `DiditSdk.startVerification(sessionToken)`.
+  /// Cannot be used to create other sessions, read other users, or
+  /// rotate the server-side API key. Phase 6 of the rollout migrated
+  /// the client from the hosted-URL flow to the native SDK — this
+  /// field became required as a result.
+  final String sessionToken;
+
+  /// Hosted-URL fallback. Kept on the response for debug builds and
+  /// for the (currently unused) `url_launcher` path that we may
+  /// re-introduce if the native SDK ever needs a backup channel.
   final String sessionUrl;
+
   final DateTime expiresAt;
 
   /// True when the Edge Function returned an existing open session
@@ -66,6 +80,7 @@ class IdentityVerificationRow {
     required this.userId,
     required this.status,
     required this.rejectReason,
+    required this.sessionToken,
     required this.sessionUrl,
     required this.externalSessionId,
     required this.createdAt,
@@ -82,9 +97,17 @@ class IdentityVerificationRow {
   /// Phase 5 screen wording. **Never** surface verbatim to the user.
   final String? rejectReason;
 
-  /// The hosted Didit URL the user must open to resume / complete the
-  /// flow. Extracted from `raw_payload.url`. Stable for the life of
-  /// the session.
+  /// Token bound to this verification session. Read from
+  /// `raw_payload.session_token`. Passed to
+  /// `DiditSdk.startVerification(sessionToken)` when the user resumes
+  /// an in-progress Didit session (status `pending`) — saves a
+  /// round-trip to the Edge Function. See `IdentitySessionReady`
+  /// docstring for the security trade-off rationale (Phase 6).
+  final String? sessionToken;
+
+  /// Hosted Didit URL — kept as a fallback for debug builds and for
+  /// the (currently unused) hosted-URL path. Extracted from
+  /// `raw_payload.url`. The native SDK path (Phase 6) does not use it.
   final String? sessionUrl;
 
   /// Didit's own session UUID — used by the webhook to find this row.
@@ -104,7 +127,8 @@ class IdentityVerificationRow {
         json['status'] as String?,
       ),
       rejectReason: json['reject_reason'] as String?,
-      sessionUrl: raw?['url'] as String?,
+      sessionToken: raw?['session_token'] as String?,
+      sessionUrl:   raw?['url']           as String?,
       externalSessionId: json['external_session_id'] as String?,
       createdAt: DateTime.parse(json['created_at'] as String),
       submittedAt: (json['submitted_at'] as String?) != null
@@ -159,13 +183,15 @@ class IdentityRepository {
         _log.info('createSession → already verified, no session needed');
         return const IdentityAlreadyVerified();
       }
-      final sessionId = map['session_id'] as String?;
-      final sessionUrl = map['session_url'] as String?;
-      final expiresAtRaw = map['expires_at'] as String?;
-      final status = map['status'] as String?;
-      if (sessionId == null || sessionUrl == null) {
+      final sessionId    = map['session_id']    as String?;
+      final sessionToken = map['session_token'] as String?;
+      final sessionUrl   = map['session_url']   as String?;
+      final expiresAtRaw = map['expires_at']    as String?;
+      final status       = map['status']        as String?;
+      if (sessionId == null || sessionToken == null || sessionUrl == null) {
         _log.warn(
-          'createSession returned without session_id / session_url: $map',
+          'createSession returned without session_id / session_token / '
+          'session_url: $map',
         );
         return const IdentitySessionError(
           code: 'invalid_response',
@@ -177,12 +203,14 @@ class IdentityRepository {
           ? DateTime.tryParse(expiresAtRaw) ??
               DateTime.now().add(const Duration(minutes: 30))
           : DateTime.now().add(const Duration(minutes: 30));
+      // Never log the token itself — keep observability privacy-safe.
       _log.info(
         'createSession OK — session=$sessionId status=$status '
-        'expiresAt=${expiresAt.toIso8601String()}',
+        'expiresAt=${expiresAt.toIso8601String()} (token redacted)',
       );
       return IdentitySessionReady(
         sessionId: sessionId,
+        sessionToken: sessionToken,
         sessionUrl: sessionUrl,
         expiresAt: expiresAt,
         reused: status == 'reused',
