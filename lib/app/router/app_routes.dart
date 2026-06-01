@@ -33,6 +33,10 @@ enum AppRoute {
   call('/call'),
   postCall('/post-call'),
   callInterrupted('/call-interrupted'),
+  // Standalone Didit identity verification screen. Reachable manually
+  // for QA but NOT yet plugged into the onboarding funnel nor the
+  // find-date gate — those wire-ups land in Phases 5-6 of the rollout.
+  identityVerification('/identity'),
   messages('/messages'),
   conversation('/messages/:id');
 

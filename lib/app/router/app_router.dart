@@ -12,6 +12,7 @@ import '../../features/call/presentation/call_interrupted_screen.dart';
 import '../../features/call/presentation/call_screen.dart';
 import '../../features/discover/presentation/discover_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
+import '../../features/identity/presentation/identity_verification_screen.dart';
 import '../../features/matching/presentation/matching_screen.dart';
 import '../../features/messaging/presentation/conversation_screen.dart';
 import '../../features/messaging/presentation/inbox_screen.dart';
@@ -245,6 +246,16 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: AppRoute.callInterrupted.path,
         name: AppRoute.callInterrupted.name,
         builder: (_, _) => const CallInterruptedScreen(),
+      ),
+      // Standalone Didit identity verification screen (Phase 4 of the
+      // rollout). Not yet integrated into the onboarding funnel nor
+      // wired into any redirect — reachable only by an explicit
+      // `context.goNamed(AppRoute.identityVerification.name)`. The
+      // funnel + the find-date gate ship in Phases 5-6.
+      GoRoute(
+        path: AppRoute.identityVerification.path,
+        name: AppRoute.identityVerification.name,
+        builder: (_, _) => const IdentityVerificationScreen(),
       ),
       // /messages itself is the Messages tab inside the shell (above).
       // Only the per-conversation full-screen route remains outside.
