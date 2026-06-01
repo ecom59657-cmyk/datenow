@@ -113,7 +113,11 @@ class MockDiscoverRepository implements DiscoverRepository {
 
   @override
   Future<void> ensureWeeklyBatch(UserProfile self) async {
-    final weekStart = WeeklySuggestionsService.startOfWeek(DateTime.now());
+    // Week boundary is UTC-anchored (see WeeklySuggestionsService docs).
+    // .toUtc() explicit here so the intent is obvious at the call site.
+    final weekStart = WeeklySuggestionsService.startOfWeek(
+      DateTime.now().toUtc(),
+    );
     final existing = _suggestionsByUser[self.userId] ?? const [];
     final currentWeek = existing
         .where((s) =>
@@ -192,7 +196,9 @@ class MockDiscoverRepository implements DiscoverRepository {
     final missing =
         WeeklySuggestionsService.weeklySlots - currentWeek.length;
     final fresh = <WeeklySuggestion>[];
-    final now = DateTime.now();
+    // createdAt is stored / serialised — keep it UTC so it matches
+    // the DB's TIMESTAMPTZ convention and renders consistently.
+    final now = DateTime.now().toUtc();
     for (final ranked in selected.take(missing)) {
       fresh.add(
         WeeklySuggestion(
@@ -297,7 +303,9 @@ class MockDiscoverRepository implements DiscoverRepository {
       );
       return;
     }
-    final now = DateTime.now();
+    // matchedAt is stored / serialised — keep it UTC to match the
+    // DB's TIMESTAMPTZ convention.
+    final now = DateTime.now().toUtc();
     final mm = MutualMatch(
       id: 'mm-${now.microsecondsSinceEpoch}',
       userId: self.userId,

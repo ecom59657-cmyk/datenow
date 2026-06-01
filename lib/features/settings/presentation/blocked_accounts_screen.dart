@@ -101,7 +101,15 @@ class BlockedAccountsScreen extends ConsumerWidget {
   }
 
   String _formatBlockedAt(DateTime when, AppLocalizations l10n) {
-    final diff = DateTime.now().difference(when);
+    // `when` arrives as a UTC DateTime (parsed from a Supabase
+    // TIMESTAMPTZ via Z-suffixed ISO string). DateTime.difference()
+    // is epoch-based so this would actually work even without the
+    // explicit .toUtc() — but making the intent explicit prevents
+    // future regressions if a caller ever passes a different
+    // representation and matches the project-wide "compute in UTC,
+    // format at the very edge" convention from the Phase A
+    // timezone refactor.
+    final diff = DateTime.now().toUtc().difference(when);
     if (diff.inDays >= 30) return '${diff.inDays ~/ 30}m';
     if (diff.inDays >= 1) return '${diff.inDays}d';
     return '${diff.inHours.clamp(1, 23)}h';

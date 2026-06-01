@@ -200,10 +200,15 @@ class IdentityRepository {
               'Vérification indisponible, réessaie dans un instant.',
         );
       }
+      // The Edge Function returns expires_at as a UTC ISO string ;
+      // when it's absent (or parse fails) we synthesise a 30-min
+      // TTL in UTC so the fallback agrees with the server's
+      // convention and any downstream comparison stays timezone-
+      // agnostic. Phase A timezone refactor.
       final expiresAt = expiresAtRaw != null
           ? DateTime.tryParse(expiresAtRaw) ??
-              DateTime.now().add(const Duration(minutes: 30))
-          : DateTime.now().add(const Duration(minutes: 30));
+              DateTime.now().toUtc().add(const Duration(minutes: 30))
+          : DateTime.now().toUtc().add(const Duration(minutes: 30));
       // Never log the token itself — keep observability privacy-safe.
       _log.info(
         'createSession OK — session=$sessionId status=$status '

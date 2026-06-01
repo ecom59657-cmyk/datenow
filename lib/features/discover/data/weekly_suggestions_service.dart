@@ -33,12 +33,25 @@ class WeeklySuggestionsService {
   /// Maximum number of suggestions kept for the week.
   static const int weeklySlots = 3;
 
-  /// Anchors a date to the local Monday at 00:00:00 — used as the week's
-  /// identifier in storage so re-opens within the same week see the same
-  /// batch and a fresh Monday triggers a regeneration.
+  /// Anchors a date to the **UTC** Monday at 00:00:00 — used as the
+  /// week's identifier in storage so re-opens within the same week
+  /// see the same batch and a fresh Monday triggers a regeneration.
+  ///
+  /// The week boundary is computed in UTC on purpose : it must agree
+  /// across every client (Paris, NYC, Tokyo) and the eventual server-
+  /// side suggestion-reset cron job. Local-time week math previously
+  /// desync'd those — a user in Tokyo (UTC+9) at 00:05 local would
+  /// land on Monday while a user in NYC (UTC-5) at 10:05 PM the
+  /// previous calendar day would land on the previous Sunday, even
+  /// though both timestamps represent the same UTC instant.
+  ///
+  /// Input is normalised to UTC ; output is a UTC DateTime so any
+  /// caller comparing against it must also be UTC-aware (use
+  /// `DateTime.now().toUtc()` or the `.isUtc` getter to verify).
   static DateTime startOfWeek(DateTime now) {
-    final monday = now.subtract(Duration(days: now.weekday - 1));
-    return DateTime(monday.year, monday.month, monday.day);
+    final utc = now.toUtc();
+    final monday = utc.subtract(Duration(days: utc.weekday - 1));
+    return DateTime.utc(monday.year, monday.month, monday.day);
   }
 
   /// Selects up to [weeklySlots] candidates from [pool], keeping only those
