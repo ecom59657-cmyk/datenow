@@ -4,18 +4,32 @@ platform :ios, '15.1'
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
 
-# Didit SDK variant selector (Phase 6) — install the Core pod
-# (DiditSDK/Core) instead of the Full pod (DiditSDK with NFC). Core
-# supports iOS 13.0+ and skips the NFC capability entirely, which
-# means :
-#   - no Apple NFC review video required at submission,
-#   - no `com.apple.developer.nfc.readersession.iso7816.select-identifiers`
-#     in Info.plist,
-#   - no `Near Field Communication Tag Reading` capability in Xcode,
+# Didit SDK setup (Phase 6).
+#
+# DiditSDK is NOT published on the public CocoaPods trunk. The
+# podspec is hosted on GitHub, and the official didit_sdk Flutter
+# plugin documentation explicitly requires us to declare the pod
+# with the :podspec URL inside the target block (see below). Without
+# this declaration, pod install fails with :
+#
+#   [!] Unable to find a specification for `DiditSDK/All (~> 4.0)`
+#                                                depended upon by `didit_sdk`
+#
+# We pick the Core subspec (no NFC) :
+#   - supports iOS 13.0+ (our Podfile is 15.1 already, no impact),
+#   - skips the Apple NFC review-video ceremony at submission,
+#   - skips the com.apple.developer.nfc.* entitlements,
+#   - skips the Near Field Communication capability in Xcode,
 #   - smaller binary, faster build.
-# The didit_sdk Flutter plugin honours this env var at pod install
-# time. Default would be `true` → Full SDK with NFC.
+#
+# Both env vars are set explicitly so the didit_sdk plugin's own
+# podspec (which reads them when resolving its DiditSDK/<variant>
+# transitive dependency) agrees with the variant we pre-declare
+# below — avoiding any /All vs /Core conflict at install time.
 ENV['DIDIT_SDK_IOS_NFC_ENABLED'] = 'false'
+ENV['DIDIT_SDK_IOS_VARIANT']     = 'core'
+didit_sdk_ios_pod      = 'DiditSDK/Core'
+didit_sdk_ios_podspec  = 'https://raw.githubusercontent.com/didit-protocol/sdk-ios/main/DiditSDK.podspec'
 
 project 'Runner', {
   'Debug' => :debug,
@@ -42,6 +56,12 @@ flutter_ios_podfile_setup
 
 target 'Runner' do
   use_frameworks!
+
+  # Pre-declare DiditSDK with its GitHub-hosted podspec URL so the
+  # transitive dependency requested by the didit_sdk Flutter plugin
+  # resolves. See the documentation block above the variant selector
+  # at the top of this Podfile for the why.
+  pod didit_sdk_ios_pod, :podspec => didit_sdk_ios_podspec
 
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
   target 'RunnerTests' do
