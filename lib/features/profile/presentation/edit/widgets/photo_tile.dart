@@ -158,14 +158,30 @@ class PhotoTile extends StatelessWidget {
                   ),
                 ),
               // Status badge floats at the bottom, OVER any overlay
-              // wash, never under the menu trigger.
-              if (_statusBadge() != null)
-                Positioned(
-                  left: 6,
-                  right: 6,
-                  bottom: 6,
-                  child: _statusBadge()!,
+              // wash, never under the menu trigger. Wrapped in an
+              // AnimatedSwitcher so the badge transitions
+              //   uploading → pending → approved/rejected/manualReview
+              // cross-fade smoothly (300 ms) instead of swapping on a
+              // single frame — testers reported the abrupt change felt
+              // brittle.
+              Positioned(
+                left: 6,
+                right: 6,
+                bottom: 6,
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 300),
+                  switchInCurve: Curves.easeOut,
+                  switchOutCurve: Curves.easeIn,
+                  child: _statusBadge() != null
+                      ? KeyedSubtree(
+                          key: ValueKey('badge:${_badgeKey()}'),
+                          child: _statusBadge()!,
+                        )
+                      : const SizedBox.shrink(
+                          key: ValueKey('badge:none'),
+                        ),
                 ),
+              ),
             ],
           ),
         ),
@@ -173,19 +189,41 @@ class PhotoTile extends StatelessWidget {
     );
   }
 
+  /// True for every state where moderation analysis is ongoing —
+  /// keeps the wash + spinner + dark badge visually continuous from
+  /// the optimistic upload through the server-side `pending` /
+  /// `analyzing` window. Without this the transition felt sec to
+  /// testers (3 simultaneous visual changes : wash off + spinner off
+  /// + badge swap).
+  bool get _isAnalysisInProgress =>
+      _isUploading ||
+      status == PhotoModerationStatus.pending ||
+      status == PhotoModerationStatus.analyzing;
+
+  /// Discriminator key for the AnimatedSwitcher around the badge.
+  /// Each distinct (uploading vs status enum value) gets its own key
+  /// so the switcher knows when to cross-fade. Two consecutive
+  /// renders with the same key are treated as "no change" → no
+  /// animation, which is what we want when the status hasn't moved.
+  String _badgeKey() {
+    if (_isUploading) return 'uploading';
+    return status?.name ?? 'none';
+  }
+
   /// Renders the image with the right colour treatment :
-  ///   * optimistic (uploading)               → subtle dark wash + centred
-  ///                                              white spinner so the
-  ///                                              user instantly sees the
-  ///                                              tile is in flight
-  ///   * normal (approved / null)              → straight Image.memory
-  ///   * pending / analyzing / manual_review   → straight Image.memory
-  ///                                              (no greyscale — user
-  ///                                              must still recognise it)
+  ///   * analysis in progress                  → subtle dark wash +
+  ///     (optimistic, pending, analyzing)        centred white spinner
+  ///                                              so the tile reads as
+  ///                                              "actively being checked"
+  ///                                              the WHOLE time
   ///   * rejected                              → greyscale + dark wash
+  ///   * approved / manualReview / null        → straight Image.memory
+  ///                                              (terminal states; the
+  ///                                              status badge alone
+  ///                                              tells the story)
   Widget _imageWithStatusOverlay() {
     final img = Image.memory(bytes!, fit: BoxFit.cover);
-    if (_isUploading) {
+    if (_isAnalysisInProgress) {
       return Stack(fit: StackFit.expand, children: [
         ColorFiltered(
           // Slight darken so the white spinner reads against light
@@ -229,12 +267,19 @@ class PhotoTile extends StatelessWidget {
     return img;
   }
 
-  /// The status badge widget for the current [status], or `null` when
-  /// no badge should render (approved or unknown).
+  /// The status badge widget for the current [status], or `null`
+  /// when no badge should render (only for the unknown-status case
+  /// — every known PhotoModerationStatus now has its own badge so
+  /// the user is always told exactly where the photo stands).
+  ///
+  /// Stable, persistent design : the "Validée" badge stays for the
+  /// life of the tile (no fade-out timer). The user must be able to
+  /// glance at their grid and immediately see which photos are
+  /// usable.
   Widget? _statusBadge() {
-    // Optimistic upload — wording matches the brief ("Analyse…"),
-    // distinct from the server-side "En vérification…" so the user
-    // can intuit the flow : upload first, then server check.
+    // Optimistic upload — distinct wording ("Analyse…") so the user
+    // can intuit the flow : upload first, then server check
+    // ("En vérification…"), then the final verdict.
     if (_isUploading) {
       return _StatusBadge(
         label: 'Analyse…',
@@ -244,21 +289,41 @@ class PhotoTile extends StatelessWidget {
     }
     switch (status) {
       case null:
-      case PhotoModerationStatus.approved:
+        // Status fetch failed (network blip on myPhotoStatusesProvider).
+        // Don't guess — render the photo without any badge until the
+        // next refresh resolves the real state.
         return null;
+      case PhotoModerationStatus.approved:
+        // Green discreet "Validée" — reassures the user the photo is
+        // safe to be used (matching live, suggestion proposals, post-
+        // call reveal). Persistent.
+        return const _StatusBadge(
+          label: 'Validée',
+          background: AppColors.success,
+          icon: Icons.verified_rounded,
+        );
       case PhotoModerationStatus.rejected:
-        return _StatusBadge(
+        return const _StatusBadge(
           label: 'Photo refusée',
           background: AppColors.error,
           icon: Icons.block_rounded,
         );
       case PhotoModerationStatus.pending:
       case PhotoModerationStatus.analyzing:
-      case PhotoModerationStatus.manualReview:
         return _StatusBadge(
           label: 'En vérification…',
           background: Colors.black.withValues(alpha: 0.65),
           icon: Icons.hourglass_top_rounded,
+        );
+      case PhotoModerationStatus.manualReview:
+        // Orange "À vérifier" — distinct from the in-progress dark
+        // badge AND from the final approved/rejected verdicts. Tells
+        // the user "an admin is reviewing" without using technical
+        // wording.
+        return const _StatusBadge(
+          label: 'À vérifier',
+          background: AppColors.warning,
+          icon: Icons.support_agent_rounded,
         );
     }
   }
