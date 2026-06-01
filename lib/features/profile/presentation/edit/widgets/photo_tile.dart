@@ -288,15 +288,28 @@ class PhotoTile extends StatelessWidget {
       );
     }
     switch (status) {
-      case null:
-        // Status fetch failed (network blip on myPhotoStatusesProvider).
-        // Don't guess — render the photo without any badge until the
-        // next refresh resolves the real state.
-        return null;
       case PhotoModerationStatus.approved:
-        // Green discreet "Validée" — reassures the user the photo is
-        // safe to be used (matching live, suggestion proposals, post-
-        // call reveal). Persistent.
+      case null:
+        // Both branches collapse onto the SAME green badge.
+        //
+        // approved → confirmed safe by the Edge Function (or by the
+        //            SQL grandfather migration for photos uploaded
+        //            before the moderation pipeline existed).
+        // null     → status lookup transiently returned no entry for
+        //            this storage_path : either myPhotoStatusesProvider
+        //            is still loading, or a grandfathered row's path
+        //            did not appear in the map for any reason. The
+        //            product rule is "if a photo is in the grid it
+        //            has been accepted" — never leave a photo without
+        //            a status badge, otherwise the user is left
+        //            guessing whether it's usable.
+        //
+        // If the photo turns out to be rejected / manual_review once
+        // the provider resolves, the AnimatedSwitcher around the
+        // badge cross-fades to the real verdict in 300 ms — short
+        // enough that the brief "Validée" flash is not jarring, and
+        // the green default is the right bias (false-positive on the
+        // safe side, not the wrong-rejection side).
         return const _StatusBadge(
           label: 'Validée',
           background: AppColors.success,
