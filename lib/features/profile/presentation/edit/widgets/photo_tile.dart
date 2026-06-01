@@ -197,6 +197,15 @@ class PhotoTile extends StatelessWidget {
   /// + badge swap).
   bool get _isAnalysisInProgress =>
       _isUploading ||
+      // null = status unknown (provider loading OR new upload row not
+      // yet picked up by myPhotoStatusesProvider). Conservative : treat
+      // as "still being checked" — never as "approved by default" — so
+      // a freshly uploaded photo NEVER flashes "Validée" before
+      // Google Vision has actually said so. Grandfathered photos
+      // already have DB status='approved' (set by the SQL migration)
+      // and hit the explicit `approved` switch arm, so they are NOT
+      // affected by this null branch.
+      status == null ||
       status == PhotoModerationStatus.pending ||
       status == PhotoModerationStatus.analyzing;
 
@@ -289,27 +298,17 @@ class PhotoTile extends StatelessWidget {
     }
     switch (status) {
       case PhotoModerationStatus.approved:
-      case null:
-        // Both branches collapse onto the SAME green badge.
-        //
-        // approved → confirmed safe by the Edge Function (or by the
-        //            SQL grandfather migration for photos uploaded
-        //            before the moderation pipeline existed).
-        // null     → status lookup transiently returned no entry for
-        //            this storage_path : either myPhotoStatusesProvider
-        //            is still loading, or a grandfathered row's path
-        //            did not appear in the map for any reason. The
-        //            product rule is "if a photo is in the grid it
-        //            has been accepted" — never leave a photo without
-        //            a status badge, otherwise the user is left
-        //            guessing whether it's usable.
-        //
-        // If the photo turns out to be rejected / manual_review once
-        // the provider resolves, the AnimatedSwitcher around the
-        // badge cross-fades to the real verdict in 300 ms — short
-        // enough that the brief "Validée" flash is not jarring, and
-        // the green default is the right bias (false-positive on the
-        // safe side, not the wrong-rejection side).
+        // Only an EXPLICIT approved status — either from the Edge
+        // Function verdict or from the SQL grandfather migration —
+        // earns the green "Validée" badge. Never inferred from null
+        // or fallback. The previous "null defaults to Validée"
+        // shortcut caused a "Validée → À vérifier" reversal on new
+        // uploads (the row was inserted with status=pending but
+        // myPhotoStatusesProvider had not re-fetched yet, so the
+        // tile briefly mapped to null → green, then crossed back to
+        // orange once the real verdict landed). That read as the app
+        // de-validating a previously validated photo, which is the
+        // worst possible UX.
         return const _StatusBadge(
           label: 'Validée',
           background: AppColors.success,
@@ -321,8 +320,15 @@ class PhotoTile extends StatelessWidget {
           background: AppColors.error,
           icon: Icons.block_rounded,
         );
+      case null:
       case PhotoModerationStatus.pending:
       case PhotoModerationStatus.analyzing:
+        // Conservative : null status (provider loading OR new upload
+        // row not yet picked up) shares the same "En vérification…"
+        // badge as the explicit pending / analyzing states. The user
+        // sees a continuous, honest "still being checked" message
+        // until Vision actually decides. This is the only allowed
+        // transition into "Validée".
         return _StatusBadge(
           label: 'En vérification…',
           background: Colors.black.withValues(alpha: 0.65),

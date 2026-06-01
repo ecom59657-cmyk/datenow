@@ -181,6 +181,16 @@ class PhotoModerationRepository {
             PhotoModerationStatus.fromWire(r['status'] as String?);
       }
       _log.info('myPhotoStatuses → ${map.length} rows');
+      // Per-row dump for UX debugging : if a tile shows "Validée"
+      // without a matching ".jpg = approved" line in this log, the
+      // green badge came from a UI fallback — not from a Google
+      // Vision verdict.
+      for (final e in map.entries) {
+        final short = e.key.contains('/')
+            ? e.key.substring(e.key.lastIndexOf('/') + 1)
+            : e.key;
+        _log.info('  $short = ${e.value.name}');
+      }
       return map;
     } catch (e, st) {
       _log.warn('myPhotoStatuses failed (returning empty): $e\n$st');
