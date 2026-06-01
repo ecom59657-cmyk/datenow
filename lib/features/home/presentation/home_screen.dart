@@ -8,10 +8,12 @@ import '../../../app/scaffold/active_tab.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../app/theme/app_typography.dart';
+import '../../../core/config/feature_flags.dart';
 import '../../../core/services/location_service.dart';
 import '../../../core/utils/display_name.dart';
 import '../../../core/utils/extensions.dart';
 import '../../../core/utils/logger.dart';
+import '../../identity/data/identity_repository.dart';
 import '../../profile_moderation/data/photo_moderation_repository.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../shared/widgets/app_button.dart';
@@ -230,6 +232,33 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     }
     _log.info('Approved photo confirmed — gate cleared');
 
+    // 2.6. Identity gate — Phase 5 of the Didit rollout.
+    //      Mirrors the photo gate above: we invalidate the provider on
+    //      every tap so a freshly-landed Didit webhook (which UPDATES
+    //      `profiles.identity_verified` server-side) is picked up
+    //      immediately rather than after the user closes / reopens
+    //      the app. Backed by the SECURITY DEFINER RPC
+    //      `has_verified_identity()` so a tampered client cannot
+    //      self-affirm. Fail-closed on RPC error.
+    //
+    //      The gate respects [FeatureFlags.requireIdentityVerification]
+    //      — default ON, can be flipped via `.env IDENTITY_GATE=false`
+    //      as an emergency fuse if Phase 2's webhook field-paths turn
+    //      out to be wrong on real sandbox traffic.
+    if (FeatureFlags.requireIdentityVerification) {
+      ref.invalidate(hasVerifiedIdentityProvider);
+      final verified = await ref.read(hasVerifiedIdentityProvider.future);
+      if (!verified) {
+        _log.warn(
+          'Identity not verified for ${user.id} — blocking find date',
+        );
+        if (!context.mounted) return;
+        await _showIdentityRequiredSheet(context);
+        return;
+      }
+      _log.info('Identity verified — gate cleared');
+    }
+
     // 3. Quota — wrapped: a broken quota backend should NOT block the
     //    button. We log and proceed in that case.
     try {
@@ -389,6 +418,98 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
               const SizedBox(height: AppSpacing.sm),
               AppButton(
                 label: l10n.findDatePhotoRequiredCancel,
+                variant: AppButtonVariant.secondary,
+                onPressed: () => Navigator.of(sheetContext).pop(),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Premium bottom sheet shown when the user taps Find-date without a
+  /// completed Didit identity verification. Mirrors
+  /// [_showPhotoRequiredSheet] visually so the two pre-flight gates
+  /// read as the same UX language.
+  ///
+  /// Strings are hardcoded FR for now — these are launch-blocking
+  /// surfaces, getting them into AppLocalizations is the next chore
+  /// after Phase 6 ships. Tagged with `TODO(i18n-identity)`.
+  Future<void> _showIdentityRequiredSheet(BuildContext context) {
+    return showModalBottomSheet<void>(
+      context: context,
+      useRootNavigator: true,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        top: false,
+        minimum: const EdgeInsets.only(bottom: AppSpacing.sm),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.lg,
+            AppSpacing.lg,
+            AppSpacing.lg,
+            AppSpacing.sm,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                width: 80,
+                height: 80,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: AppColors.brandGradient,
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.brandPink.withValues(alpha: 0.4),
+                      blurRadius: 24,
+                      spreadRadius: 2,
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.verified_user_outlined,
+                  color: Colors.white,
+                  size: 36,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              Text(
+                'Vérifie ton identité', // TODO(i18n-identity)
+                textAlign: TextAlign.center,
+                style: AppTypography.h2,
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                // TODO(i18n-identity)
+                'DateNow vérifie ton âge et ton identité avant de lancer un date — '
+                'pour la sécurité de tous. Cela prend environ 2 minutes : pièce '
+                'd\'identité + selfie.',
+                textAlign: TextAlign.center,
+                style: AppTypography.body
+                    .copyWith(color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              AppButton(
+                label: 'Vérifier maintenant', // TODO(i18n-identity)
+                icon: Icons.shield_outlined,
+                size: AppButtonSize.large,
+                onPressed: () {
+                  Navigator.of(sheetContext).pop();
+                  context.pushNamed(AppRoute.identityVerification.name);
+                },
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              AppButton(
+                label: 'Plus tard', // TODO(i18n-identity)
                 variant: AppButtonVariant.secondary,
                 onPressed: () => Navigator.of(sheetContext).pop(),
               ),

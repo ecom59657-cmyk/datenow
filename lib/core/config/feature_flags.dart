@@ -38,6 +38,32 @@ class FeatureFlags {
   ///      S1 / S2 / S3 are validated end-to-end on V2.
   static bool get useMatchingV2 => _truthy('MATCHING_V2');
 
+  /// Activates the Didit identity-verification gate on the Find-date
+  /// CTA (Phase 5 of the Didit rollout).
+  ///
+  /// **Default ON** — diverges from every other flag in this file on
+  /// purpose. Identity verification is a legal / compliance gate
+  /// (18+ + face match + liveness) and shipping it dormant defeats
+  /// the point. Flip OFF only as a fuse if Phase 2's Didit webhook
+  /// payload paths turn out to be wrong on real sandbox traffic and
+  /// the gate would deadlock new signups.
+  ///
+  /// Override in `.env`:
+  ///
+  ///     IDENTITY_GATE=false    (also accepts '0' or 'no')
+  ///
+  /// When OFF, the three Phase 5 surfaces hide together — gate,
+  /// Profile banner, Settings tile — so the user sees zero hint of
+  /// the feature. The dormant Phase 4 surface (`/identity` route) is
+  /// still reachable via debug entry, just not advertised.
+  static bool get requireIdentityVerification {
+    final raw = (dotenv.env['IDENTITY_GATE'] ?? '').trim().toLowerCase();
+    // Default ON — only the literal strings 'false' / '0' / 'no'
+    // disable. Missing key, empty string, or any other value keeps
+    // the gate active.
+    return raw != 'false' && raw != '0' && raw != 'no';
+  }
+
   /// Internal — reads `.env` value, accepts `true` / `1` / `yes`
   /// (case-insensitive). Anything else returns `false`. Mirrors the
   /// helper in [Env] so a future caller can read either class through

@@ -4,11 +4,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../app/router/app_routes.dart';
+import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
+import '../../../core/config/feature_flags.dart';
 import '../../../core/utils/extensions.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../shared/widgets/app_scaffold.dart';
 import '../../auth/presentation/providers/auth_provider.dart';
+import '../../identity/data/identity_repository.dart';
 import 'widgets/destructive_dialog.dart';
 import 'widgets/setting_widgets.dart';
 
@@ -89,6 +92,43 @@ class SettingsScreen extends ConsumerWidget {
                 subtitle: l10n.profilePhotosSubtitle,
                 onTap: () => context.pushNamed(AppRoute.editPhotos.name),
               ),
+              // Identity-verification tile — Phase 5 of the Didit
+              // rollout. The subtitle + trailing icon adapt to the
+              // current verification status (live via the RPC).
+              // Hidden entirely when the gate is disabled via
+              // `.env IDENTITY_GATE=false` so we never advertise a
+              // dormant feature.
+              // TODO(i18n-identity): localise strings.
+              if (FeatureFlags.requireIdentityVerification)
+                Consumer(
+                  builder: (context, ref, _) {
+                    final verifiedAsync =
+                        ref.watch(hasVerifiedIdentityProvider);
+                    final verified =
+                        verifiedAsync.asData?.value ?? false;
+                    return SettingTile(
+                      icon: Icons.verified_user_outlined,
+                      title: 'Vérification d\'identité',
+                      subtitle: verified
+                          ? 'Identité vérifiée'
+                          : 'Vérification requise pour lancer un date',
+                      trailing: verified
+                          ? const Icon(
+                              Icons.check_circle_rounded,
+                              color: AppColors.success,
+                              size: 22,
+                            )
+                          : const Icon(
+                              Icons.error_outline_rounded,
+                              color: AppColors.warning,
+                              size: 22,
+                            ),
+                      onTap: () => context.pushNamed(
+                        AppRoute.identityVerification.name,
+                      ),
+                    );
+                  },
+                ),
             ],
           ),
           const SizedBox(height: AppSpacing.lg),

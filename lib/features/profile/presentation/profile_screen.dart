@@ -7,12 +7,14 @@ import '../../../app/scaffold/active_tab.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../app/theme/app_typography.dart';
+import '../../../core/config/feature_flags.dart';
 import '../../../core/utils/display_name.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../shared/widgets/app_button.dart';
 import '../../../shared/widgets/app_scaffold.dart';
 import '../../../shared/widgets/glass_card.dart';
 import '../../auth/presentation/providers/auth_provider.dart';
+import '../../identity/data/identity_repository.dart';
 import '../../profile_setup/presentation/providers/profile_provider.dart';
 import '../../subscription/presentation/providers/subscription_provider.dart';
 import 'edit/providers/profile_photos_provider.dart';
@@ -79,6 +81,31 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
               ],
             ),
           ),
+          // Identity-verification banner — Phase 5 of the Didit rollout.
+          // Renders only when the gate is enabled AND the caller is not
+          // yet verified. Provider error / loading also hides it so we
+          // never flash a misleading "verify now" prompt on a transient
+          // RPC blip. The full Find-date gate (in `home_screen.dart`)
+          // already fails-closed, so a hidden banner here is not a hole.
+          if (FeatureFlags.requireIdentityVerification) ...[
+            Consumer(
+              builder: (context, ref, _) {
+                final verified = ref
+                        .watch(hasVerifiedIdentityProvider)
+                        .asData
+                        ?.value ??
+                    true;
+                if (verified) return const SizedBox.shrink();
+                return Padding(
+                  padding: const EdgeInsets.only(top: AppSpacing.md),
+                  child: _IdentityBanner(
+                    onTap: () => context
+                        .pushNamed(AppRoute.identityVerification.name),
+                  ),
+                );
+              },
+            ),
+          ],
           const SizedBox(height: AppSpacing.lg),
           _SectionTile(
             icon: Icons.person_outline_rounded,
@@ -240,6 +267,77 @@ class _SectionTile extends StatelessWidget {
             const Icon(Icons.chevron_right_rounded,
                 color: AppColors.textTertiary),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Non-blocking nudge shown at the top of the Profile screen when the
+/// signed-in user has not yet completed the Didit identity flow.
+///
+/// Mirrors the warm-amber palette used for "vérification en cours"
+/// elsewhere (e.g. the photo moderation `manual_review` badge), so
+/// the visual language stays "action needed, not error". The whole
+/// banner is tappable — single CTA, no secondary action, no dismiss
+/// button (the user can simply ignore it; the find-date gate handles
+/// the actual block).
+///
+/// TODO(i18n-identity): strings hardcoded FR until Phase 5+ stabilises.
+class _IdentityBanner extends StatelessWidget {
+  const _IdentityBanner({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      borderRadius: AppRadius.brLg,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: AppRadius.brLg,
+        child: Container(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          decoration: BoxDecoration(
+            color: AppColors.warning.withValues(alpha: 0.10),
+            borderRadius: AppRadius.brLg,
+            border: Border.all(
+              color: AppColors.warning.withValues(alpha: 0.35),
+            ),
+          ),
+          child: Row(
+            children: [
+              const Icon(
+                Icons.shield_outlined,
+                color: AppColors.warning,
+                size: 24,
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Vérifie ton identité',
+                      style: AppTypography.bodyStrong,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Obligatoire pour lancer un date — ~2 min.',
+                      style: AppTypography.caption.copyWith(
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(
+                Icons.chevron_right_rounded,
+                color: AppColors.warning,
+              ),
+            ],
+          ),
         ),
       ),
     );
