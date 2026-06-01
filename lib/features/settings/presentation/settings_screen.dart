@@ -12,6 +12,7 @@ import '../../../l10n/app_localizations.dart';
 import '../../../shared/widgets/app_scaffold.dart';
 import '../../auth/presentation/providers/auth_provider.dart';
 import '../../identity/data/identity_repository.dart';
+import '../../identity/domain/identity_verification_status.dart';
 import 'widgets/destructive_dialog.dart';
 import 'widgets/setting_widgets.dart';
 
@@ -92,9 +93,17 @@ class SettingsScreen extends ConsumerWidget {
                 subtitle: l10n.profilePhotosSubtitle,
                 onTap: () => context.pushNamed(AppRoute.editPhotos.name),
               ),
-              // Identity-verification tile — Phase 5 of the Didit
-              // rollout. The subtitle + trailing icon adapt to the
-              // current verification status (live via the RPC).
+              // Identity-verification tile — Phase 5 + UX iteration.
+              //
+              // Five visual states keyed off the latest
+              // identity_verifications row's `status`. The green
+              // check is shown EXCLUSIVELY for `approved` (i.e. a
+              // real Didit verdict), never for grandfather accounts
+              // (no row → falls into the "À vérifier" branch). This
+              // matches the audit-honesty invariant : if Settings
+              // says "Identité vérifiée ✓" with a green check, the
+              // user *really* went through Didit.
+              //
               // Hidden entirely when the gate is disabled via
               // `.env IDENTITY_GATE=false` so we never advertise a
               // dormant feature.
@@ -102,27 +111,22 @@ class SettingsScreen extends ConsumerWidget {
               if (FeatureFlags.requireIdentityVerification)
                 Consumer(
                   builder: (context, ref, _) {
-                    final verifiedAsync =
-                        ref.watch(hasVerifiedIdentityProvider);
-                    final verified =
-                        verifiedAsync.asData?.value ?? false;
+                    final user = ref.watch(currentUserProvider);
+                    if (user == null) return const SizedBox.shrink();
+                    final latest = ref
+                        .watch(latestIdentityVerificationProvider(user.id))
+                        .asData
+                        ?.value;
+                    final tile = _identityTileFor(latest?.status);
                     return SettingTile(
-                      icon: Icons.verified_user_outlined,
+                      icon: tile.icon,
                       title: 'Vérification d\'identité',
-                      subtitle: verified
-                          ? 'Identité vérifiée'
-                          : 'Vérification requise pour lancer un date',
-                      trailing: verified
-                          ? const Icon(
-                              Icons.check_circle_rounded,
-                              color: AppColors.success,
-                              size: 22,
-                            )
-                          : const Icon(
-                              Icons.error_outline_rounded,
-                              color: AppColors.warning,
-                              size: 22,
-                            ),
+                      subtitle: tile.subtitle,
+                      trailing: Icon(
+                        tile.trailingIcon,
+                        color: tile.trailingColor,
+                        size: 22,
+                      ),
                       onTap: () => context.pushNamed(
                         AppRoute.identityVerification.name,
                       ),
@@ -230,5 +234,73 @@ class SettingsScreen extends ConsumerWidget {
         ],
       ),
     );
+  }
+}
+
+// ── Identity-verification tile state mapping ─────────────────────
+//
+// Helper kept private to this file — the Phase 4 IdentityVerification
+// screen has its own (richer) palette table for the same status enum,
+// but the Settings tile only needs a 5-row table with a subtitle +
+// trailing icon (no large status card body).
+//
+// `approved` (the only "Didit-verified" branch) gets the green
+// check. Every other branch — including the `null` row that covers
+// "never started" AND grandfather accounts — gets an amber or red
+// glyph so the visual hierarchy stays honest.
+
+class _IdentityTileState {
+  const _IdentityTileState({
+    required this.icon,
+    required this.subtitle,
+    required this.trailingIcon,
+    required this.trailingColor,
+  });
+  final IconData icon;
+  final String subtitle;
+  final IconData trailingIcon;
+  final Color trailingColor;
+}
+
+_IdentityTileState _identityTileFor(IdentityVerificationStatus? s) {
+  switch (s) {
+    case IdentityVerificationStatus.approved:
+      return const _IdentityTileState(
+        icon: Icons.verified_user_outlined,
+        subtitle: 'Identité vérifiée',
+        trailingIcon: Icons.check_circle_rounded,
+        trailingColor: AppColors.success,
+      );
+    case IdentityVerificationStatus.pending:
+    case IdentityVerificationStatus.inReview:
+      return const _IdentityTileState(
+        icon: Icons.verified_user_outlined,
+        subtitle: 'Vérification en cours',
+        trailingIcon: Icons.hourglass_top_rounded,
+        trailingColor: AppColors.warning,
+      );
+    case IdentityVerificationStatus.rejected:
+      return const _IdentityTileState(
+        icon: Icons.verified_user_outlined,
+        subtitle: 'Vérification refusée',
+        trailingIcon: Icons.error_outline_rounded,
+        trailingColor: AppColors.error,
+      );
+    case IdentityVerificationStatus.expired:
+      return const _IdentityTileState(
+        icon: Icons.verified_user_outlined,
+        subtitle: 'Session expirée, recommencer',
+        trailingIcon: Icons.timer_off_outlined,
+        trailingColor: AppColors.warning,
+      );
+    case null:
+      // Covers BOTH "never started" AND grandfather accounts. No
+      // green check, no false-positive verification claim.
+      return const _IdentityTileState(
+        icon: Icons.verified_user_outlined,
+        subtitle: 'Vérifier mon identité',
+        trailingIcon: Icons.error_outline_rounded,
+        trailingColor: AppColors.warning,
+      );
   }
 }

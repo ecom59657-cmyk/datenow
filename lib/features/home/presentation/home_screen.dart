@@ -70,6 +70,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
             // existing shell branch — no new screen, no extra route.
             onAvatarTap: () => context.goNamed(AppRoute.profile.name),
           ).animate().fadeIn(duration: 350.ms),
+          // Non-blocking identity-verification nudge for users who have
+          // not yet gone through the Didit flow — including grandfather
+          // accounts (Phase 1 migration leftovers). Hidden as soon as
+          // [isDiditVerifiedProvider] flips to true. The find-date
+          // hard gate (FeatureFlags.requireIdentityVerification) lives
+          // in `_onFindDate` and is the actual blocker — this card
+          // only frames the verification as a *community safety* step.
+          if (FeatureFlags.requireIdentityVerification) ...[
+            const SizedBox(height: AppSpacing.lg),
+            _HomeIdentityNudge(),
+          ],
           const SizedBox(height: AppSpacing.xl),
           HomeHeroCard(
             onPressed: _onFindDate,
@@ -750,6 +761,106 @@ class _PremiumTeaserCard extends ConsumerWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Soft community-safety nudge shown on Home for any user who has
+/// NOT been Didit-approved yet. Reads [isDiditVerifiedProvider] so a
+/// grandfather account (identity_provider='grandfather' from the
+/// Phase 1 migration) is still asked to go through Didit, while a
+/// real approved account sees nothing.
+///
+/// Visual tone : premium + reassuring. Brand gradient on the icon
+/// (same warm orb used by the photo-required sheet) plus a soft
+/// glass-card body. NOT a warning color — the goal is "join the
+/// secure crew", not "you are suspicious".
+///
+/// Whole card is tappable (single primary CTA). No dismiss button —
+/// the card hides itself the moment the Didit webhook flips the
+/// row's status to `approved` (Realtime stream → provider rebuild).
+///
+/// TODO(i18n-identity): hardcoded FR until Phase 5+ stabilises.
+class _HomeIdentityNudge extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final diditVerified = ref.watch(isDiditVerifiedProvider);
+    if (diditVerified) return const SizedBox.shrink();
+
+    return Material(
+      color: Colors.transparent,
+      borderRadius: AppRadius.brLg,
+      child: InkWell(
+        onTap: () =>
+            context.pushNamed(AppRoute.identityVerification.name),
+        borderRadius: AppRadius.brLg,
+        child: Container(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceElevated,
+            borderRadius: AppRadius.brLg,
+            border: Border.all(color: AppColors.hairline),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Warm gradient orb — same visual language as
+              // _showPhotoRequiredSheet's hero icon, so the two
+              // community-safety surfaces read as the same family.
+              Container(
+                width: 44,
+                height: 44,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: AppColors.brandGradient,
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.brandPink.withValues(alpha: 0.30),
+                      blurRadius: 16,
+                      spreadRadius: 1,
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.shield_outlined,
+                  color: Colors.white,
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Protège tes rencontres',
+                      style: AppTypography.bodyStrong,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'La vérification d\'identité aide à garder '
+                      'DateNow sûr pour tout le monde.',
+                      style: AppTypography.caption.copyWith(
+                        color: AppColors.textSecondary,
+                        height: 1.35,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    Text(
+                      'Vérifier mon identité  →',
+                      style: AppTypography.caption.copyWith(
+                        color: AppColors.brandPink,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

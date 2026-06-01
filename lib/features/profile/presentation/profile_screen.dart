@@ -81,21 +81,19 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
               ],
             ),
           ),
-          // Identity-verification banner — Phase 5 of the Didit rollout.
-          // Renders only when the gate is enabled AND the caller is not
-          // yet verified. Provider error / loading also hides it so we
-          // never flash a misleading "verify now" prompt on a transient
-          // RPC blip. The full Find-date gate (in `home_screen.dart`)
-          // already fails-closed, so a hidden banner here is not a hole.
+          // Identity-verification banner — Phase 5 + UX iteration.
+          // Renders for ANY user that is not Didit-approved, including
+          // grandfather accounts (Phase 1 migration leftovers). Switched
+          // from [hasVerifiedIdentityProvider] (true for grandfather)
+          // to [isDiditVerifiedProvider] (true ONLY for a real
+          // didit-approved row) so the visual states stay honest :
+          // a grandfather user sees the gentle "verify now" banner
+          // even though the find-date hard gate lets them through.
           if (FeatureFlags.requireIdentityVerification) ...[
             Consumer(
               builder: (context, ref, _) {
-                final verified = ref
-                        .watch(hasVerifiedIdentityProvider)
-                        .asData
-                        ?.value ??
-                    true;
-                if (verified) return const SizedBox.shrink();
+                final diditVerified = ref.watch(isDiditVerifiedProvider);
+                if (diditVerified) return const SizedBox.shrink();
                 return Padding(
                   padding: const EdgeInsets.only(top: AppSpacing.md),
                   child: _IdentityBanner(

@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/services/supabase_service.dart';
 import '../../../core/utils/logger.dart';
+import '../../auth/presentation/providers/auth_provider.dart';
 import '../domain/identity_verification_status.dart';
 
 /// Outcome of `IdentityRepository.createSession()`.
@@ -313,3 +314,33 @@ final latestIdentityVerificationProvider =
     return repo.watchLatest(userId);
   },
 );
+
+/// True ONLY when the signed-in user has a Didit-issued verification
+/// in the `approved` terminal state.
+///
+/// Distinct from [hasVerifiedIdentityProvider] on purpose :
+///   * `hasVerifiedIdentityProvider` is backed by the SECURITY DEFINER
+///     RPC `has_verified_identity()` — returns true for `grandfather`
+///     accounts (the Phase 1 migration flipped existing dev accounts
+///     to identity_verified=true with identity_provider='grandfather'
+///     so they could keep using the app while Didit shipped). It
+///     drives the find-date hard gate, which is intentionally lenient
+///     on legacy accounts.
+///   * `isDiditVerifiedProvider` ignores the grandfather grandparent
+///     flag and requires a *real* Didit-approved row in
+///     `identity_verifications`. It drives the UX surfaces that
+///     advertise "Identité vérifiée ✓" (Settings tile, absence of
+///     the Home nudge card, absence of the Profile banner) — we
+///     don't want grandfather accounts to feel falsely reassured
+///     and we don't want to lie to a future audit reviewer about
+///     who really went through KYC.
+///
+/// Falls back to `false` while the stream is still loading or when
+/// no row exists for the user — both are "not yet Didit-verified"
+/// states from the UX standpoint.
+final isDiditVerifiedProvider = Provider<bool>((ref) {
+  final user = ref.watch(currentUserProvider);
+  if (user == null) return false;
+  final row = ref.watch(latestIdentityVerificationProvider(user.id)).asData?.value;
+  return row?.status == IdentityVerificationStatus.approved;
+});
