@@ -130,33 +130,60 @@ class CallSessionRepository {
       return (row: existing, source: 'fetched_existing');
     }
 
-    // Two-step create: INSERT first to let Postgres generate the call id,
-    // then UPDATE with `channel_name = dn_<id>` so the channel name is
-    // strictly server-derived from the row's own primary key. This is the
-    // canonical "one call → one channel" guarantee the spec asks for.
-    final inserted = await _client
-        .from(_table)
-        .insert({
-          'caller_id': meUserId,
-          'callee_id': peerUserId,
-          'status': 'live',
-        })
-        .select()
-        .single();
-    final callId = inserted['id'] as String;
-    final channelName = 'dn_$callId';
-
-    final updated = await _client
-        .from(_table)
-        .update({'channel_name': channelName})
-        .eq('id', callId)
-        .select()
-        .single();
-    _log.info(
-      'created call id=$callId channel=${updated['channel_name']}',
-    );
-    DebugLog.call('call created $callId'); // debug-observer
-    return (row: CallSessionRow.fromJson(updated), source: 'created');
+    // V1 Hardening (Pass 5 H2) :
+    // The legacy two-step INSERT-then-UPDATE pattern is gone. Direct
+    // INSERT into `calls` is now blocked by RLS (commit 4 dropped
+    // the FOR ALL policy and replaced it with SELECT/UPDATE-only).
+    //
+    // We call the SECURITY DEFINER RPC `create_call_for_discover`
+    // which validates the caller server-side (auth, identity gate,
+    // ban check, mutual block, no concurrent call) and writes the
+    // row with id + channel_name in a single statement. The
+    // canonical channel-name pattern (`dn_<id>`) is preserved
+    // unchanged — only the call site moves.
+    //
+    // Race handling : if the peer just created the row a tick
+    // before us, the RPC raises `already_in_call` (SQLSTATE 23P01).
+    // We catch it and fall back to `_findActiveForPair`, which is
+    // exactly what the pre-V1-hardening code did when its INSERT
+    // hit the UNIQUE-active-pair index.
+    try {
+      final created = await _client.rpc<dynamic>(
+        'create_call_for_discover',
+        params: {'p_peer_id': peerUserId},
+      );
+      // RPC returns a single calls row (SETOF calls). Supabase wraps
+      // it as a single-element list for `RETURNS public.calls`.
+      final Map<String, dynamic> row =
+          (created is List && created.isNotEmpty)
+              ? (created.first as Map).cast<String, dynamic>()
+              : (created as Map).cast<String, dynamic>();
+      _log.info(
+        'created call id=${row['id']} channel=${row['channel_name']}',
+      );
+      DebugLog.call('call created ${row['id']}');
+      return (row: CallSessionRow.fromJson(row), source: 'created');
+    } on sb.PostgrestException catch (e) {
+      // 23P01 already_in_call : a concurrent peer just won the race.
+      // Re-fetch the row they created.
+      if (e.code == '23P01') {
+        _log.info(
+          'create_call_for_discover lost race vs peer — re-fetching',
+        );
+        final raced = await _findActiveForPair(meUserId, peerUserId);
+        if (raced != null) {
+          return (row: raced, source: 'fetched_existing');
+        }
+      }
+      // 23505 UNIQUE active pair : same outcome, race lost.
+      if (e.code == '23505') {
+        final raced = await _findActiveForPair(meUserId, peerUserId);
+        if (raced != null) {
+          return (row: raced, source: 'fetched_existing');
+        }
+      }
+      rethrow;
+    }
   }
 
   /// Flips the caller's own pre-call ready flag. The `mark_call_ready`

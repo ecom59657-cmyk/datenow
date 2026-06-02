@@ -270,31 +270,45 @@ class RevealRepository {
     return MatchDecisionOutcome.awaitingPeer;
   }
 
-  /// Creates the permanent match row. Idempotent: the table's
-  /// UNIQUE(user_a_id, user_b_id) + ordered-pair CHECK mean a second
-  /// caller (the peer reaching `mutualMatch` at the same time) upserts
-  /// the same row instead of duplicating it.
+  /// Creates the permanent match row.
+  ///
+  /// V1 Hardening (Pass 5 M1) :
+  /// Previously this method did a direct `.from('matches').upsert(...)`
+  /// via PostgREST. The RLS policy `matches_all_participant` was FOR
+  /// ALL, so the only server-side check was "caller participates" —
+  /// a tampered client could forge a match row WITHOUT both peers
+  /// actually having a `reveals.decision='match'` on the same call.
+  ///
+  /// Now we call the SECURITY DEFINER RPC `create_match_if_mutual`.
+  /// The RPC re-checks server-side that:
+  ///   * the caller is one of the call's participants ;
+  ///   * BOTH participants have a `decision='match'` reveal on this
+  ///     `call_id` (no spoofing the peer's vote).
+  /// On its own UNIQUE(user_a_id, user_b_id), the function is
+  /// idempotent : a concurrent second call (the peer reaching
+  /// `mutualMatch` at the same instant) updates the existing row
+  /// instead of duplicating it.
+  ///
+  /// `userA`/`userB` params are kept for the caller-side log message
+  /// but the RPC resolves the canonical pair from the call_id, so
+  /// the caller cannot lie about who participates.
   Future<void> createMatch({
     required String callId,
     required String userA,
     required String userB,
     required int compatibilityScore,
   }) async {
-    // The table requires user_a_id < user_b_id.
     final ordered = [userA, userB]..sort();
     _log.info(
       'createMatch — pair=${ordered.first}/${ordered.last} '
-      'call=$callId score=$compatibilityScore',
+      'call=$callId score=$compatibilityScore (via RPC)',
     );
-    await _client.from('matches').upsert(
-      {
-        'user_a_id': ordered.first,
-        'user_b_id': ordered.last,
-        'compatibility_score': compatibilityScore.clamp(0, 100),
-        'call_id': callId,
-        'status': 'new',
+    await _client.rpc<dynamic>(
+      'create_match_if_mutual',
+      params: {
+        'p_call_id': callId,
+        'p_compatibility_score': compatibilityScore.clamp(0, 100),
       },
-      onConflict: 'user_a_id,user_b_id',
     );
   }
 }
