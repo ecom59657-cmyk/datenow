@@ -262,6 +262,17 @@ class _EditPhotosScreenState extends ConsumerState<EditPhotosScreen> {
             padding: const EdgeInsets.only(top: AppSpacing.sm, bottom: 64),
             children: [
               _PrivacyBanner(l10n: l10n),
+              const SizedBox(height: AppSpacing.sm),
+              // GDPR sprint commit 3 — moderation transparency notice.
+              // Article 13/14 information obligation : the user must
+              // know that uploaded photos are analysed by a sub-
+              // processor (Google Cloud Vision) before the upload
+              // happens. Kept as a passive notice — no checkbox,
+              // since the upload itself counts as informed consent
+              // to the disclosed processing.
+              // TODO(i18n-gdpr) : extract to l10n keys when the
+              // wording stabilises.
+              const _ModerationNotice(),
               const SizedBox(height: AppSpacing.lg),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -433,6 +444,54 @@ class _PrivacyBanner extends StatelessWidget {
               style: AppTypography.caption.copyWith(
                 color: AppColors.brandViolet,
                 fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// GDPR transparency notice surfaced just below the existing
+/// privacy banner. Discloses that uploaded photos are analysed by
+/// Google Cloud Vision (sub-processor) for community-safety
+/// moderation, before the user actually picks a photo. Article 13/14
+/// information obligation. Hardcoded FR ; localisation pending —
+/// TODO(i18n-gdpr).
+class _ModerationNotice extends StatelessWidget {
+  const _ModerationNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.sm,
+      ),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceElevated,
+        borderRadius: AppRadius.brSm,
+        border: Border.all(color: AppColors.hairlineSoft),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(
+            Icons.policy_outlined,
+            size: 18,
+            color: AppColors.textSecondary,
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Text(
+              'Pour la sécurité de la communauté, tes photos sont '
+              'analysées automatiquement par Google Cloud Vision '
+              '(détection de contenu inapproprié et de visages). '
+              'Aucun document d\'identité n\'est requis ici.',
+              style: AppTypography.caption.copyWith(
+                color: AppColors.textSecondary,
+                height: 1.4,
               ),
             ),
           ),

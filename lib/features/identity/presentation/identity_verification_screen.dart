@@ -259,12 +259,69 @@ class _IntroHeader extends StatelessWidget {
         Text('Vérifie ton identité', style: AppTypography.h1),
         const SizedBox(height: AppSpacing.xs),
         Text(
-          'DateNow vérifie ton âge et ton identité via un partenaire externe (Didit). '
-          'Cela prend environ 2 minutes : pièce d\'identité + selfie. '
-          'Nous ne stockons pas tes documents.',
+          'Vérification effectuée par Didit S.L. (Espagne), notre '
+          'partenaire KYC. Cela prend environ 2 minutes : pièce '
+          'd\'identité + selfie + vérification de présence.',
           style: AppTypography.body.copyWith(color: AppColors.textSecondary),
         ),
+        const SizedBox(height: AppSpacing.sm),
+        // GDPR sprint commit 3 : transparency notice on what data
+        // crosses the org boundary. Article 13/14 information
+        // obligation : the user MUST know that biometric data is
+        // shared with a sub-processor before the SDK launches. We
+        // keep this as an inline notice (no blocking checkbox) so
+        // the existing UX flow is preserved ; tapping "Vérifier
+        // mon identité" below counts as informed consent to the
+        // disclosed processing.
+        const _InfoNotice(
+          icon: Icons.info_outline_rounded,
+          text:
+              'En lançant la vérification, tu acceptes que ta pièce '
+              'd\'identité et ton selfie soient transmis à Didit S.L. '
+              'pour vérifier ton âge et ton identité. DateNow conserve '
+              'uniquement le résultat de la vérification (vérifié ou non), '
+              'pas tes documents.',
+        ),
       ],
+    );
+  }
+}
+
+/// Small inline information notice used by the identity screen to
+/// surface the vendor-data-flow disclosure before the verification
+/// SDK launches. Neutral palette (no warning color) — purely
+/// informative, not actionable.
+class _InfoNotice extends StatelessWidget {
+  const _InfoNotice({required this.icon, required this.text});
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.sm),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceElevated,
+        borderRadius: AppRadius.brSm,
+        border: Border.all(color: AppColors.hairlineSoft),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 18, color: AppColors.textSecondary),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Text(
+              text,
+              style: AppTypography.caption.copyWith(
+                color: AppColors.textSecondary,
+                height: 1.4,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
