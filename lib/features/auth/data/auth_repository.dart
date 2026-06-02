@@ -172,12 +172,39 @@ class SupabaseAuthRepository implements AuthRepository {
         shouldCreateUser: false,
       );
     } on sb.AuthException catch (e, st) {
+      // V1 hardening (Pass 7 A7) : suppress account enumeration.
+      //
+      // Before this fix, `requestSigninOtp` for an unknown email
+      // threw an `AuthFailure(code: 'user_not_found')`, while a
+      // known email returned silently. An attacker could spray the
+      // signin form with candidate emails and read the differential
+      // response to learn which addresses are registered DateNow
+      // users — a textbook user-enumeration oracle.
+      //
+      // The fix is to swallow `user_not_found` and pretend success.
+      // The UI then routes to the OTP entry screen as if a code had
+      // been sent ; `verifyOtp` will fail with a generic
+      // 'otp_invalid' for any code the attacker types, which is
+      // indistinguishable from a legitimate user mistyping their
+      // code. The attacker can still infer email validity by waiting
+      // for an email to actually arrive, but that requires controlling
+      // a mailbox — i.e. social engineering, not an enumeration oracle.
+      //
+      // We DO still throw rate-limit / OTP-disabled / other errors
+      // so the UX surfaces real outages.
+      final failure = _mapAuthFailure(e);
+      if (failure.code == 'user_not_found') {
+        _log.info(
+          'requestSigninOtp: user_not_found suppressed (anti-enum)',
+        );
+        return;
+      }
       _log.error(
         'requestSigninOtp error: code=${e.code} message="${e.message}"',
         e,
         st,
       );
-      throw _mapAuthFailure(e);
+      throw failure;
     }
   }
 

@@ -223,11 +223,23 @@ class IdentityRepository {
       );
     } on FunctionException catch (e) {
       // Edge Function returned a non-2xx — Didit upstream issue,
-      // missing secret, db_insert_failed, etc.
+      // missing secret, db_insert_failed, rate limit, etc.
       _log.error(
         'createSession FunctionException status=${e.status} '
         'reason=${e.reasonPhrase} details=${e.details}',
       );
+      // V1 hardening (Pass 7 A9) : the Edge Function returns 429
+      // with `{"error":"rate_limit_exceeded"}` after 5 sessions in
+      // 24 h per user. Surface a dedicated message so the user
+      // understands it is a self-throttle, not a Didit outage.
+      if (e.status == 429) {
+        return const IdentitySessionError(
+          code: 'rate_limit_exceeded',
+          userMessage:
+              'Trop de tentatives de vérification aujourd\'hui. '
+              'Réessaie demain.',
+        );
+      }
       return IdentitySessionError(
         code: 'function_${e.status}',
         userMessage:

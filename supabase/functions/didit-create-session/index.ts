@@ -147,6 +147,48 @@ serve(async (req) => {
     // for that session_id will find it via vendor_data fallback.
   }
 
+  // ── 3b. V1 Hardening — per-user 24 h rate limit (Pass 7 A9). ─────
+  // The idempotency check above re-uses the LATEST open session, so
+  // happy-path callers create at most one Didit session per active
+  // verification. The rate limit below is the guard for the abuse
+  // path : an attacker (or a misbehaving client) that loops through
+  // `rejected` / `expired` rows, forcing this function to spin a
+  // fresh Didit session every iteration. Each fresh session has a
+  // ~$0.33 Didit Full-KYC bundle cost ; without this cap a single
+  // tampered account could burn the team's monthly Didit budget in
+  // a few minutes.
+  //
+  // Limit : 5 NEW sessions per 24 h, per authenticated user.
+  // Includes all status (pending / in_review / approved / rejected /
+  // expired) so a user cannot game the cap by cycling through
+  // rejected attempts.
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const { count: dailyCount, error: countErr } = await adminClient
+    .from("identity_verifications")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .gte("created_at", since);
+  if (countErr) {
+    // Fail-open on count error — better to allow the legitimate
+    // user through than to brick KYC for a transient DB hiccup. The
+    // attacker would have to keep finding count() failures to keep
+    // bypassing, which is impractical.
+    console.warn(
+      `[Didit][WARN] rate-limit count() failed user=${userId} ` +
+      `err=${countErr.message} — fail-open`,
+    );
+  } else if ((dailyCount ?? 0) >= 5) {
+    console.warn(
+      `[Didit][WARN] rate-limit hit user=${userId} ` +
+      `count=${dailyCount} threshold=5/24h`,
+    );
+    return json({
+      error: "rate_limit_exceeded",
+      retry_after_hours: 24,
+    }, 429);
+  }
+
+
   // ── 4. age_claimed from profiles.birth_date ───────────────────
   // We store the age the user typed at onboarding so the eventual
   // webhook can compare it to Didit's extracted DOB (age_mismatch
