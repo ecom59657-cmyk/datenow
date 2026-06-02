@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- DateNow brand background (#0A0A0F) used for the native launch screen
+         so it matches the app's dark theme and there is no white flash on
+         startup before Flutter draws its first frame. -->
+    <color name="launch_background">#FF0A0A0F</color>
+</resources>
