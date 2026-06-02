@@ -19,6 +19,7 @@ String? r({
   bool profileLoading = false,
   bool profileHasValue = true,
   bool profileComplete = true,
+  bool splashMinElapsed = true,
   String location = '/splash',
 }) {
   return decideRedirect(
@@ -29,6 +30,7 @@ String? r({
     profileLoading: profileLoading,
     profileHasValue: profileHasValue,
     profileComplete: profileComplete,
+    splashMinElapsed: splashMinElapsed,
     location: location,
   );
 }
@@ -224,6 +226,56 @@ void main() {
         r(authLoading: true, location: AppRoute.settingsTerms.path),
         isNull,
       );
+    });
+  });
+
+  group('decideRedirect — premium splash min-duration floor (gate 0.5)', () {
+    // The splash must stay visible for a minimum elegant window even when
+    // auth/session restore resolves instantly. While the floor has not
+    // elapsed (splashMinElapsed=false) we hold on /splash regardless of how
+    // ready the rest of the state is.
+
+    test('floor not elapsed + on /splash → stay (null), even if home-ready',
+        () {
+      // Fully signed-in + complete profile would normally go /home, but the
+      // floor keeps us on the splash so the animation is seen.
+      expect(r(splashMinElapsed: false, location: '/splash'), isNull);
+    });
+
+    test('floor not elapsed, signed out (would go /auth) → stay on splash',
+        () {
+      expect(
+        r(splashMinElapsed: false, signedIn: false, location: '/splash'),
+        isNull,
+      );
+    });
+
+    test('floor not elapsed, first-install (would go /onboarding) → stay',
+        () {
+      expect(
+        r(
+          splashMinElapsed: false,
+          onboardingDone: false,
+          signedIn: false,
+          location: '/splash',
+        ),
+        isNull,
+      );
+    });
+
+    test('floor not elapsed but NOT on splash → no hold (never sends to splash)',
+        () {
+      // The gate only prolongs an existing splash; it must not hijack
+      // in-app navigation, so off-splash it is a no-op and normal gates win.
+      expect(
+        r(splashMinElapsed: false, location: '/home'),
+        isNull, // signed-in + complete + on /home → steady state
+      );
+    });
+
+    test('floor elapsed → splash releases to /home', () {
+      expect(r(splashMinElapsed: true, location: '/splash'),
+          AppRoute.home.path);
     });
   });
 

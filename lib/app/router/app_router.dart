@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -47,6 +49,21 @@ import 'app_routes.dart';
 final GlobalKey<NavigatorState> rootNavigatorKey =
     GlobalKey<NavigatorState>(debugLabel: 'datenow-root');
 
+/// Minimum on-screen time for the premium open animation. Runs CONCURRENTLY
+/// with auth/session restore — it is a floor (`max(bootstrap, this)`), never
+/// an additive delay, so a slow cold start is unaffected and a near-instant
+/// start still gets a visible splash. Tuned so the logo fade+scale (700 ms)
+/// and the tagline fade (≈1050 ms) finish before we leave.
+const Duration kSplashMinDuration = Duration(milliseconds: 1100);
+
+/// Completes [kSplashMinDuration] after it is first read — i.e. when the
+/// router builds and the splash first mounts. The [_RouterNotifier] watches
+/// it so the redirect re-runs the moment the floor elapses. Until then it is
+/// `AsyncLoading`, which gate 0.5 reads as "hold the splash".
+final splashGateProvider = FutureProvider<void>((ref) async {
+  await Future<void>.delayed(kSplashMinDuration);
+});
+
 /// Builds the GoRouter for the app and wires it to Riverpod so auth +
 /// onboarding state can drive redirects.
 final routerProvider = Provider<GoRouter>((ref) {
@@ -61,7 +78,15 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoute.splash.path,
         name: AppRoute.splash.name,
-        builder: (_, _) => const SplashScreen(),
+        // CustomTransitionPage so the splash cross-fades out (220 ms) when
+        // the redirect moves on — no hard cut / platform slide into the app.
+        pageBuilder: (_, _) => CustomTransitionPage<void>(
+          child: const SplashScreen(),
+          transitionDuration: const Duration(milliseconds: 220),
+          reverseTransitionDuration: const Duration(milliseconds: 220),
+          transitionsBuilder: (_, animation, _, child) =>
+              FadeTransition(opacity: animation, child: child),
+        ),
       ),
       GoRoute(
         path: AppRoute.onboarding.path,
@@ -284,6 +309,8 @@ class _RouterNotifier extends ChangeNotifier {
     );
     _ref.listen(authStateProvider, (_, _) => notifyListeners());
     _ref.listen(currentProfileProvider, (_, _) => notifyListeners());
+    // Re-run the redirect when the splash min-duration floor elapses.
+    _ref.listen(splashGateProvider, (_, _) => notifyListeners());
   }
 
   final Ref _ref;
@@ -292,6 +319,8 @@ class _RouterNotifier extends ChangeNotifier {
     final auth = _ref.read(authStateProvider);
     final onboarding = _ref.read(onboardingCompletedProvider);
     final profile = _ref.read(currentProfileProvider);
+    // `hasValue` flips true only once the timer future has completed.
+    final splashMinElapsed = _ref.read(splashGateProvider).hasValue;
     return decideRedirect(
       authLoading: auth.isLoading,
       onboardingLoading: onboarding.isLoading,
@@ -300,6 +329,7 @@ class _RouterNotifier extends ChangeNotifier {
       profileLoading: profile.isLoading,
       profileHasValue: profile.hasValue,
       profileComplete: profile.value?.isComplete ?? false,
+      splashMinElapsed: splashMinElapsed,
       location: state.matchedLocation,
     );
   }
@@ -342,6 +372,10 @@ String? decideRedirect({
   required bool profileHasValue,
   required bool profileComplete,
   required String location,
+  // Whether the premium splash min-duration floor has elapsed. Defaults to
+  // `true` so the historic call sites (and the pure-function tests) keep
+  // their exact behaviour — only the live router passes the real value.
+  bool splashMinElapsed = true,
 }) {
   final isOnSplash = location == AppRoute.splash.path;
   final isOnOnboarding = location == AppRoute.onboarding.path;
@@ -353,6 +387,16 @@ String? decideRedirect({
   //    push off-route mid-transition reads as a broken app.
   if (location == AppRoute.settingsTerms.path ||
       location == AppRoute.settingsPrivacyPolicy.path) {
+    return null;
+  }
+
+  // 0.5 Premium splash floor — hold on /splash until the min-duration has
+  //     elapsed so the open animation is actually seen. Only ever PROLONGS
+  //     the splash (returns null = stay); it never sends anyone there, so it
+  //     can't affect in-app navigation (where the timer has long completed).
+  //     Covers every cold entry — connected, signed-out, first-install — as
+  //     they all start on /splash. Legal deep-links already returned above.
+  if (isOnSplash && !splashMinElapsed) {
     return null;
   }
 
