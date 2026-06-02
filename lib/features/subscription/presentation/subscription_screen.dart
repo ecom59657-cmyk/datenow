@@ -5,13 +5,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../app/theme/app_typography.dart';
-import '../../../core/utils/extensions.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../shared/widgets/app_button.dart';
 import '../../../shared/widgets/app_scaffold.dart';
 import '../../../shared/widgets/glass_card.dart';
-import '../../profile_setup/presentation/providers/profile_provider.dart';
-import '../data/subscription_repository.dart';
 import 'providers/subscription_provider.dart';
 
 /// Premium subscription screen. Sells the experience (real dates,
@@ -28,19 +25,85 @@ class SubscriptionScreen extends ConsumerStatefulWidget {
 }
 
 class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
-  bool _upgrading = false;
-
-  Future<void> _upgrade() async {
-    final profile = ref.read(currentProfileProvider).asData?.value;
-    if (profile == null) return;
-    setState(() => _upgrading = true);
-    await ref
-        .read(subscriptionRepositoryProvider)
-        .upgradeToPremium(profile.userId);
-    if (!mounted) return;
-    setState(() => _upgrading = false);
-    final l10n = AppLocalizations.of(context);
-    context.showSnack(l10n.subscriptionUpgradedSnack);
+  /// Coming-soon teaser sheet — surfaced when the user taps the
+  /// "Bientôt disponible" CTA. No paywall, no Stripe, no upgrade
+  /// RPC : the entire purchase path is dormant until DateNow
+  /// Premium ships. The sheet keeps the moment feeling
+  /// considered rather than broken — same orb-gradient visual
+  /// language as the photo-required and identity-required sheets.
+  ///
+  /// TODO(i18n) : strings hardcoded FR. Localise when the wording
+  /// is signed off by product.
+  Future<void> _showComingSoonSheet(BuildContext context) {
+    return showModalBottomSheet<void>(
+      context: context,
+      useRootNavigator: true,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        top: false,
+        minimum: const EdgeInsets.only(bottom: AppSpacing.sm),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.lg,
+            AppSpacing.lg,
+            AppSpacing.lg,
+            AppSpacing.sm,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                width: 80,
+                height: 80,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: AppColors.brandGradient,
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.brandPink.withValues(alpha: 0.4),
+                      blurRadius: 24,
+                      spreadRadius: 2,
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.auto_awesome_rounded,
+                  color: Colors.white,
+                  size: 36,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              Text(
+                'DateNow Premium arrive bientôt ✨',
+                textAlign: TextAlign.center,
+                style: AppTypography.h2,
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                'Nous préparons actuellement l\'expérience premium. '
+                'Tu seras parmi les premiers à en profiter.',
+                textAlign: TextAlign.center,
+                style: AppTypography.body
+                    .copyWith(color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              AppButton(
+                label: 'Compris',
+                variant: AppButtonVariant.secondary,
+                onPressed: () => Navigator.of(sheetContext).pop(),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -160,10 +223,12 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
                   variant: AppButtonVariant.secondary,
                   onPressed: () {},
                 )
-              : _PremiumCtaButton(
-                  label: l10n.subscriptionUpgradeCta,
-                  loading: _upgrading,
-                  onPressed: _upgrading ? null : _upgrade,
+              // Premium purchase flow is intentionally dormant.
+              // The CTA looks premium (brand-pink halo preserved)
+              // but communicates "coming soon" via the clock icon
+              // + the bottom-sheet teaser below.
+              : _PremiumComingSoonCta(
+                  onPressed: () => _showComingSoonSheet(context),
                 ),
         ],
       ),
@@ -322,19 +387,19 @@ class _BenefitTile extends StatelessWidget {
   }
 }
 
-/// Primary CTA — gradient fill + brand-pink glow halo. Heavier
-/// visually than [AppButton.primary] because the whole page funnels
-/// toward this tap.
-class _PremiumCtaButton extends StatelessWidget {
-  const _PremiumCtaButton({
-    required this.label,
-    required this.loading,
-    required this.onPressed,
-  });
+/// "Coming soon" Premium CTA — same gradient + brand-pink glow halo
+/// as the (now-removed) `_PremiumCtaButton`, so the visual weight on
+/// the subscription page stays intentional. The clock icon
+/// (`schedule_rounded`) is the only signal that the feature is not
+/// yet shipped — pressing the button opens a teaser sheet instead
+/// of triggering the dormant upgrade RPC.
+///
+/// TODO(i18n) : the label is hardcoded FR until product signs off
+/// the wording.
+class _PremiumComingSoonCta extends StatelessWidget {
+  const _PremiumComingSoonCta({required this.onPressed});
 
-  final String label;
-  final bool loading;
-  final VoidCallback? onPressed;
+  final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
@@ -351,10 +416,9 @@ class _PremiumCtaButton extends StatelessWidget {
         ],
       ),
       child: AppButton(
-        label: label,
-        icon: Icons.workspace_premium_rounded,
+        label: 'Bientôt disponible',
+        icon: Icons.schedule_rounded,
         size: AppButtonSize.large,
-        isLoading: loading,
         onPressed: onPressed,
       ),
     );
