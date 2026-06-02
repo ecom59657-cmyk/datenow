@@ -179,7 +179,14 @@ class _UnreadBadge extends StatelessWidget {
 }
 
 String _humanizeTime(DateTime when, AppLocalizations l10n) {
-  final diff = DateTime.now().difference(when);
+  // `when` arrives as a UTC DateTime (Supabase TIMESTAMPTZ).
+  // DateTime.difference() is epoch-based so the math is correct
+  // even when comparing a local DateTime.now() to a UTC when, but
+  // adding the explicit .toUtc() matches the project-wide Phase A
+  // timezone convention ("compute in UTC, format at the very edge")
+  // and prevents future regressions if a caller ever passes a
+  // non-UTC `when`.
+  final diff = DateTime.now().toUtc().difference(when);
   if (diff.inMinutes < 1) return l10n.messageTimeJustNow;
   if (diff.inMinutes < 60) return l10n.messageTimeMinutes(diff.inMinutes);
   if (diff.inHours < 24) return l10n.messageTimeHours(diff.inHours);

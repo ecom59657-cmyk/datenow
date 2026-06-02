@@ -87,7 +87,14 @@ class MessageBubble extends StatelessWidget {
 }
 
 String _formatTime(DateTime when) {
-  final h = when.hour.toString().padLeft(2, '0');
-  final m = when.minute.toString().padLeft(2, '0');
+  // Messages arrive parsed as UTC DateTime (Supabase TIMESTAMPTZ with
+  // a trailing Z → DateTime.parse returns isUtc=true). Without the
+  // .toLocal() the .hour getter reads UTC, so a 15:46 Paris message
+  // showed up as 13:46. Convert to the device's local timezone
+  // before extracting the wall-clock fields. DB stays UTC; only the
+  // render edge converts.
+  final local = when.toLocal();
+  final h = local.hour.toString().padLeft(2, '0');
+  final m = local.minute.toString().padLeft(2, '0');
   return '$h:$m';
 }
