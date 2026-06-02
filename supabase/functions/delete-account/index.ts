@@ -88,10 +88,64 @@ serve(async (req) => {
     return json({ error: "wipe_threw" }, 500);
   }
 
-  // 3. Delete the auth.users row with the service role so the email
+  // 3. Wipe the user's Storage objects (GDPR sprint).
+  //
+  //    The DB CASCADE in step 2 already removed the user_photos
+  //    rows, but the underlying binaries in the `profile-photos`
+  //    bucket persist by design — there is no FK between Storage
+  //    and user_photos. Without an explicit `.storage.remove()`,
+  //    deleted users' face photos stayed in the bucket
+  //    indefinitely, breaching Article 17 right-to-erasure.
+  //
+  //    Convention: every photo path is `{user_id}/{filename}`
+  //    (enforced by the storage RLS policy in
+  //    20260513120300_storage.sql), so we can list the user's
+  //    folder and bulk-remove without consulting the DB. The
+  //    UI hard-caps photos at 6 per user (UserProfile.maxPhotos);
+  //    the 100-item `list` limit below is therefore an over-
+  //    estimate that comfortably absorbs any orphan upload.
+  //
+  //    Fail-soft: if list or remove errors out, we log and
+  //    continue. The DB rows are already gone, the auth.users
+  //    row is about to go too — leaving a few binary orphans is
+  //    bad but recoverable manually via Supabase Studio, while
+  //    blocking the whole deletion would brick the user's
+  //    erasure request entirely.
+  const adminClient = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+  try {
+    const { data: files, error: listErr } = await adminClient.storage
+      .from("profile-photos")
+      .list(userId, { limit: 100 });
+    if (listErr) {
+      console.warn(
+        `[storage-list-fail] user=${userId} err=${listErr.message} ` +
+          `— continuing (DB already wiped)`,
+      );
+    } else if (files && files.length > 0) {
+      const paths = files.map((f) => `${userId}/${f.name}`);
+      const { error: removeErr } = await adminClient.storage
+        .from("profile-photos")
+        .remove(paths);
+      if (removeErr) {
+        console.warn(
+          `[storage-remove-fail] user=${userId} count=${paths.length} ` +
+            `err=${removeErr.message} — continuing (DB already wiped)`,
+        );
+      } else {
+        console.log(
+          `[storage-wiped] user=${userId} count=${paths.length}`,
+        );
+      }
+    } else {
+      console.log(`[storage-empty] user=${userId} no photos to delete`);
+    }
+  } catch (e) {
+    console.warn(`[storage-wipe-throw] user=${userId}`, e);
+  }
+
+  // 4. Delete the auth.users row with the service role so the email
   //    can be re-registered. The user has no profile row anymore so
   //    even if this step fails, no DateNow data remains.
-  const adminClient = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
   try {
     const { error: authErr } = await adminClient.auth.admin.deleteUser(userId);
     if (authErr) {
