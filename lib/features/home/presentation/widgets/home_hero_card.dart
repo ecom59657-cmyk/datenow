@@ -21,23 +21,31 @@ class HomeHeroCard extends StatelessWidget {
 
   final VoidCallback onPressed;
 
-  /// Believable live count — kept in sync with the "people online" stat
-  /// tile below (1.2k ≈ 1 247).
-  static const int _onlineCount = 1247;
-
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     return Container(
-      height: 420,
+      // Taller to host the central camera orb as the focal point with
+      // generous, premium vertical rhythm around it. The hero lives inside a
+      // scrolling ListView so the extra height never risks an overflow.
+      height: 468,
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         borderRadius: AppRadius.brXl,
+        // More diffuse, layered glow for depth — a soft wide pink cast over a
+        // subtler violet ambient, instead of one hard drop.
         boxShadow: [
           BoxShadow(
-            color: AppColors.brandPink.withValues(alpha: 0.32),
+            color: AppColors.brandPink.withValues(alpha: 0.26),
+            blurRadius: 60,
+            spreadRadius: -6,
+            offset: const Offset(0, 26),
+          ),
+          BoxShadow(
+            color: AppColors.brandViolet.withValues(alpha: 0.13),
             blurRadius: 44,
-            offset: const Offset(0, 20),
+            spreadRadius: -10,
+            offset: const Offset(0, 10),
           ),
         ],
       ),
@@ -64,24 +72,62 @@ class HomeHeroCard extends StatelessWidget {
               ),
             ),
           ),
-          // 4. Foreground content.
+          // 3.5 Soft central depth glow behind the headline — diffuse and
+          //     subtle, just enough to lift the title off the backdrop.
+          const Align(
+            alignment: Alignment.center,
+            child: _CenterGlow(),
+          ),
+          // 3.6 Localised dark band behind the gradient title line so the pink
+          //     "en vidéo floutée." pops with premium contrast. Transparent at
+          //     the top (orb + "Commence un date" stay colourful), deepening to
+          //     near-black across the lower-centre band where the accent line
+          //     and subtext sit, then easing back out toward the CTA. Sits ABOVE
+          //     the pink centre glow (cancels it there) but BELOW the text.
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.transparent,
+                  Colors.transparent,
+                  Colors.black.withValues(alpha: 0.55),
+                  Colors.black.withValues(alpha: 0.55),
+                  Colors.black.withValues(alpha: 0.18),
+                ],
+                stops: const [0.0, 0.42, 0.55, 0.74, 1.0],
+              ),
+            ),
+          ),
+          // 4. Foreground content — a centred column with the camera orb as
+          //    the emotional focal point. Spacer flex ratios do the vertical
+          //    rhythm (Apple/Spotify-style breathing) and adapt to the card
+          //    height without ever overflowing.
           Padding(
-            padding: const EdgeInsets.all(AppSpacing.lg),
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.lg,
+              AppSpacing.lg,
+              AppSpacing.lg,
+              AppSpacing.xl,
+            ),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                _OnlineNowChip(count: _onlineCount, label: l10n.homeOnlineNow)
+                const Spacer(flex: 3),
+                // Focal point — premium glowing camera orb.
+                const _CameraOrb()
                     .animate()
-                    .fadeIn(duration: 400.ms, delay: 200.ms),
-                const Spacer(),
+                    .fadeIn(duration: 600.ms, delay: 100.ms),
+                const Spacer(flex: 3),
                 _HeroHeadline(l10n: l10n)
                     .animate()
-                    .fadeIn(duration: 500.ms, delay: 120.ms)
-                    .slideY(begin: 0.15, end: 0, curve: Curves.easeOut),
-                const SizedBox(height: AppSpacing.lg),
+                    .fadeIn(duration: 500.ms, delay: 240.ms)
+                    .slideY(begin: 0.12, end: 0, curve: Curves.easeOut),
+                const Spacer(flex: 4),
                 _StartDateButton(label: l10n.homeHeroCta, onPressed: onPressed)
                     .animate()
-                    .fadeIn(duration: 500.ms, delay: 280.ms)
+                    .fadeIn(duration: 500.ms, delay: 340.ms)
                     .slideY(begin: 0.2, end: 0, curve: Curves.easeOut),
               ],
             ),
@@ -105,36 +151,179 @@ class _HeroHeadline extends StatelessWidget {
 
   final AppLocalizations l10n;
 
+  /// Vibrant, luminous pink→magenta accent for "en vidéo floutée." — hot,
+  /// saturated and high-contrast on the dark backdrop, with a glossy light
+  /// highlight at the top-left.
+  static const LinearGradient _accentGradient = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [
+      Color(0xFFFFA6D4), // glossy light-pink highlight
+      Color(0xFFFF2E92), // vivid pink
+      Color(0xFFFF0A7B), // hot magenta
+    ],
+    stops: [0.0, 0.5, 1.0],
+  );
+
   @override
   Widget build(BuildContext context) {
-    final titleStyle = AppTypography.h1.copyWith(
+    // Slightly smaller than before (28) with an airier line-height for an
+    // editorial, luxurious feel — centred to sit under the camera orb.
+    final leadStyle = AppTypography.h1.copyWith(
       color: Colors.white,
-      height: 1.12,
+      fontSize: 28,
+      height: 1.25,
+      fontWeight: FontWeight.w700,
+      letterSpacing: -0.2,
     );
+    final accentStyle = leadStyle.copyWith(fontWeight: FontWeight.w800);
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.center,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(l10n.homeHeroTitleLead, style: titleStyle),
-        ShaderMask(
-          shaderCallback: (rect) =>
-              AppColors.brandGradient.createShader(rect),
-          blendMode: BlendMode.srcIn,
-          child: Text(
-            l10n.homeHeroTitleAccent,
-            style: titleStyle,
+        // Title is LOCKED to exactly two lines — one phrase per line, never
+        // auto-wrapped (maxLines:1 + softWrap:false on each). Both lines share
+        // a single FittedBox(scaleDown) so on a narrow device they shrink
+        // together and stay aligned instead of wrapping or overflowing; on a
+        // standard iPhone they render at full size.
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                l10n.homeHeroTitleLead,
+                maxLines: 1,
+                softWrap: false,
+                textAlign: TextAlign.center,
+                style: leadStyle,
+              ),
+              // A breath between the two lines for editorial spacing.
+              const SizedBox(height: 6),
+              // Line 2 — vibrant pink→magenta accent on the "blurred video"
+              // promise.
+              ShaderMask(
+                shaderCallback: (rect) => _accentGradient.createShader(rect),
+                blendMode: BlendMode.srcIn,
+                child: Text(
+                  l10n.homeHeroTitleAccent,
+                  maxLines: 1,
+                  softWrap: false,
+                  textAlign: TextAlign.center,
+                  style: accentStyle,
+                ),
+              ),
+            ],
           ),
         ),
-        const SizedBox(height: AppSpacing.md),
+        const SizedBox(height: AppSpacing.lg),
+        // Primary reassurance line — strong, present.
         Text(
           l10n.homeHeroSubtitleStrong,
-          style: AppTypography.bodyStrong.copyWith(color: Colors.white),
+          maxLines: 1,
+          textAlign: TextAlign.center,
+          overflow: TextOverflow.ellipsis,
+          style: AppTypography.h3.copyWith(
+            color: Colors.white,
+            fontWeight: FontWeight.w700,
+          ),
         ),
+        // Clear separation, then the softer secondary line.
+        const SizedBox(height: AppSpacing.xs),
         Text(
           l10n.homeHeroSubtitleSoft,
+          maxLines: 1,
+          textAlign: TextAlign.center,
+          overflow: TextOverflow.ellipsis,
           style: AppTypography.body.copyWith(color: AppColors.textSecondary),
         ),
       ],
+    );
+  }
+}
+
+/// The emotional focal point — a large, premium glowing camera orb. A softly
+/// translucent circle with a subtle hairline border and a diffuse pink/violet
+/// halo, a video-camera-with-heart icon at its centre. Reads as "live, human,
+/// premium" without any surprise-call aggression. Gently breathes.
+class _CameraOrb extends StatelessWidget {
+  const _CameraOrb();
+
+  static const double _size = 104;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: _size,
+      height: _size,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        // Faintly translucent glass fill.
+        gradient: RadialGradient(
+          colors: [
+            Colors.white.withValues(alpha: 0.13),
+            Colors.white.withValues(alpha: 0.03),
+          ],
+        ),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.22),
+          width: 1,
+        ),
+        // Diffuse pink × violet halo for depth.
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.brandPink.withValues(alpha: 0.42),
+            blurRadius: 38,
+            spreadRadius: 2,
+          ),
+          BoxShadow(
+            color: AppColors.brandViolet.withValues(alpha: 0.30),
+            blurRadius: 56,
+            spreadRadius: 8,
+          ),
+        ],
+      ),
+      child: const _VideoHeartIcon(
+        cameraSize: 46,
+        cameraColor: Colors.white,
+        heartColor: AppColors.brandPink,
+      ),
+    )
+        .animate(onPlay: (c) => c.repeat(reverse: true))
+        .scale(
+          duration: 2800.ms,
+          begin: const Offset(1, 1),
+          end: const Offset(1.045, 1.045),
+          curve: Curves.easeInOut,
+        );
+  }
+}
+
+/// Soft, diffuse radial glow placed at the card centre to give the headline
+/// a subtle sense of depth — premium, never loud. Decorative + non-blocking.
+class _CenterGlow extends StatelessWidget {
+  const _CenterGlow();
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: Container(
+        width: 340,
+        height: 340,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: RadialGradient(
+            colors: [
+              AppColors.brandPink.withValues(alpha: 0.16),
+              AppColors.brandPink.withValues(alpha: 0.04),
+              AppColors.brandPink.withValues(alpha: 0),
+            ],
+            stops: const [0.0, 0.5, 1.0],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -159,7 +348,9 @@ class _PresenceField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ImageFiltered(
-      imageFilter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+      // Softer blur (was 18) so the silhouettes read as real people behind the
+      // glass — present and human — while faces stay unidentifiable.
+      imageFilter: ImageFilter.blur(sigmaX: 11, sigmaY: 11),
       child: Stack(
         clipBehavior: Clip.none,
         children: [
@@ -220,19 +411,35 @@ class _PresenceOrb extends StatelessWidget {
           colors: colors,
         ),
       ),
-      child: spec.online
-          ? Align(
-              alignment: const Alignment(0.6, 0.6),
+      child: Stack(
+        children: [
+          // Faint human silhouette so the blurred field reads as REAL people
+          // (not an abstract gradient blob) — anonymised by the field blur.
+          Center(
+            child: Icon(
+              Icons.person_rounded,
+              size: spec.size * 0.62,
+              color: Colors.white.withValues(alpha: 0.26),
+            ),
+          ),
+          if (spec.online)
+            Align(
+              alignment: const Alignment(0.7, 0.7),
               child: Container(
-                width: spec.size * 0.22,
-                height: spec.size * 0.22,
-                decoration: const BoxDecoration(
+                width: spec.size * 0.2,
+                height: spec.size * 0.2,
+                decoration: BoxDecoration(
                   color: AppColors.online,
                   shape: BoxShape.circle,
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.5),
+                    width: 1.5,
+                  ),
                 ),
               ),
-            )
-          : null,
+            ),
+        ],
+      ),
     );
 
     return orb
@@ -246,67 +453,6 @@ class _PresenceOrb extends StatelessWidget {
   }
 }
 
-/// Live social-proof pill — a pulsing green dot + count. Creates a gentle
-/// "it's happening right now" pull.
-class _OnlineNowChip extends StatelessWidget {
-  const _OnlineNowChip({required this.count, required this.label});
-
-  final int count;
-  final String label;
-
-  /// Group thousands with a thin space — "1 247".
-  String get _formattedCount {
-    final digits = count.toString();
-    final buffer = StringBuffer();
-    for (var i = 0; i < digits.length; i++) {
-      if (i > 0 && (digits.length - i) % 3 == 0) buffer.write(' ');
-      buffer.write(digits[i]);
-    }
-    return buffer.toString();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.38),
-        borderRadius: AppRadius.brPill,
-        border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 8,
-            height: 8,
-            decoration: const BoxDecoration(
-              color: AppColors.online,
-              shape: BoxShape.circle,
-            ),
-          )
-              .animate(onPlay: (c) => c.repeat(reverse: true))
-              .fadeIn(duration: 900.ms)
-              .then()
-              .fade(begin: 1, end: 0.3, duration: 900.ms),
-          const SizedBox(width: 7),
-          Text(
-            '$_formattedCount $label',
-            style: AppTypography.caption.copyWith(
-              color: Colors.white,
-              fontWeight: FontWeight.w600,
-              fontSize: 13,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// The explicit click target — a full-width white pill that reads
-/// unmistakably as a button against the dark hero. Gently pulses to
-/// draw the eye.
 class _StartDateButton extends StatelessWidget {
   const _StartDateButton({required this.label, required this.onPressed});
 
@@ -340,6 +486,7 @@ class _StartDateButton extends StatelessWidget {
                     color: AppColors.brandPink,
                     fontWeight: FontWeight.w700,
                     fontSize: 17,
+                    letterSpacing: 0.2,
                   ),
                 ),
               ),
@@ -361,20 +508,30 @@ class _StartDateButton extends StatelessWidget {
 /// Video-call icon with a small heart badge — signals "live video date"
 /// and "meeting someone" in one glyph, matching the DateNow identity.
 class _VideoHeartIcon extends StatelessWidget {
-  const _VideoHeartIcon();
+  const _VideoHeartIcon({
+    this.cameraSize = 30,
+    this.cameraColor = AppColors.brandPink,
+    this.heartColor = AppColors.brandViolet,
+  });
+
+  /// Camera glyph size. The heart badge scales with it.
+  final double cameraSize;
+  final Color cameraColor;
+  final Color heartColor;
 
   @override
   Widget build(BuildContext context) {
+    final heart = cameraSize * 0.46;
     return SizedBox(
-      width: 32,
-      height: 28,
+      width: cameraSize + 6,
+      height: cameraSize + 2,
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          const Icon(
+          Icon(
             Icons.videocam_rounded,
-            size: 28,
-            color: AppColors.brandPink,
+            size: cameraSize,
+            color: cameraColor,
           ),
           Positioned(
             right: -3,
@@ -385,10 +542,10 @@ class _VideoHeartIcon extends StatelessWidget {
                 color: Colors.white,
                 shape: BoxShape.circle,
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.favorite_rounded,
-                size: 13,
-                color: AppColors.brandViolet,
+                size: heart,
+                color: heartColor,
               ),
             ),
           ),
