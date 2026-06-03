@@ -56,6 +56,9 @@ class AppLogo extends StatelessWidget {
   }
 }
 
+/// The DateNow mark — the official app-icon artwork itself
+/// (assets/logo/datenow_logo.png), rounded and given a soft brand glow.
+/// Using the real icon keeps the in-app logo, splash and App Icon identical.
 class _LogoMark extends StatelessWidget {
   const _LogoMark({required this.size});
 
@@ -63,24 +66,29 @@ class _LogoMark extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final radius = BorderRadius.circular(size * 0.24);
     return Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
-        gradient: AppColors.brandGradient,
-        borderRadius: BorderRadius.circular(size * 0.28),
+        borderRadius: radius,
         boxShadow: [
           BoxShadow(
-            color: AppColors.brandPink.withValues(alpha: 0.4),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
+            color: AppColors.brandPink.withValues(alpha: 0.3),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
           ),
         ],
       ),
-      child: Icon(
-        Icons.favorite_rounded,
-        color: Colors.white,
-        size: size * 0.5,
+      child: ClipRRect(
+        borderRadius: radius,
+        child: Image.asset(
+          'assets/logo/datenow_logo.png',
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
+          filterQuality: FilterQuality.medium,
+        ),
       ),
     );
   }

@@ -109,11 +109,27 @@ dev_dependencies:
   freezed: ^2.5.7
   json_serializable: ^6.8.0
 
+  # App icon generation — turns assets/logo/datenow_logo.png into the full
+  # iOS AppIcon set (and Android mipmaps), replacing the default Flutter icon.
+  # Run: dart run flutter_launcher_icons
+  flutter_launcher_icons: ^0.14.1
+
 flutter:
   uses-material-design: true
   generate: true
 
   assets:
     - .env
+    - assets/logo/
 
   # Fonts are loaded via google_fonts at runtime — no bundled assets needed.
+
+# App-icon generation (flutter_launcher_icons). The master is an opaque
+# 1024² PNG; remove_alpha_ios is belt-and-suspenders for the App Store
+# "no alpha channel" rule. Regenerate after changing the logo with:
+#   dart run flutter_launcher_icons
+flutter_launcher_icons:
+  ios: true
+  android: true
+  image_path: "assets/logo/datenow_logo.png"
+  remove_alpha_ios: true
