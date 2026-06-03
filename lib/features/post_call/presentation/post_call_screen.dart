@@ -75,6 +75,18 @@ class _PostCallScreenState extends ConsumerState<PostCallScreen> {
   StreamSubscription<List<RevealRow>>? _revealSub;
   bool _matchPersisted = false;
 
+  /// Suspense window after the user taps Match: a finite, VISIBLE 15 s
+  /// countdown waiting for the peer's match decision — never an endless
+  /// spinner. On expiry we DO NOT write anything (no auto match, no auto
+  /// pass): the user's own `decision='match'` stays as-is server-side and the
+  /// view flips to a clean close (Retour accueil / Lancer un nouveau date).
+  /// If the peer matches BEFORE 0, the realtime stream resolves to `matched`
+  /// exactly as today (Cas A) and the countdown is cancelled.
+  static const _awaitPeerSeconds = 15;
+  Timer? _awaitTimer;
+  int _awaitCountdown = _awaitPeerSeconds;
+  bool _awaitPeerTimedOut = false;
+
   /// Set once `_persistMatch` resolves with a conversation id — drives
   /// the "Envoyer un message" CTA on the matched view. Stays null on a
   /// `RevealOutcome.declined` outcome.
@@ -213,6 +225,7 @@ class _PostCallScreenState extends ConsumerState<PostCallScreen> {
     // Optimistic hint: the listener will compute exactly the same
     // stage once the upsert's UPDATE event lands in our stream.
     setState(() => _stage = _Stage.awaitingPeerMatch);
+    _startAwaitCountdown();
     DebugLog.reveal('match decision: self -> match');
     try {
       await revealRepo.submitDecision(
@@ -275,6 +288,43 @@ class _PostCallScreenState extends ConsumerState<PostCallScreen> {
     _startRevealTimeout();
   }
 
+  /// Starts the visible 15 s peer-match-decision countdown. Idempotent.
+  /// Ticks 15→1; at 0 it flips [_awaitPeerTimedOut] (clean close) WITHOUT
+  /// writing any decision. Auto-cancels if the stage moves off
+  /// awaitingPeerMatch (e.g. the peer matched → `matched`, Cas A).
+  void _startAwaitCountdown() {
+    if (_awaitTimer != null || _awaitPeerTimedOut) return;
+    setState(() => _awaitCountdown = _awaitPeerSeconds);
+    _awaitTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted || _stage != _Stage.awaitingPeerMatch) {
+        timer.cancel();
+        _awaitTimer = null;
+        return;
+      }
+      final next = _awaitCountdown - 1;
+      if (next <= 0) {
+        timer.cancel();
+        _awaitTimer = null;
+        _log.info(
+          'awaitingPeerMatch: 15s elapsed — peer did not respond, '
+          'closing cleanly (no decision written)',
+        );
+        DebugLog.reveal('await peer timed out (15s)');
+        setState(() {
+          _awaitCountdown = 0;
+          _awaitPeerTimedOut = true;
+        });
+        return;
+      }
+      setState(() => _awaitCountdown = next);
+    });
+  }
+
+  void _cancelAwaitCountdown() {
+    _awaitTimer?.cancel();
+    _awaitTimer = null;
+  }
+
   /// Single source of truth for the local UI stage. Computed from the
   /// live `reveals` rows via [PostCallStage.fromRows], then mapped onto
   /// the local [_Stage] enum the widget renders against. Idempotent:
@@ -303,6 +353,13 @@ class _PostCallScreenState extends ConsumerState<PostCallScreen> {
         _stage == _Stage.noMatch) {
       return;
     }
+
+    // Once the 15 s peer-decision window has elapsed the experience is closed
+    // for the user — a late peer decision must not yank them back into the
+    // flow. (Their own decision='match' stays in the DB; if the peer matches,
+    // the match still forms server-side and surfaces via the normal matches
+    // list — never a false match.)
+    if (_awaitPeerTimedOut) return;
 
     // Map the (mine, theirs) outcome onto the local view stage.
     final next = switch (outcome) {
@@ -338,6 +395,13 @@ class _PostCallScreenState extends ConsumerState<PostCallScreen> {
     if (next == _Stage.passed) {
       DebugLog.reveal('match decision: self pass observed');
       _revealTimeoutTimer?.cancel();
+    }
+    // Run the 15 s suspense countdown only while awaiting the peer's match
+    // decision; cancel it the moment the stage resolves to anything else.
+    if (next == _Stage.awaitingPeerMatch) {
+      _startAwaitCountdown();
+    } else {
+      _cancelAwaitCountdown();
     }
 
     setState(() => _stage = next);
@@ -486,6 +550,7 @@ class _PostCallScreenState extends ConsumerState<PostCallScreen> {
   void dispose() {
     _peerDecisionTimer?.cancel();
     _revealTimeoutTimer?.cancel();
+    _awaitTimer?.cancel();
     _revealSub?.cancel();
     super.dispose();
   }
@@ -516,12 +581,16 @@ class _PostCallScreenState extends ConsumerState<PostCallScreen> {
           onMatch: _confirmMatch,
           onPass: _passAfterReveal,
         ),
-      // User tapped Match — waiting for the peer's decision before any
-      // match/conversation row is written.
+      // User tapped Match — a visible 15 s countdown waits for the peer's
+      // decision before any match/conversation row is written. On expiry the
+      // view closes cleanly (no decision written).
       _Stage.awaitingPeerMatch => _AwaitingPeerMatchView(
           match: match,
           peerPhotoBytes: _peerPhotoBytes,
-          onCancel: _passAfterReveal,
+          countdown: _awaitCountdown,
+          timedOut: _awaitPeerTimedOut,
+          onBackHome: _backHome,
+          onFindAnother: _findAnother,
         ),
       _Stage.matched => _ResolvedView(
           matched: true,
@@ -723,21 +792,80 @@ class _MutualRevealView extends StatelessWidget {
 /// confirmed their decision yet. No match row exists yet — the screen
 /// is reactive, the realtime stream will flip it to matched or noMatch
 /// as soon as the peer picks Match or Pass.
+/// After the user taps Match: a visible 15 s suspense countdown waiting on the
+/// peer's decision. If the peer matches in time the realtime stream flips this
+/// screen to `matched` (handled by the parent — Cas A). On expiry [timedOut]
+/// becomes true and the view closes the experience cleanly (Cas B): a clear
+/// "no response in time" message + Retour accueil / Lancer un nouveau date —
+/// never a decision auto-written, never wording that implies a later reply.
 class _AwaitingPeerMatchView extends StatelessWidget {
   const _AwaitingPeerMatchView({
     required this.match,
     required this.peerPhotoBytes,
-    required this.onCancel,
+    required this.countdown,
+    required this.timedOut,
+    required this.onBackHome,
+    required this.onFindAnother,
   });
 
   final ActiveMatch? match;
   final Uint8List? peerPhotoBytes;
-  final VoidCallback onCancel;
+  final int countdown;
+  final bool timedOut;
+  final VoidCallback onBackHome;
+  final VoidCallback onFindAnother;
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final candidate = match?.candidate;
+
+    // Cas B — the 15 s elapsed without the peer deciding. Close cleanly.
+    if (timedOut) {
+      return Column(
+        children: [
+          const Spacer(),
+          const Icon(
+            Icons.hourglass_bottom_rounded,
+            size: 72,
+            color: AppColors.textSecondary,
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          Text(
+            'Temps écoulé',
+            style: AppTypography.h1,
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+            child: Text(
+              'L\'autre personne n\'a pas répondu dans le temps imparti.',
+              textAlign: TextAlign.center,
+              style:
+                  AppTypography.body.copyWith(color: AppColors.textSecondary),
+            ),
+          ),
+          const Spacer(),
+          AppButton(
+            label: 'Lancer un nouveau date',
+            icon: Icons.bolt_rounded,
+            size: AppButtonSize.large,
+            onPressed: onFindAnother,
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          AppButton(
+            label: 'Retour à l\'accueil',
+            icon: Icons.home_rounded,
+            variant: AppButtonVariant.secondary,
+            onPressed: onBackHome,
+          ),
+          const SizedBox(height: AppSpacing.lg),
+        ],
+      );
+    }
+
+    // Suspense — visible countdown waiting on the peer.
     return Column(
       children: [
         const SizedBox(height: AppSpacing.lg),
@@ -748,13 +876,11 @@ class _AwaitingPeerMatchView extends StatelessWidget {
         ),
         const SizedBox(height: AppSpacing.sm),
         Padding(
-          padding:
-              const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
           child: Text(
-            'En attente de la réponse de votre date…',
+            'Nous attendons la décision de l\'autre personne.',
             textAlign: TextAlign.center,
-            style:
-                AppTypography.body.copyWith(color: AppColors.textSecondary),
+            style: AppTypography.body.copyWith(color: AppColors.textSecondary),
           ),
         ),
         const Spacer(),
@@ -776,24 +902,55 @@ class _AwaitingPeerMatchView extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
-        const SizedBox(height: AppSpacing.md),
-        const SizedBox(
-          height: 28,
-          width: 28,
-          child: CircularProgressIndicator(
-            strokeWidth: 2.4,
-            valueColor: AlwaysStoppedAnimation(AppColors.brandPink),
-          ),
-        ),
+        const SizedBox(height: AppSpacing.lg),
+        // Visible 15 → 1 countdown ring.
+        _CountdownBadge(seconds: countdown),
         const Spacer(),
-        AppButton(
-          label: 'Annuler',
-          variant: AppButtonVariant.secondary,
-          size: AppButtonSize.large,
-          onPressed: onCancel,
-        ),
         const SizedBox(height: AppSpacing.lg),
       ],
+    );
+  }
+}
+
+/// Premium circular countdown badge — the number shrinks 15 → 1 inside a
+/// brand-pink ring. Pure presentation; the timer lives in the parent state.
+class _CountdownBadge extends StatelessWidget {
+  const _CountdownBadge({required this.seconds});
+
+  final int seconds;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 84,
+      height: 84,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: AppColors.brandPink.withValues(alpha: 0.1),
+        border: Border.all(
+          color: AppColors.brandPink.withValues(alpha: 0.55),
+          width: 2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.brandPink.withValues(alpha: 0.22),
+            blurRadius: 18,
+            spreadRadius: 1,
+          ),
+        ],
+      ),
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 250),
+        child: Text(
+          '$seconds',
+          key: ValueKey<int>(seconds),
+          style: AppTypography.h1.copyWith(
+            color: Colors.white,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ),
     );
   }
 }
