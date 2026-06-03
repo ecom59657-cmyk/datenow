@@ -15,10 +15,15 @@ class ConversationTile extends ConsumerWidget {
     super.key,
     required this.conversation,
     required this.onTap,
+    this.onAvatarTap,
   });
 
   final Conversation conversation;
   final VoidCallback onTap;
+
+  /// Tapping the avatar opens the matched-profile card (access re-verified
+  /// server-side). Null → avatar is not tappable.
+  final VoidCallback? onAvatarTap;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -35,7 +40,15 @@ class ConversationTile extends ConsumerWidget {
           ),
           child: Row(
             children: [
-              _PeerAvatar(photoUrl: conversation.peerPrimaryPhotoUrl),
+              if (onAvatarTap == null)
+                _PeerAvatar(photoUrl: conversation.peerPrimaryPhotoUrl)
+              else
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: onAvatarTap,
+                  child: _PeerAvatar(
+                      photoUrl: conversation.peerPrimaryPhotoUrl),
+                ),
               const SizedBox(width: AppSpacing.md),
               Expanded(
                 child: Column(

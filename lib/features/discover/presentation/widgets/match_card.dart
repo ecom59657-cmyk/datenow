@@ -30,10 +30,19 @@ import '../../domain/mutual_match.dart';
 /// `ProfileRepository.getPhotoBytes(storagePath)` returns the cached bytes
 /// or a graceful initial fallback while in flight / on miss.
 class MatchCard extends ConsumerWidget {
-  const MatchCard({super.key, required this.match, this.onTap});
+  const MatchCard({
+    super.key,
+    required this.match,
+    this.onTap,
+    this.onAvatarTap,
+  });
 
   final MutualMatch match;
   final VoidCallback? onTap;
+
+  /// Tapping the avatar opens the matched-profile card (access re-verified
+  /// server-side). Null → avatar is not tappable.
+  final VoidCallback? onAvatarTap;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -48,7 +57,14 @@ class MatchCard extends ConsumerWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          _MatchAvatar(profile: candidate),
+          if (onAvatarTap == null)
+            _MatchAvatar(profile: candidate)
+          else
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: onAvatarTap,
+              child: _MatchAvatar(profile: candidate),
+            ),
           const SizedBox(width: 14),
           Expanded(
             child: Column(

@@ -17,6 +17,7 @@ import '../../../shared/widgets/app_button.dart';
 import '../../../shared/widgets/app_scaffold.dart';
 import '../../../shared/widgets/glass_card.dart';
 import '../../../shared/widgets/loading_indicator.dart';
+import '../../auth/presentation/providers/auth_provider.dart';
 import 'providers/messaging_providers.dart';
 import 'widgets/conversation_tile.dart';
 
@@ -111,6 +112,9 @@ class _InboxScreenState extends ConsumerState<InboxScreen>
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final inbox = ref.watch(inboxProvider);
+    // Self id resolves the peer of each conversation so its avatar can open
+    // the matched-profile card. Every inbox row is a confirmed mutual match.
+    final selfId = ref.watch(currentUserProvider)?.id;
 
     return AppScaffold(
       appBar: AppBar(
@@ -165,6 +169,14 @@ class _InboxScreenState extends ConsumerState<InboxScreen>
                           AppRoute.conversation.name,
                           pathParameters: {'id': c.id},
                         ),
+                        onAvatarTap: selfId == null
+                            ? null
+                            : () => context.pushNamed(
+                                  AppRoute.matchedProfile.name,
+                                  pathParameters: {
+                                    'userId': c.peerIdFor(selfId)
+                                  },
+                                ),
                       ),
                       if (i < list.length - 1)
                         const Divider(

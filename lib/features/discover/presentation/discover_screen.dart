@@ -167,6 +167,10 @@ class _MatchesBody extends ConsumerWidget {
               MatchCard(
                 match: m,
                 onTap: () => _openConversationFromMatch(context, ref, m),
+                onAvatarTap: () => context.pushNamed(
+                  AppRoute.matchedProfile.name,
+                  pathParameters: {'userId': m.candidate.userId},
+                ),
               ),
               const SizedBox(height: AppSpacing.sm),
             ],
