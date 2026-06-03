@@ -164,7 +164,11 @@ final routerProvider = Provider<GoRouter>((ref) {
             GoRoute(
               path: AppRoute.messages.path,
               name: AppRoute.messages.name,
-              builder: (_, _) => const InboxScreen(),
+              // `?from=profile` (set when pushed from the Profile screen) shows
+              // a back button; the bottom-nav tab opens it without the param.
+              builder: (_, state) => InboxScreen(
+                fromProfile: state.uri.queryParameters['from'] == 'profile',
+              ),
             ),
           ]),
           StatefulShellBranch(routes: [

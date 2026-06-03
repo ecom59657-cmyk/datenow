@@ -127,7 +127,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
             icon: Icons.chat_bubble_outline_rounded,
             label: l10n.profileMessagesEntry,
             subtitle: l10n.profileMessagesEntrySubtitle,
-            onTap: () => context.pushNamed(AppRoute.messages.name),
+            // `from=profile` makes the inbox show a back button so the user
+            // can return here (the bottom-nav Messages tab passes no param).
+            onTap: () => context.pushNamed(
+              AppRoute.messages.name,
+              queryParameters: const {'from': 'profile'},
+            ),
           ),
           _SectionTile(
             icon: Icons.settings_outlined,

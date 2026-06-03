@@ -28,7 +28,12 @@ import 'widgets/conversation_tile.dart';
 /// Lives as the root of the Messages tab in [StatefulShellRoute] — no
 /// back arrow, scroll auto-resets to the top whenever the user returns.
 class InboxScreen extends ConsumerStatefulWidget {
-  const InboxScreen({super.key});
+  const InboxScreen({super.key, this.fromProfile = false});
+
+  /// True when this inbox was pushed from the Profile screen (rather than
+  /// selected via the bottom-nav Messages tab). Only then do we show a back
+  /// button so the user can return to Profile — the tab root stays untouched.
+  final bool fromProfile;
 
   @override
   ConsumerState<InboxScreen> createState() => _InboxScreenState();
@@ -120,6 +125,23 @@ class _InboxScreenState extends ConsumerState<InboxScreen>
       appBar: AppBar(
         title: Text(l10n.messagesTitle),
         automaticallyImplyLeading: false,
+        // Back button only when opened from Profile — the bottom-nav tab root
+        // keeps its no-back behaviour. Falls back to the Profile tab if there
+        // is nothing to pop, so the user always returns to Profile.
+        leading: widget.fromProfile
+            ? IconButton(
+                icon: const BackButtonIcon(),
+                tooltip: MaterialLocalizations.of(context)
+                    .backButtonTooltip,
+                onPressed: () {
+                  if (context.canPop()) {
+                    context.pop();
+                  } else {
+                    context.goNamed(AppRoute.profile.name);
+                  }
+                },
+              )
+            : null,
       ),
       body: ListView(
         controller: tabScrollController,
