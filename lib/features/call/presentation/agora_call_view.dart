@@ -735,11 +735,11 @@ class _AgoraCallViewState extends ConsumerState<AgoraCallView> {
     //      `Alignment.topRight + EdgeInsets.only(top: 8)` that
     //      collided with CallScreen's top HUD.
     //   1. Mystery blur — sigma-15 BackdropFilter over the fullscreen
-    //      video, never the PIP. The product concept (peer blurred
-    //      until post-call reveal) is preserved. The LOCAL PIP sits
-    //      ABOVE this layer so the user sees themselves sharply — the
-    //      FaceTime / Tinder Live UX (hair check, framing) without
-    //      compromising the reveal moment.
+    //      video. The product concept (live feed blurred until the
+    //      post-call reveal) is preserved. The LOCAL PIP sits ABOVE this
+    //      layer, so it carries its OWN matching blur internally (see
+    //      [_LocalPip]) — the live date must never show a sharp camera,
+    //      self-view included.
     //   2. Local PIP — top-right, safe-area aware (top = padding +
     //      ~60 dp = clears CallScreen's HUD pills with breathing
     //      room), rounded corners + soft shadow, switch-camera icon
@@ -903,11 +903,11 @@ class _AgoraCallViewState extends ConsumerState<AgoraCallView> {
 /// * Soft shadow `(blur 24, offset y=8, black α=0.35)` — lifts the PIP
 ///   off the blurred remote without a hard line.
 ///
-/// Sits **above** the BackdropFilter in build()'s Stack, so the user
-/// sees themselves *sharply* even though the remote is blurred — that's
-/// the FaceTime / Tinder Live aesthetic and crucially preserves the
-/// DateNow "reveal at post-call" concept (it's the PEER that stays
-/// hidden, not the self).
+/// Sits **above** the fullscreen BackdropFilter in build()'s Stack, so it
+/// would otherwise render sharp. It therefore carries its OWN matching
+/// sigma-15 blur internally (a BackdropFilter inside its ClipRRect) — the
+/// DateNow concept is that NO live camera is ever sharp, self-view
+/// included; the reveal is a post-call moment only.
 ///
 /// The switch-camera affordance lives inside the PIP at its
 /// bottom-right corner — a one-tap shortcut to flip front/rear without
@@ -955,18 +955,32 @@ class _LocalPip extends StatelessWidget {
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(_radius),
-                child: SizedBox.expand(
-                  child: rtc.AgoraVideoView(
-                    controller: rtc.VideoViewController(
-                      rtcEngine: engine,
-                      canvas: const rtc.VideoCanvas(
-                        uid: 0,
-                        // Cover (crop excess) so the self view fills
-                        // the PIP edge-to-edge without letterbox bars.
-                        renderMode: rtc.RenderModeType.renderModeHidden,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    rtc.AgoraVideoView(
+                      controller: rtc.VideoViewController(
+                        rtcEngine: engine,
+                        canvas: const rtc.VideoCanvas(
+                          uid: 0,
+                          // Cover (crop excess) so the self view fills
+                          // the PIP edge-to-edge without letterbox bars.
+                          renderMode: rtc.RenderModeType.renderModeHidden,
+                        ),
                       ),
                     ),
-                  ),
+                    // Mystery blur over the LOCAL self-view too. The live
+                    // date must NEVER show a sharp camera feed — the reveal
+                    // is a post-call moment only. Same sigma-15 BackdropFilter
+                    // as the fullscreen layer (the technique that actually
+                    // blurs the iOS PlatformView texture); the enclosing
+                    // ClipRRect bounds it to the PIP, and it sits BELOW the
+                    // switch-camera affordance so controls stay sharp + tappable.
+                    BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+                      child: const SizedBox.expand(),
+                    ),
+                  ],
                 ),
               ),
             ),
