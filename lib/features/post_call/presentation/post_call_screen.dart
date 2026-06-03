@@ -77,11 +77,14 @@ class _PostCallScreenState extends ConsumerState<PostCallScreen> {
 
   /// Suspense window after the user taps Match: a finite, VISIBLE 15 s
   /// countdown waiting for the peer's match decision — never an endless
-  /// spinner. On expiry we DO NOT write anything (no auto match, no auto
-  /// pass): the user's own `decision='match'` stays as-is server-side and the
-  /// view flips to a clean close (Retour accueil / Lancer un nouveau date).
-  /// If the peer matches BEFORE 0, the realtime stream resolves to `matched`
-  /// exactly as today (Cas A) and the countdown is cancelled.
+  /// spinner. This window IS the mutual-decision window: if the peer doesn't
+  /// match within it, the date is over and no match may form afterwards. On
+  /// expiry we therefore overwrite our own `decision` to `'pass'` server-side
+  /// (the only non-'match' value the schema + create_match_if_mutual already
+  /// understand → no migration), which guarantees a late peer 'match' can
+  /// never satisfy the `COUNT(decision='match')=2` gate. If the peer matches
+  /// BEFORE 0, the realtime stream resolves to `matched` exactly as today
+  /// (Cas A) and the countdown is cancelled before any pass is written.
   static const _awaitPeerSeconds = 15;
   Timer? _awaitTimer;
   int _awaitCountdown = _awaitPeerSeconds;
@@ -307,13 +310,17 @@ class _PostCallScreenState extends ConsumerState<PostCallScreen> {
         _awaitTimer = null;
         _log.info(
           'awaitingPeerMatch: 15s elapsed — peer did not respond, '
-          'closing cleanly (no decision written)',
+          'closing the decision window (writing decision=pass)',
         );
-        DebugLog.reveal('await peer timed out (15s)');
+        DebugLog.reveal('await peer timed out (15s) → pass');
         setState(() {
           _awaitCountdown = 0;
           _awaitPeerTimedOut = true;
         });
+        // Close the mutual-decision window server-side so a late peer 'match'
+        // can never form a match (Cas B). Fire-and-forget — the UI is already
+        // on the clean-close view regardless of the write's latency.
+        unawaited(_closeDecisionWindow());
         return;
       }
       setState(() => _awaitCountdown = next);
@@ -323,6 +330,28 @@ class _PostCallScreenState extends ConsumerState<PostCallScreen> {
   void _cancelAwaitCountdown() {
     _awaitTimer?.cancel();
     _awaitTimer = null;
+  }
+
+  /// Closes the mutual-decision window when the 15 s elapsed: overwrites our
+  /// own reveal row to `decision='pass'`. After this, even if the peer taps
+  /// Match, `create_match_if_mutual` sees only one `decision='match'` and
+  /// raises `no_mutual_reveal` → no late match, no conversation. The peer's
+  /// screen also resolves to a clean no-match (their stream sees our 'pass').
+  Future<void> _closeDecisionWindow() async {
+    final self = ref.read(currentProfileProvider).asData?.value;
+    final callId = ref.read(activeCallIdProvider);
+    final repo = ref.read(revealRepositoryProvider);
+    if (self == null || callId == null || repo == null) return;
+    try {
+      await repo.submitDecision(
+        callId: callId,
+        userId: self.userId,
+        decision: 'pass',
+      );
+      _log.info('decision window closed — wrote decision=pass after timeout');
+    } catch (e, st) {
+      _log.error('closeDecisionWindow (pass after timeout) failed', e, st);
+    }
   }
 
   /// Single source of truth for the local UI stage. Computed from the
@@ -354,11 +383,11 @@ class _PostCallScreenState extends ConsumerState<PostCallScreen> {
       return;
     }
 
-    // Once the 15 s peer-decision window has elapsed the experience is closed
-    // for the user — a late peer decision must not yank them back into the
-    // flow. (Their own decision='match' stays in the DB; if the peer matches,
-    // the match still forms server-side and surfaces via the normal matches
-    // list — never a false match.)
+    // Once the 15 s peer-decision window has elapsed the experience is closed:
+    // we wrote decision='pass' (see _closeDecisionWindow), so no match can
+    // form anymore. Freeze the UI on the clean-close view — a late peer
+    // decision (or our own 'pass' echoing back through the stream) must not
+    // yank the user into any other stage.
     if (_awaitPeerTimedOut) return;
 
     // Map the (mine, theirs) outcome onto the local view stage.
