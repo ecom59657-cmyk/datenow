@@ -52,16 +52,23 @@ class _Content extends StatelessWidget {
   Widget build(BuildContext context) {
     final name = profile.firstName ?? 'Profil';
     final title = profile.age != null ? '$name, ${profile.age}' : name;
+    // Hero is sized to a share of the viewport (not a width-based aspect
+    // ratio that consumed ~54% of the screen on a 6.1"). ~40%, clamped, keeps
+    // it the dominant portrait while leaving room for name + badge + every
+    // interest chip above the fold on a standard iPhone. Small screens /
+    // very large Dynamic Type still scroll via the enclosing ListView.
+    final heroHeight =
+        (MediaQuery.of(context).size.height * 0.40).clamp(260.0, 420.0);
     return ListView(
       padding: const EdgeInsets.fromLTRB(
         AppSpacing.lg,
         AppSpacing.sm,
         AppSpacing.lg,
-        AppSpacing.xxl,
+        AppSpacing.lg,
       ),
       children: [
-        _PhotoCard(path: profile.mainPhotoPath),
-        const SizedBox(height: AppSpacing.lg),
+        _PhotoCard(path: profile.mainPhotoPath, height: heroHeight),
+        const SizedBox(height: AppSpacing.md),
         Text(title, style: AppTypography.display.copyWith(fontSize: 30)),
         const SizedBox(height: AppSpacing.sm),
         Align(
@@ -74,9 +81,9 @@ class _Content extends StatelessWidget {
           ),
         ),
         if (profile.interests.isNotEmpty) ...[
-          const SizedBox(height: AppSpacing.xl),
+          const SizedBox(height: AppSpacing.lg),
           Text('Centres d’intérêt', style: AppTypography.h3),
-          const SizedBox(height: AppSpacing.md),
+          const SizedBox(height: AppSpacing.sm),
           _InterestChips(interests: profile.interests),
         ],
       ],
@@ -88,16 +95,18 @@ class _Content extends StatelessWidget {
 /// matched-gated storage pipeline; falls back to the brand gradient when the
 /// peer has no approved photo or the download fails.
 class _PhotoCard extends ConsumerWidget {
-  const _PhotoCard({required this.path});
+  const _PhotoCard({required this.path, required this.height});
 
   final String? path;
+  final double height;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return ClipRRect(
       borderRadius: AppRadius.brXl,
-      child: AspectRatio(
-        aspectRatio: 3 / 4,
+      child: SizedBox(
+        height: height,
+        width: double.infinity,
         child: path == null
             ? const _PhotoFallback()
             : FutureBuilder(
@@ -145,14 +154,14 @@ class _InterestChips extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     return Wrap(
-      spacing: 10,
-      runSpacing: 10,
+      spacing: 8,
+      runSpacing: 8,
       children: [
         for (final interest in interests)
           Container(
             padding: const EdgeInsets.symmetric(
               horizontal: AppSpacing.md,
-              vertical: 10,
+              vertical: 8,
             ),
             decoration: BoxDecoration(
               color: AppColors.pinkSoft,
