@@ -120,10 +120,16 @@ class HomeHeroCard extends StatelessWidget {
                     .animate()
                     .fadeIn(duration: 600.ms, delay: 100.ms),
                 const Spacer(flex: 3),
-                _HeroHeadline(l10n: l10n)
-                    .animate()
-                    .fadeIn(duration: 500.ms, delay: 240.ms)
-                    .slideY(begin: 0.12, end: 0, curve: Curves.easeOut),
+                // Left-aligned editorial text block (the orb and CTA below
+                // stay centred — only the copy goes flush-left for a premium,
+                // Apple/Raya-style composition).
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: _HeroHeadline(l10n: l10n)
+                      .animate()
+                      .fadeIn(duration: 500.ms, delay: 240.ms)
+                      .slideY(begin: 0.12, end: 0, curve: Curves.easeOut),
+                ),
                 const Spacer(flex: 4),
                 _StartDateButton(label: l10n.homeHeroCta, onPressed: onPressed)
                     .animate()
@@ -178,7 +184,7 @@ class _HeroHeadline extends StatelessWidget {
     );
     final accentStyle = leadStyle.copyWith(fontWeight: FontWeight.w800);
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
         // Title is LOCKED to exactly two lines — one phrase per line, never
@@ -188,15 +194,16 @@ class _HeroHeadline extends StatelessWidget {
         // standard iPhone they render at full size.
         FittedBox(
           fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
                 l10n.homeHeroTitleLead,
                 maxLines: 1,
                 softWrap: false,
-                textAlign: TextAlign.center,
+                textAlign: TextAlign.left,
                 style: leadStyle,
               ),
               // A breath between the two lines for editorial spacing.
@@ -210,7 +217,7 @@ class _HeroHeadline extends StatelessWidget {
                   l10n.homeHeroTitleAccent,
                   maxLines: 1,
                   softWrap: false,
-                  textAlign: TextAlign.center,
+                  textAlign: TextAlign.left,
                   style: accentStyle,
                 ),
               ),
@@ -222,7 +229,7 @@ class _HeroHeadline extends StatelessWidget {
         Text(
           l10n.homeHeroSubtitleStrong,
           maxLines: 1,
-          textAlign: TextAlign.center,
+          textAlign: TextAlign.left,
           overflow: TextOverflow.ellipsis,
           style: AppTypography.h3.copyWith(
             color: Colors.white,
@@ -234,7 +241,7 @@ class _HeroHeadline extends StatelessWidget {
         Text(
           l10n.homeHeroSubtitleSoft,
           maxLines: 1,
-          textAlign: TextAlign.center,
+          textAlign: TextAlign.left,
           overflow: TextOverflow.ellipsis,
           style: AppTypography.body.copyWith(color: AppColors.textSecondary),
         ),
