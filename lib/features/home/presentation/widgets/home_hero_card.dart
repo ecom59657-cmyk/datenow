@@ -74,18 +74,12 @@ class HomeHeroCard extends StatelessWidget {
                     .animate()
                     .fadeIn(duration: 400.ms, delay: 200.ms),
                 const Spacer(),
-                Text(
-                  l10n.homeHeroTitle,
-                  style: AppTypography.h1.copyWith(
-                    color: Colors.white,
-                    height: 1.15,
-                  ),
-                )
+                _HeroHeadline(l10n: l10n)
                     .animate()
                     .fadeIn(duration: 500.ms, delay: 120.ms)
                     .slideY(begin: 0.15, end: 0, curve: Curves.easeOut),
                 const SizedBox(height: AppSpacing.lg),
-                _StartDateButton(label: l10n.findDateTitle, onPressed: onPressed)
+                _StartDateButton(label: l10n.homeHeroCta, onPressed: onPressed)
                     .animate()
                     .fadeIn(duration: 500.ms, delay: 280.ms)
                     .slideY(begin: 0.2, end: 0, curve: Curves.easeOut),
@@ -95,6 +89,53 @@ class HomeHeroCard extends StatelessWidget {
         ],
       ),
     ).animate().fadeIn(duration: 450.ms);
+  }
+}
+
+/// Hero headline + reassurance subtext.
+///
+/// Reproduces the validated DA: a large two-line title where the second line
+/// — "en vidéo floutée." — is painted with the DateNow brand gradient (same
+/// ShaderMask technique as the wordmark) so the *blurred-video* promise is
+/// the first thing the eye lands on. The two-line subtext below reframes the
+/// date as a calm conversation: a strong white "Parlez d'abord." over a
+/// softer "Le reveal viendra ensuite." — no surprise-call pressure.
+class _HeroHeadline extends StatelessWidget {
+  const _HeroHeadline({required this.l10n});
+
+  final AppLocalizations l10n;
+
+  @override
+  Widget build(BuildContext context) {
+    final titleStyle = AppTypography.h1.copyWith(
+      color: Colors.white,
+      height: 1.12,
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(l10n.homeHeroTitleLead, style: titleStyle),
+        ShaderMask(
+          shaderCallback: (rect) =>
+              AppColors.brandGradient.createShader(rect),
+          blendMode: BlendMode.srcIn,
+          child: Text(
+            l10n.homeHeroTitleAccent,
+            style: titleStyle,
+          ),
+        ),
+        const SizedBox(height: AppSpacing.md),
+        Text(
+          l10n.homeHeroSubtitleStrong,
+          style: AppTypography.bodyStrong.copyWith(color: Colors.white),
+        ),
+        Text(
+          l10n.homeHeroSubtitleSoft,
+          style: AppTypography.body.copyWith(color: AppColors.textSecondary),
+        ),
+      ],
+    );
   }
 }
 
