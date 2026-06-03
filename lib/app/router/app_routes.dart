@@ -38,7 +38,10 @@ enum AppRoute {
   // find-date gate — those wire-ups land in Phases 5-6 of the rollout.
   identityVerification('/identity'),
   messages('/messages'),
-  conversation('/messages/:id');
+  conversation('/messages/:id'),
+  // Read-only post-match profile card. Access is enforced server-side by
+  // the get_matched_profile RPC — the :userId here is only a hint.
+  matchedProfile('/matched-profile/:userId');
 
   const AppRoute(this.path);
 

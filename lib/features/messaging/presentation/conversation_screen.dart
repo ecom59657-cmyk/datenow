@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../../app/router/app_routes.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../app/theme/app_typography.dart';
@@ -253,7 +255,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
       applyHorizontalPadding: false,
       appBar: AppBar(
         leading: const BackButton(),
-        title: _PeerTitle(conversation: conversation),
+        title: _PeerTitle(conversation: conversation, peerId: peerId),
         centerTitle: false,
         actions: [
           if (peerId != null)
@@ -330,15 +332,20 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
 }
 
 class _PeerTitle extends ConsumerWidget {
-  const _PeerTitle({required this.conversation});
+  const _PeerTitle({required this.conversation, this.peerId});
 
   final Conversation? conversation;
+
+  /// Peer user id. When non-null, tapping the photo/name opens the
+  /// read-only matched-profile card (access re-verified server-side).
+  final String? peerId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final name = conversation?.peerFirstName ?? '—';
     final photoUrl = conversation?.peerPrimaryPhotoUrl;
-    return Row(
+    final id = peerId;
+    final row = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         if (photoUrl != null)
@@ -371,6 +378,15 @@ class _PeerTitle extends ConsumerWidget {
           ),
         ),
       ],
+    );
+    if (id == null) return row;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => context.pushNamed(
+        AppRoute.matchedProfile.name,
+        pathParameters: {'userId': id},
+      ),
+      child: row,
     );
   }
 }

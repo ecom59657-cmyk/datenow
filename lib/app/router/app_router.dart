@@ -15,6 +15,7 @@ import '../../features/call/presentation/call_screen.dart';
 import '../../features/discover/presentation/discover_screen.dart';
 import '../../features/home/presentation/home_screen.dart';
 import '../../features/identity/presentation/identity_verification_screen.dart';
+import '../../features/matching/presentation/matched_profile_screen.dart';
 import '../../features/matching/presentation/matching_screen.dart';
 import '../../features/messaging/presentation/conversation_screen.dart';
 import '../../features/messaging/presentation/inbox_screen.dart';
@@ -290,6 +291,17 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (_, state) {
           final id = state.pathParameters['id']!;
           return ConversationScreen(conversationId: id);
+        },
+      ),
+      // Read-only matched-profile card. The :userId is only a routing hint;
+      // the get_matched_profile RPC re-verifies the match server-side, so a
+      // direct link with an arbitrary id resolves to "Profil indisponible".
+      GoRoute(
+        path: AppRoute.matchedProfile.path,
+        name: AppRoute.matchedProfile.name,
+        builder: (_, state) {
+          final userId = state.pathParameters['userId']!;
+          return MatchedProfileScreen(userId: userId);
         },
       ),
     ],
