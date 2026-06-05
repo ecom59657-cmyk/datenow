@@ -14,6 +14,7 @@ import '../../../core/config/app_config.dart';
 import '../../../core/debug/debug_observer.dart';
 import '../../../core/utils/extensions.dart';
 import '../../../core/utils/logger.dart';
+import '../../../core/utils/wakelock.dart';
 import '../../../shared/widgets/app_button.dart';
 import '../../auth/presentation/providers/auth_provider.dart';
 import '../../matching/presentation/providers/active_match_provider.dart';
@@ -109,6 +110,10 @@ class _CallScreenState extends ConsumerState<CallScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // Keep the screen awake for the whole call surface (FaceTime-style).
+    // Disabled again in dispose(), which always runs when we leave the call,
+    // so the wakelock can never outlive the date.
+    unawaited(Wakelock.enable());
     _start = DateTime.now();
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -399,6 +404,8 @@ class _CallScreenState extends ConsumerState<CallScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    // Restore normal auto-lock as soon as we leave the call surface.
+    unawaited(Wakelock.disable());
     _ticker?.cancel();
     _peerReadyTimer?.cancel();
     _joiningTimer?.cancel();

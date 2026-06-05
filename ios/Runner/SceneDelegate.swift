@@ -28,5 +28,25 @@ class SceneDelegate: FlutterSceneDelegate {
         result(FlutterMethodNotImplemented)
       }
     }
+
+    // Keep the screen awake during a live video date (FaceTime-style). Dart
+    // calls enable() when the call surface mounts and disable() when it is
+    // torn down, so the idle timer is only ever disabled for the call.
+    let wakelock = FlutterMethodChannel(
+      name: "datenow/wakelock",
+      binaryMessenger: controller.binaryMessenger
+    )
+    wakelock.setMethodCallHandler { call, result in
+      switch call.method {
+      case "enable":
+        UIApplication.shared.isIdleTimerDisabled = true
+        result(nil)
+      case "disable":
+        UIApplication.shared.isIdleTimerDisabled = false
+        result(nil)
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
   }
 }
