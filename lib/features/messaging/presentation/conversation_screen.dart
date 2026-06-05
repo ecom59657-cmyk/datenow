@@ -6,6 +6,8 @@ import '../../../app/router/app_routes.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../app/theme/app_typography.dart';
+import '../../../core/notifications/app_badge.dart';
+import '../../../core/notifications/push_notifications_service.dart';
 import '../../../core/utils/extensions.dart';
 import '../../../core/utils/logger.dart';
 import '../../../l10n/app_localizations.dart';
@@ -47,7 +49,17 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
   static const double _autoScrollThreshold = 80;
 
   @override
+  void initState() {
+    super.initState();
+    // Tell the push service which conversation is on screen, so a foreground
+    // push for it is marked read + cleared instead of lingering.
+    PushNotificationsService.instance
+        .setActiveConversation(widget.conversationId);
+  }
+
+  @override
   void dispose() {
+    PushNotificationsService.instance.setActiveConversation(null);
     _scrollController.dispose();
     super.dispose();
   }
@@ -155,6 +167,10 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
         ref.invalidate(inboxProvider);
         ref.invalidate(unreadMessagesCountProvider);
       }
+      // Clear this conversation's delivered iOS notifications and recompute
+      // the app-icon badge from the real unread total.
+      AppBadge.clearConversation(widget.conversationId);
+      PushNotificationsService.instance.refreshBadge();
     });
   }
 

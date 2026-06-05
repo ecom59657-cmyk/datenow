@@ -274,11 +274,48 @@ Deno.serve(async (req) => {
     });
   }
 
+  // ── Recipient unread badge ────────────────────────────────────────────
+  // Total unread incoming messages for the recipient (includes the message
+  // that just triggered this webhook). Sent as `aps.badge` so the iOS app
+  // icon shows the real unread count. Mirrors the unread_messages_count() RPC
+  // but for `recipientId` (the RPC is auth.uid()-scoped, unusable here).
+  // Best-effort: on any failure we omit `badge` rather than send a wrong one.
+  let badge: number | undefined;
+  try {
+    const { data: convs } = await supa
+      .from("conversations")
+      .select("id")
+      .or(`user_a_id.eq.${recipientId},user_b_id.eq.${recipientId}`);
+    const convIds = (convs ?? []).map((c: { id: string }) => c.id);
+    if (convIds.length === 0) {
+      badge = 0;
+    } else {
+      const { count, error: cntErr } = await supa
+        .from("messages")
+        .select("id", { count: "exact", head: true })
+        .is("read_at", null)
+        .neq("sender_id", recipientId)
+        .in("conversation_id", convIds);
+      if (cntErr) {
+        console.warn(`[push] unread count failed (badge omitted): ${cntErr.message}`);
+      } else {
+        badge = count ?? 0;
+      }
+    }
+    if (typeof badge === "number") {
+      console.log(`[push] recipient unread badge = ${badge}`);
+    }
+  } catch (e) {
+    console.warn(`[push] unread count threw (badge omitted): ${e}`);
+  }
+
+  const aps: Record<string, unknown> = {
+    alert: { title: "DateNow", body: firstName },
+    sound: "default",
+  };
+  if (typeof badge === "number") aps.badge = badge;
   const apnsPayload = JSON.stringify({
-    aps: {
-      alert: { title: "DateNow", body: firstName },
-      sound: "default",
-    },
+    aps,
     conversation_id: payload.record.conversation_id,
     sender_id: payload.record.sender_id,
     route: `/messages/${payload.record.conversation_id}`,

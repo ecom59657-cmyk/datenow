@@ -14,6 +14,8 @@
 // plist is in place. See docs/PUSH_NOTIFICATIONS_SETUP.md.
 // =============================================================================
 
+import 'dart:async';
+
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
@@ -25,8 +27,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../app/router/app_router.dart';
 import '../../app/router/app_routes.dart';
 import '../utils/logger.dart';
+import 'app_badge.dart';
 
-class PushNotificationsService {
+class PushNotificationsService with WidgetsBindingObserver {
   PushNotificationsService._();
 
   static final PushNotificationsService instance =
@@ -35,6 +38,16 @@ class PushNotificationsService {
   static const _log = AppLogger('Push');
 
   bool _initialized = false;
+
+  /// The conversation the user is currently viewing, or null. Set by
+  /// ConversationScreen so a foreground push for the open conversation can be
+  /// marked read + cleared instead of lingering.
+  String? _activeConversationId;
+
+  /// Tells the service which conversation is on screen (null when none).
+  void setActiveConversation(String? conversationId) {
+    _activeConversationId = conversationId;
+  }
   bool _firebaseReady = false;
   String? _lastInitError;
   FirebaseMessaging? _fm;
@@ -141,6 +154,15 @@ class PushNotificationsService {
 
       // Foreground tap → conversation deep link.
       FirebaseMessaging.onMessageOpenedApp.listen(_handleTap);
+
+      // Foreground message: if it's for the conversation already on screen,
+      // mark it read + clear its delivered notification; always refresh the
+      // app-icon badge to the real unread total.
+      FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
+
+      // Recompute the badge whenever the app comes back to the foreground, so
+      // it stays truthful even if reads happened on another device.
+      WidgetsBinding.instance.addObserver(this);
 
       // Cold-start: if the app was launched FROM a notification tap,
       // GetInitialMessage returns the payload synchronously.
@@ -485,6 +507,62 @@ class PushNotificationsService {
       );
     } else {
       _log.warn('deep-link gave up after 30 frames — router never built');
+    }
+  }
+
+  /// Foreground push handler. iOS still shows the banner (presentation options
+  /// keep alert on for other conversations), but if the message is for the
+  /// conversation already on screen we mark it read + clear its delivered
+  /// notification so nothing lingers. The badge is always recomputed.
+  void _handleForegroundMessage(RemoteMessage message) {
+    final convId = message.data['conversation_id'] as String?;
+    _log.info(
+      'onMessage (foreground) conv=${convId ?? '∅'} '
+      'active=${_activeConversationId ?? '∅'}',
+    );
+    if (convId != null && convId == _activeConversationId) {
+      unawaited(_markConversationRead(convId));
+      unawaited(AppBadge.clearConversation(convId));
+    }
+    unawaited(refreshBadge());
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    unawaited(refreshBadge());
+    final convId = _activeConversationId;
+    if (convId != null) unawaited(AppBadge.clearConversation(convId));
+  }
+
+  /// Recomputes the app-icon badge from the REAL unread total
+  /// (`unread_messages_count()` RPC) and pushes it to iOS. Safe no-op when
+  /// signed out or Supabase is unavailable.
+  Future<void> refreshBadge() async {
+    try {
+      final client = Supabase.instance.client;
+      if (client.auth.currentUser == null) return;
+      final res = await client.rpc<dynamic>('unread_messages_count');
+      final count = res is int
+          ? res
+          : (res is num ? res.toInt() : 0);
+      await AppBadge.setCount(count);
+      _log.info('refreshBadge → $count');
+    } catch (e) {
+      _log.warn('refreshBadge failed (ignored): $e');
+    }
+  }
+
+  /// Marks every incoming message of [conversationId] read server-side
+  /// (`mark_conversation_read` RPC, participant-checked).
+  Future<void> _markConversationRead(String conversationId) async {
+    try {
+      await Supabase.instance.client.rpc<dynamic>(
+        'mark_conversation_read',
+        params: {'p_conversation_id': conversationId},
+      );
+    } catch (e) {
+      _log.warn('mark_conversation_read($conversationId) failed: $e');
     }
   }
 }
