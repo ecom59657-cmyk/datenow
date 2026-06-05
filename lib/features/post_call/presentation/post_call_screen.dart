@@ -89,6 +89,12 @@ class _PostCallScreenState extends ConsumerState<PostCallScreen> {
   int _awaitCountdown = _awaitPeerSeconds;
   bool _awaitPeerTimedOut = false;
 
+  /// Lets the photo reveal animation play before the 15 s countdown starts —
+  /// the count begins "once the photo is fully revealed", not the instant we
+  /// reach mutual. Matches the reveal animation length in [_RevealPhotoCard].
+  static const _revealAnimDuration = Duration(milliseconds: 1100);
+  Timer? _revealDelayTimer;
+
   /// Set once `_persistMatch` resolves with a conversation id — drives
   /// the "Envoyer un message" CTA on the matched view. Stays null on a
   /// `RevealOutcome.declined` outcome.
@@ -311,7 +317,23 @@ class _PostCallScreenState extends ConsumerState<PostCallScreen> {
   /// Ticks 15→1; at 0 it flips [_awaitPeerTimedOut] (clean close) WITHOUT
   /// writing any decision. Auto-cancels if the stage moves off
   /// awaitingPeerMatch (e.g. the peer matched → `matched`, Cas A).
+  /// On reaching mutual: hold the countdown until the reveal animation has
+  /// played (~1.1 s), then start it. Idempotent.
+  void _scheduleDecisionCountdown() {
+    if (_awaitTimer != null ||
+        _revealDelayTimer != null ||
+        _awaitPeerTimedOut) {
+      return;
+    }
+    _revealDelayTimer = Timer(_revealAnimDuration, () {
+      _revealDelayTimer = null;
+      _startAwaitCountdown();
+    });
+  }
+
   void _startAwaitCountdown() {
+    _revealDelayTimer?.cancel();
+    _revealDelayTimer = null;
     if (_awaitTimer != null || _awaitPeerTimedOut) return;
     setState(() => _awaitCountdown = _awaitPeerSeconds);
     _awaitTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
@@ -355,6 +377,8 @@ class _PostCallScreenState extends ConsumerState<PostCallScreen> {
   void _cancelAwaitCountdown() {
     _awaitTimer?.cancel();
     _awaitTimer = null;
+    _revealDelayTimer?.cancel();
+    _revealDelayTimer = null;
   }
 
   /// Closes the mutual-decision window when the 15 s elapsed: overwrites our
@@ -450,10 +474,13 @@ class _PostCallScreenState extends ConsumerState<PostCallScreen> {
       DebugLog.reveal('match decision: self pass observed');
       _revealTimeoutTimer?.cancel();
     }
-    // The 15 s decision window spans the whole photo-revealed phase: it starts
-    // the moment we reach mutual (photo + Match/Pass visible) and keeps running
-    // through awaitingPeerMatch. Cancel it as soon as the stage resolves.
-    if (next == _Stage.mutual || next == _Stage.awaitingPeerMatch) {
+    // The 15 s decision window spans the photo-revealed phase. On reaching
+    // mutual we let the reveal animation play first, then start the count; if
+    // we land directly on awaitingPeerMatch (re-entry with our match already
+    // recorded) we start it right away. Cancel it as soon as the stage resolves.
+    if (next == _Stage.mutual) {
+      _scheduleDecisionCountdown();
+    } else if (next == _Stage.awaitingPeerMatch) {
       _startAwaitCountdown();
     } else {
       _cancelAwaitCountdown();
@@ -611,6 +638,7 @@ class _PostCallScreenState extends ConsumerState<PostCallScreen> {
     _peerDecisionTimer?.cancel();
     _revealTimeoutTimer?.cancel();
     _awaitTimer?.cancel();
+    _revealDelayTimer?.cancel();
     _revealSub?.cancel();
     super.dispose();
   }
@@ -736,9 +764,13 @@ class _RevealingView extends StatelessWidget {
   }
 }
 
-/// Mutual-reveal stage — BOTH peers submitted revealed=true. Photo
-/// shown large-format + Match/Pass buttons. The match row is only
-/// created if the user taps Match (in [_PostCallScreenState._confirmMatch]).
+/// Mutual-reveal stage — the emotional reveal + decision moment. The peer
+/// photo auto-reveals (blur → sharp + premium zoom + magenta glow), then the
+/// 15 s neon countdown ticks. Match writes the row only when both peers tap it
+/// (in [_PostCallScreenState._confirmMatch]).
+///
+/// Minimal copy on purpose: only "À toi de jouer ! ✨", the countdown, the
+/// name/age and the two buttons — the photo is the dominant element.
 class _MutualRevealView extends StatelessWidget {
   const _MutualRevealView({
     required this.match,
@@ -751,8 +783,8 @@ class _MutualRevealView extends StatelessWidget {
   final ActiveMatch? match;
   final Uint8List? peerPhotoBytes;
 
-  /// Seconds left in the shared 15 s decision window — visible so the moment
-  /// reads as a deliberate, time-boxed choice.
+  /// Seconds left in the 15 s decision window (starts once the reveal anim
+  /// has played) — shown in the neon circle.
   final int countdown;
   final VoidCallback onMatch;
   final VoidCallback onPass;
@@ -763,27 +795,27 @@ class _MutualRevealView extends StatelessWidget {
     final candidate = match?.candidate;
     return Column(
       children: [
-        const SizedBox(height: AppSpacing.lg),
-        Text(
-          'C\'est réciproque ✨',
-          textAlign: TextAlign.center,
-          style: AppTypography.h2,
-        ),
         const SizedBox(height: AppSpacing.sm),
-        _CountdownBadge(seconds: countdown),
-        const Spacer(),
-        // peerPhotoBytes lands asynchronously after the mutual outcome
-        // triggers _loadPeerPhoto. While the bytes are in flight, show
-        // a soft skeleton — NOT the "Photo cachée" silhouette which
-        // would lie about the state. If bytes never arrive (peer has
-        // no photo somehow, RLS error), the skeleton is replaced by an
-        // explicit message after a short timeout.
-        Center(
-          child: peerPhotoBytes == null
-              ? const _PhotoLoadingSkeleton()
-              : _PhotoReveal(revealed: true, bytes: peerPhotoBytes),
+        Text(
+          'À toi de jouer ! ✨',
+          textAlign: TextAlign.center,
+          style: AppTypography.h1,
         ),
-        const SizedBox(height: AppSpacing.lg),
+        const SizedBox(height: AppSpacing.md),
+        // Neon countdown, sitting between the title and the photo.
+        _CountdownCircle(seconds: countdown),
+        const SizedBox(height: AppSpacing.md),
+        // Dominant reveal photo — fills the remaining vertical space, so it
+        // scales up on big iPhones without ever overflowing small ones.
+        Expanded(
+          child: Center(
+            child: AspectRatio(
+              aspectRatio: 4 / 5,
+              child: _RevealPhotoCard(bytes: peerPhotoBytes),
+            ),
+          ),
+        ),
+        const SizedBox(height: AppSpacing.md),
         if (candidate != null)
           Text(
             formatProfileNameAge(
@@ -796,7 +828,7 @@ class _MutualRevealView extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
-        const Spacer(),
+        const SizedBox(height: AppSpacing.lg),
         AppButton(
           label: l10n.postCallMatch,
           icon: Icons.favorite_rounded,
@@ -813,6 +845,139 @@ class _MutualRevealView extends StatelessWidget {
         const SizedBox(height: AppSpacing.lg),
       ],
     );
+  }
+}
+
+/// Neon countdown circle — "N" over "sec" inside a glowing brand-pink ring.
+class _CountdownCircle extends StatelessWidget {
+  const _CountdownCircle({required this.seconds});
+
+  final int seconds;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 76,
+      height: 76,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: AppColors.brandPink.withValues(alpha: 0.1),
+        border: Border.all(color: AppColors.brandPink, width: 2),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.brandPink.withValues(alpha: 0.45),
+            blurRadius: 22,
+            spreadRadius: 1,
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 250),
+            transitionBuilder: (child, anim) =>
+                FadeTransition(opacity: anim, child: child),
+            child: Text(
+              '$seconds',
+              key: ValueKey<int>(seconds),
+              style: AppTypography.h1.copyWith(
+                color: Colors.white,
+                fontWeight: FontWeight.w800,
+                height: 1.0,
+              ),
+            ),
+          ),
+          Text(
+            'sec',
+            style: AppTypography.caption.copyWith(
+              color: AppColors.brandPink,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 1,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The reveal photo: rounded card with a magenta/violet glow that develops
+/// from blur to sharp with a subtle zoom-settle — the "I finally see them"
+/// moment. Fills whatever box it's given (used inside an AspectRatio).
+class _RevealPhotoCard extends StatelessWidget {
+  const _RevealPhotoCard({required this.bytes});
+
+  final Uint8List? bytes;
+
+  @override
+  Widget build(BuildContext context) {
+    final Widget content = bytes == null
+        ? const ColoredBox(
+            color: AppColors.surface,
+            child: Center(
+              child: SizedBox(
+                width: 28,
+                height: 28,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.5,
+                  valueColor: AlwaysStoppedAnimation(AppColors.brandPink),
+                ),
+              ),
+            ),
+          )
+        : TweenAnimationBuilder<double>(
+            tween: Tween<double>(begin: 24, end: 0),
+            duration: const Duration(milliseconds: 1100),
+            curve: Curves.easeOutCubic,
+            builder: (context, sigma, child) => ImageFiltered(
+              imageFilter: ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
+              child: child,
+            ),
+            child: SizedBox.expand(
+              child: Image.memory(
+                bytes!,
+                fit: BoxFit.cover,
+                gaplessPlayback: true,
+              ),
+            ),
+          );
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(
+          color: AppColors.brandPink.withValues(alpha: 0.6),
+          width: 2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.brandPink.withValues(alpha: 0.4),
+            blurRadius: 44,
+            spreadRadius: 2,
+            offset: const Offset(0, 10),
+          ),
+          BoxShadow(
+            color: AppColors.brandViolet.withValues(alpha: 0.28),
+            blurRadius: 60,
+            spreadRadius: 6,
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(28),
+        child: content,
+      ),
+    )
+        .animate()
+        .scale(
+          begin: const Offset(1.05, 1.05),
+          end: const Offset(1, 1),
+          duration: 1100.ms,
+          curve: Curves.easeOutCubic,
+        )
+        .fadeIn(duration: 350.ms);
   }
 }
 

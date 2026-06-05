@@ -18,11 +18,11 @@ void main() {
 
   group('postCallTitle wording', () {
     test('FR is the new shorter copy', () {
-      expect(fr.postCallTitle, 'Votre date est terminé');
+      expect(fr.postCallTitle, 'Votre date est terminé 🎉');
     });
 
     test('EN is the new shorter copy', () {
-      expect(en.postCallTitle, 'Your date is over');
+      expect(en.postCallTitle, 'Your date is over 🎉');
     });
 
     test('FR no longer carries the old "en direct" wording', () {
