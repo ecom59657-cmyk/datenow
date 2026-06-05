@@ -112,7 +112,9 @@ class _CallScreenState extends ConsumerState<CallScreen>
     WidgetsBinding.instance.addObserver(this);
     // Keep the screen awake for the whole call surface (FaceTime-style).
     // Disabled again in dispose(), which always runs when we leave the call,
-    // so the wakelock can never outlive the date.
+    // so the wakelock can never outlive the date. Re-asserted at live start +
+    // on Agora join (the native video pipeline can reset the idle timer).
+    _log.info('wakelock enable at CallScreen init');
     unawaited(Wakelock.enable());
     _start = DateTime.now();
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
@@ -323,6 +325,11 @@ class _CallScreenState extends ConsumerState<CallScreen>
       setState(() => _precall = _PreCall.live);
       ref.read(precallStateProvider.notifier).state = 'live';
       DebugObserver.instance.setPhase('live'); // debug-observer
+      // Re-assert the wakelock now that the live video surface is up — the
+      // native Agora pipeline can reset isIdleTimerDisabled during init, so
+      // the initState enable alone isn't enough to survive the whole date.
+      _log.info('wakelock re-enable at live start');
+      unawaited(Wakelock.enable());
     });
   }
 
@@ -405,6 +412,7 @@ class _CallScreenState extends ConsumerState<CallScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     // Restore normal auto-lock as soon as we leave the call surface.
+    _log.info('wakelock disable at CallScreen dispose');
     unawaited(Wakelock.disable());
     _ticker?.cancel();
     _peerReadyTimer?.cancel();

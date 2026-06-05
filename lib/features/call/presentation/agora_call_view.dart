@@ -13,6 +13,7 @@ import '../../../app/theme/app_spacing.dart';
 import '../../../app/theme/app_typography.dart';
 import '../../../core/debug/debug_observer.dart';
 import '../../../core/utils/logger.dart';
+import '../../../core/utils/wakelock.dart';
 import '../data/agora_token_repository.dart';
 import '../domain/call_end_reason.dart';
 
@@ -380,6 +381,12 @@ class _AgoraCallViewState extends ConsumerState<AgoraCallView> {
             );
             if (!mounted) return;
             setState(() => _joined = true);
+            // Most reliable point to keep the screen awake: the native Agora
+            // engine is fully up and may have reset isIdleTimerDisabled during
+            // init, so we re-assert the wakelock here (in addition to
+            // CallScreen init + live start). No Agora config is touched.
+            _log.info('wakelock re-enable on Agora join success');
+            unawaited(Wakelock.enable());
             DebugLog.agora('joined channel'); // debug-observer
             _publishDebug();
           },
