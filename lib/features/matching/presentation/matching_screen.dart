@@ -41,7 +41,12 @@ class MatchingScreen extends ConsumerStatefulWidget {
   ConsumerState<MatchingScreen> createState() => _MatchingScreenState();
 }
 
-enum _Phase { searching, found, empty }
+/// Bounded search state machine. searching/widening/finalCheck are the three
+/// time-based stages of the SAME active search (poll + heartbeat keep running);
+/// they only change the on-screen copy and (gently) the score floor. found →
+/// call. noDateAvailable → the clean 30 s give-up. error → a setup/network
+/// failure (never masked as "no date").
+enum _Phase { searching, widening, finalCheck, found, noDateAvailable, error }
 
 class _MatchingScreenState extends ConsumerState<MatchingScreen>
     with WidgetsBindingObserver {
@@ -50,17 +55,27 @@ class _MatchingScreenState extends ConsumerState<MatchingScreen>
   // The future v2 driver will use the tag `[MATCHING V2]` so both
   // versions are diff-able in the same log stream.
   static const _log = AppLogger('MATCHING V1');
-  // Only the two *search* messages loop here. "Confirmation du match…"
-  // belongs to the `found` phase — it must never show while still
-  // searching, so it is not part of this rotation.
-  static const _stepCount = 2;
 
-  Timer? _messageRotator;
+  /// Bounded search: the copy (and score floor) progress with elapsed time and
+  /// the whole search is hard-capped so the user never waits on an endless
+  /// spinner.
+  ///   0-8s   searching   (minScore 50)
+  ///   8-18s  widening    (minScore 45)
+  ///   18-30s finalCheck  (minScore 40)
+  ///   >30s   noDateAvailable — give up cleanly.
+  static const _widenAfter = Duration(seconds: 8);
+  static const _finalCheckAfter = Duration(seconds: 18);
+  static const _searchTimeout = Duration(seconds: 30);
+
+  Timer? _searchTimer;
   Timer? _navTimer;
   Timer? _pollTimer;
   Timer? _heartbeatTimer;
   StreamSubscription<CallSessionRow?>? _callSub;
-  int _step = 0;
+
+  /// Wall-clock instant the current search began — drives the stage copy and
+  /// the 30 s cap. Reset on every (re)search.
+  DateTime? _searchStart;
 
   _Phase _phase = _Phase.searching;
   ActiveMatch? _match;
@@ -129,7 +144,7 @@ class _MatchingScreenState extends ConsumerState<MatchingScreen>
   /// every exit path so a future timer added to the search loop only
   /// has to be cancelled here once.
   void _cancelAllTimers() {
-    _messageRotator?.cancel();
+    _searchTimer?.cancel();
     _navTimer?.cancel();
     _pollTimer?.cancel();
     _heartbeatTimer?.cancel();
@@ -170,25 +185,69 @@ class _MatchingScreenState extends ConsumerState<MatchingScreen>
     _disposePresence = presence;
     presence.setIntent(PresenceStatus.searching);
     DebugObserver.instance.startSession(); // debug-observer
+    _searchStart = DateTime.now();
     setState(() {
       _phase = _Phase.searching;
-      _step = 0;
       _match = null;
     });
-    // Looping ripple animation — purely cosmetic; the real search is the
-    // poll timer below.
-    _messageRotator?.cancel();
-    _messageRotator = Timer.periodic(
-      const Duration(seconds: 1, milliseconds: 200),
-      (timer) {
-        if (!mounted) {
-          timer.cancel();
-          return;
-        }
-        setState(() => _step = (_step + 1) % _stepCount);
-      },
+    // Drives the searching → widening → finalCheck → noDateAvailable
+    // progression purely from elapsed time. The real search is the poll
+    // timer started in _enterQueueAndSearch.
+    _searchTimer?.cancel();
+    _searchTimer = Timer.periodic(
+      const Duration(seconds: 1),
+      (_) => _tickSearch(),
     );
     unawaited(_enterQueueAndSearch());
+  }
+
+  /// One stage tick. Advances the copy with elapsed time and gives up cleanly
+  /// at [_searchTimeout]. No-op once a match landed.
+  void _tickSearch() {
+    if (!mounted || _match != null) return;
+    final start = _searchStart;
+    if (start == null) return;
+    final elapsed = DateTime.now().difference(start);
+    if (elapsed >= _searchTimeout) {
+      _onSearchTimedOut();
+      return;
+    }
+    final next = elapsed >= _finalCheckAfter
+        ? _Phase.finalCheck
+        : elapsed >= _widenAfter
+            ? _Phase.widening
+            : _Phase.searching;
+    if (next != _phase) setState(() => _phase = next);
+  }
+
+  /// 30 s elapsed with no match → stop everything, leave the queue cleanly and
+  /// show the explicit "no date available" state. Never an endless spinner.
+  void _onSearchTimedOut() {
+    if (_match != null) return;
+    final waitedMs = _queueEnteredAt != null
+        ? DateTime.now().difference(_queueEnteredAt!).inMilliseconds
+        : null;
+    _log.info(
+      'search timed out at ${_searchTimeout.inSeconds}s — no date available '
+      '(waited=${waitedMs ?? '?'}ms)',
+    );
+    _cancelAllTimers();
+    // Leave the queue directly — NOT via _cleanup, which is one-shot and must
+    // stay available for the eventual real exit AND for a Réessayer re-entry.
+    unawaited(_leaveQueueSilently());
+    _disposePresence?.setIntent(PresenceStatus.online);
+    if (mounted) setState(() => _phase = _Phase.noDateAvailable);
+  }
+
+  Future<void> _leaveQueueSilently() async {
+    final driver = _disposeDriver;
+    final selfId = _disposeUserId;
+    if (driver == null || selfId == null) return;
+    try {
+      await driver.leaveQueue(selfId);
+    } catch (e) {
+      _log.warn('leaveQueue (timeout) failed (ignored): $e');
+    }
   }
 
   Future<void> _enterQueueAndSearch() async {
@@ -199,7 +258,7 @@ class _MatchingScreenState extends ConsumerState<MatchingScreen>
         'Matchmaking unavailable — driver=${driver != null} '
         'profile=${self != null}',
       );
-      if (mounted) setState(() => _phase = _Phase.empty);
+      if (mounted) setState(() => _phase = _Phase.error);
       return;
     }
     _log.info('Using driver=${driver.name}');
@@ -213,7 +272,7 @@ class _MatchingScreenState extends ConsumerState<MatchingScreen>
       await driver.joinQueue(self.userId);
     } catch (e, st) {
       _log.error('STEP A joinQueue THREW — pas de row en queue', e, st);
-      if (mounted) setState(() => _phase = _Phase.empty);
+      if (mounted) setState(() => _phase = _Phase.error);
       return;
     }
 
@@ -231,7 +290,7 @@ class _MatchingScreenState extends ConsumerState<MatchingScreen>
           'soit un trigger/sweep a delete la row tout de suite. '
           'Cf logs joinQueue UPSERT au-dessus pour le détail.',
         );
-        if (mounted) setState(() => _phase = _Phase.empty);
+        if (mounted) setState(() => _phase = _Phase.error);
         return;
       }
     } catch (e, st) {
@@ -313,11 +372,18 @@ class _MatchingScreenState extends ConsumerState<MatchingScreen>
       final self = ref.read(currentProfileProvider).asData?.value;
       if (driver == null || self == null) return;
 
+      // Gently widen the compatibility floor as the search progresses
+      // (50 → 45 → 40). The RPC's hard gates (identity, distance cap,
+      // not-self / not-banned) are unchanged, so this never surfaces a false
+      // match — only a slightly lower score floor.
+      final minScore = switch (_phase) {
+        _Phase.finalCheck => 40,
+        _Phase.widening => 45,
+        _ => 50,
+      };
       final result = await driver.findBestLiveCandidateV1(
         selfId: self.userId,
-        // Threshold tuned for tonight's test — the v3 plan (sub-phase
-        // 1.5) replaces this with the freshness-decay state machine.
-        minScore: 50,
+        minScore: minScore,
       );
 
       if (result.candidateId == null) {
@@ -421,7 +487,7 @@ class _MatchingScreenState extends ConsumerState<MatchingScreen>
     );
     _pollTimer?.cancel();
     _heartbeatTimer?.cancel();
-    _messageRotator?.cancel();
+    _searchTimer?.cancel();
     _callSub?.cancel();
     final match = ActiveMatch(
       candidate: peer,
@@ -485,15 +551,19 @@ class _MatchingScreenState extends ConsumerState<MatchingScreen>
         ),
       ),
       body: switch (_phase) {
-        _Phase.searching => _SearchingView(
+        _Phase.searching || _Phase.widening || _Phase.finalCheck =>
+          _SearchingView(
             l10n: l10n,
-            step: _step,
+            phase: _phase,
             activeCount: _activeCount,
             onCancel: _cancel,
           ),
         _Phase.found => _FoundView(l10n: l10n, match: _match!),
-        _Phase.empty => _EmptyView(
-            l10n: l10n,
+        _Phase.noDateAvailable => _NoDateView(
+            onRetry: _startSearch,
+            onCancel: _cancel,
+          ),
+        _Phase.error => _ErrorView(
             onRetry: _startSearch,
             onCancel: _cancel,
           ),
@@ -509,43 +579,55 @@ class _MatchingScreenState extends ConsumerState<MatchingScreen>
 class _SearchingView extends StatelessWidget {
   const _SearchingView({
     required this.l10n,
-    required this.step,
+    required this.phase,
     required this.activeCount,
     required this.onCancel,
   });
 
   final AppLocalizations l10n;
-  final int step;
+  final _Phase phase;
   final int? activeCount;
   final VoidCallback onCancel;
 
   @override
   Widget build(BuildContext context) {
-    // Only the two search-phase messages. "Confirmation du match…"
-    // (matchingStep3) is deliberately NOT here — it belongs to the
-    // `found` phase, once a compatible peer has actually been detected.
-    final messages = [
-      l10n.matchingStep1,
-      l10n.matchingStep2,
-    ];
-    final index = step % messages.length;
+    // Stage-driven copy — progresses with elapsed time so the search reads as
+    // active and bounded, never a static loop.
+    final (String title, String subtitle) = switch (phase) {
+      _Phase.widening => (
+          'On élargit légèrement la recherche…',
+          'On regarde les profils compatibles un peu plus loin.',
+        ),
+      _Phase.finalCheck => (
+          'Dernière vérification…',
+          'On essaie de trouver quelqu\'un prêt pour un date maintenant.',
+        ),
+      _ => (
+          'Recherche d\'une personne disponible…',
+          'On vérifie les profils compatibles en ligne.',
+        ),
+    };
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const Spacer(flex: 2),
         const Center(child: _RippleAvatar()),
         const SizedBox(height: AppSpacing.xl),
-        Text(
-          l10n.matchingTitle,
-          textAlign: TextAlign.center,
-          style: AppTypography.h2,
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 300),
+          child: Text(
+            title,
+            key: ValueKey(title),
+            textAlign: TextAlign.center,
+            style: AppTypography.h2,
+          ),
         ),
         const SizedBox(height: AppSpacing.sm),
         AnimatedSwitcher(
           duration: const Duration(milliseconds: 300),
           child: Text(
-            messages[index],
-            key: ValueKey(index),
+            subtitle,
+            key: ValueKey(subtitle),
             textAlign: TextAlign.center,
             style: AppTypography.body.copyWith(
               color: AppColors.textSecondary,
@@ -678,17 +760,23 @@ class _FoundView extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Empty — no compatible candidate online
+// Terminal states — no date after 30 s, or a setup/network error
 // ---------------------------------------------------------------------------
 
-class _EmptyView extends StatelessWidget {
-  const _EmptyView({
-    required this.l10n,
+/// Shared layout for the two terminal states: icon + title + body + the two
+/// "Réessayer" / "Retour à l'accueil" actions.
+class _TerminalView extends StatelessWidget {
+  const _TerminalView({
+    required this.icon,
+    required this.title,
+    required this.body,
     required this.onRetry,
     required this.onCancel,
   });
 
-  final AppLocalizations l10n;
+  final IconData icon;
+  final String title;
+  final String body;
   final VoidCallback onRetry;
   final VoidCallback onCancel;
 
@@ -698,42 +786,70 @@ class _EmptyView extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const Spacer(flex: 2),
-        const Icon(
-          Icons.hourglass_empty_rounded,
-          size: 64,
-          color: AppColors.textTertiary,
-        ),
+        Icon(icon, size: 64, color: AppColors.textTertiary),
         const SizedBox(height: AppSpacing.lg),
-        Text(
-          l10n.matchingNoCandidateTitle,
-          textAlign: TextAlign.center,
-          style: AppTypography.h2,
-        ),
+        Text(title, textAlign: TextAlign.center, style: AppTypography.h2),
         const SizedBox(height: AppSpacing.sm),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
           child: Text(
-            l10n.matchingNoCandidateBody,
+            body,
             textAlign: TextAlign.center,
-            style: AppTypography.body.copyWith(
-              color: AppColors.textSecondary,
-            ),
+            style: AppTypography.body.copyWith(color: AppColors.textSecondary),
           ),
         ),
         const Spacer(flex: 3),
         AppButton(
-          label: l10n.matchingTryAgain,
+          label: 'Réessayer',
           size: AppButtonSize.large,
           onPressed: onRetry,
         ),
         const SizedBox(height: AppSpacing.sm),
         AppButton(
-          label: l10n.cancel,
+          label: 'Retour à l\'accueil',
           variant: AppButtonVariant.secondary,
           onPressed: onCancel,
         ),
         const SizedBox(height: AppSpacing.lg),
       ],
+    );
+  }
+}
+
+/// 30 s elapsed without a date — the bounded give-up state.
+class _NoDateView extends StatelessWidget {
+  const _NoDateView({required this.onRetry, required this.onCancel});
+
+  final VoidCallback onRetry;
+  final VoidCallback onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    return _TerminalView(
+      icon: Icons.hourglass_empty_rounded,
+      title: 'Aucun date disponible pour le moment.',
+      body: 'Reviens dans quelques minutes ou relance une recherche.',
+      onRetry: onRetry,
+      onCancel: onCancel,
+    );
+  }
+}
+
+/// Setup / network failure — never masked as "no date available".
+class _ErrorView extends StatelessWidget {
+  const _ErrorView({required this.onRetry, required this.onCancel});
+
+  final VoidCallback onRetry;
+  final VoidCallback onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    return _TerminalView(
+      icon: Icons.cloud_off_rounded,
+      title: 'Connexion impossible',
+      body: 'Vérifie ta connexion et réessaie.',
+      onRetry: onRetry,
+      onCancel: onCancel,
     );
   }
 }
