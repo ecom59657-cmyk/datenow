@@ -60,7 +60,7 @@ PODS:
   - didit_sdk (4.0.2):
     - DiditSDK/Core (~> 4.0)
     - Flutter
-  - DiditSDK/Core (4.0.2)
+  - DiditSDK/Core (4.0.4)
   - Firebase/CoreOnly (11.15.0):
     - FirebaseCore (~> 11.15.0)
   - Firebase/Messaging (11.15.0):
@@ -260,7 +260,7 @@ SPEC CHECKSUMS:
   AppAuth: d4f13a8fe0baf391b2108511793e4b479691fb73
   AppCheckCore: cc8fd0a3a230ddd401f326489c99990b013f0c4f
   didit_sdk: b442e4b8cdf19bbbb8872805569e0591e908cb79
-  DiditSDK: 07fc2a1b506f06ba6287076e4dc0f6594b2039da
+  DiditSDK: 050bd3ebad2cf9491febf5a9dffe59349ff4b1b9
   Firebase: d99ac19b909cd2c548339c2241ecd0d1599ab02e
   firebase_core: 995454a784ff288be5689b796deb9e9fa3601818
   firebase_messaging: f4a41dd102ac18b840eba3f39d67e77922d3f707
