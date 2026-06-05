@@ -23,7 +23,6 @@ import '../../matching/data/matching_repository.dart';
 import '../../messaging/data/messaging_repository.dart';
 import '../../matching/domain/active_match.dart';
 import '../../matching/presentation/providers/active_match_provider.dart';
-import '../../matching/presentation/widgets/compatibility_badge.dart';
 import '../../profile_setup/data/profile_repository.dart';
 import '../../profile_setup/domain/user_profile.dart';
 import '../../profile_setup/presentation/providers/profile_provider.dart';
@@ -105,7 +104,24 @@ class _PostCallScreenState extends ConsumerState<PostCallScreen> {
     // converges from server truth. Deferred one frame so the providers
     // (activeMatchProvider / activeCallIdProvider) are guaranteed
     // initialised.
-    WidgetsBinding.instance.addPostFrameCallback((_) => _attachRevealSub());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _attachRevealSub();
+      // Auto-reveal: the photo reveal is no longer a user action — we submit
+      // revealed=true immediately so both peers land on the photo + Match/Pass
+      // view (with the 15 s decision countdown) without an extra tap.
+      _autoReveal();
+    });
+  }
+
+  bool _autoRevealed = false;
+
+  /// Submits revealed=true automatically (no "Révéler" button). Idempotent;
+  /// also re-triggered from [_onReveals] if the stage is still pre-reveal
+  /// (e.g. the stream emitted before our write landed).
+  void _autoReveal() {
+    if (_autoRevealed) return;
+    _autoRevealed = true;
+    _submitReveal();
   }
 
   /// Attaches the realtime `reveals` subscription if it isn't already.
@@ -299,7 +315,8 @@ class _PostCallScreenState extends ConsumerState<PostCallScreen> {
     if (_awaitTimer != null || _awaitPeerTimedOut) return;
     setState(() => _awaitCountdown = _awaitPeerSeconds);
     _awaitTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!mounted || _stage != _Stage.awaitingPeerMatch) {
+      if (!mounted ||
+          (_stage != _Stage.mutual && _stage != _Stage.awaitingPeerMatch)) {
         timer.cancel();
         _awaitTimer = null;
         return;
@@ -308,18 +325,26 @@ class _PostCallScreenState extends ConsumerState<PostCallScreen> {
       if (next <= 0) {
         timer.cancel();
         _awaitTimer = null;
+        // Whether the user had already tapped Match (awaitingPeerMatch) or had
+        // not decided (mutual), the window is over with no mutual match.
+        final matchedByMe = _stage == _Stage.awaitingPeerMatch;
         _log.info(
-          'awaitingPeerMatch: 15s elapsed — peer did not respond, '
-          'closing the decision window (writing decision=pass)',
+          'decision window: 15s elapsed (matchedByMe=$matchedByMe) — closing, '
+          'writing decision=pass',
         );
-        DebugLog.reveal('await peer timed out (15s) → pass');
+        DebugLog.reveal('decision window timed out (15s) → pass');
         setState(() {
           _awaitCountdown = 0;
-          _awaitPeerTimedOut = true;
+          if (matchedByMe) {
+            // We matched, the peer did not respond in time → explicit close.
+            _awaitPeerTimedOut = true;
+          } else {
+            // We never decided → treated as a pass (no match).
+            _stage = _Stage.passed;
+          }
         });
-        // Close the mutual-decision window server-side so a late peer 'match'
-        // can never form a match (Cas B). Fire-and-forget — the UI is already
-        // on the clean-close view regardless of the write's latency.
+        // Close the decision window server-side (decision=pass) so a late peer
+        // 'match' can never form a match. Fire-and-forget.
         unawaited(_closeDecisionWindow());
         return;
       }
@@ -425,12 +450,18 @@ class _PostCallScreenState extends ConsumerState<PostCallScreen> {
       DebugLog.reveal('match decision: self pass observed');
       _revealTimeoutTimer?.cancel();
     }
-    // Run the 15 s suspense countdown only while awaiting the peer's match
-    // decision; cancel it the moment the stage resolves to anything else.
-    if (next == _Stage.awaitingPeerMatch) {
+    // The 15 s decision window spans the whole photo-revealed phase: it starts
+    // the moment we reach mutual (photo + Match/Pass visible) and keeps running
+    // through awaitingPeerMatch. Cancel it as soon as the stage resolves.
+    if (next == _Stage.mutual || next == _Stage.awaitingPeerMatch) {
       _startAwaitCountdown();
     } else {
       _cancelAwaitCountdown();
+    }
+    // Defensive auto-reveal: if we're still pre-reveal (peer acted first, our
+    // write hasn't landed), reveal automatically — no button.
+    if (next == _Stage.decide) {
+      _autoReveal();
     }
 
     setState(() => _stage = next);
@@ -591,22 +622,20 @@ class _PostCallScreenState extends ConsumerState<PostCallScreen> {
 
     final body = switch (_stage) {
       // Decide — peer photo MASKED (no local "show photo" toggle any
-      // more); single "Révéler" CTA which submits reveal=true and
-      // moves to waiting until the peer reveals too.
-      _Stage.decide => _DecideView(
-          match: match,
-          onReveal: _submitReveal,
-        ),
+      // Reveal is automatic now — this is a brief transition while our
+      // revealed=true write lands and the peer's row converges. No button.
+      _Stage.decide => const _RevealingView(),
       _Stage.waiting => _WaitingView(
           timedOut: _revealTimedOut,
           onKeepWaiting: _keepWaiting,
           onGiveUp: _pass,
         ),
-      // Mutual reveal — BOTH peers submitted revealed=true. Photo
-      // shown large-format here, Match/Pass buttons available.
+      // Mutual reveal — BOTH peers revealed. Photo shown large-format with the
+      // 15 s decision countdown + Match/Pass buttons.
       _Stage.mutual => _MutualRevealView(
           match: match,
           peerPhotoBytes: _peerPhotoBytes,
+          countdown: _awaitCountdown,
           onMatch: _confirmMatch,
           onPass: _passAfterReveal,
         ),
@@ -675,70 +704,34 @@ class _PostCallScreenState extends ConsumerState<PostCallScreen> {
 // Stage views
 // ---------------------------------------------------------------------------
 
-/// Decide stage — peer photo is ALWAYS masked here. Tapping "Révéler"
-/// commits the user's reveal=true to the server and moves the screen
-/// to the waiting state until the peer reveals too. The large photo
-/// + Match/Pass buttons only appear in [_MutualRevealView] once BOTH
-/// peers have revealed.
-class _DecideView extends StatelessWidget {
-  const _DecideView({
-    required this.match,
-    required this.onReveal,
-  });
-
-  final ActiveMatch? match;
-  final VoidCallback onReveal;
+/// Brief transition shown while the automatic reveal write lands and both
+/// rows converge to mutual. No user action — the photo + Match/Pass + 15 s
+/// countdown appear in [_MutualRevealView] as soon as both peers have revealed.
+class _RevealingView extends StatelessWidget {
+  const _RevealingView();
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    final candidate = match?.candidate;
-    final score = match?.score;
-
-    return Column(
-      children: [
-        const SizedBox(height: AppSpacing.lg),
-        Text(
-          l10n.postCallSubtitle,
-          textAlign: TextAlign.center,
-          style: AppTypography.body.copyWith(color: AppColors.textSecondary),
-        ),
-        const Spacer(),
-        // Always masked at this stage — `revealed: false` ⇒ silhouette.
-        const Center(child: _PhotoReveal(revealed: false, bytes: null)),
-        const SizedBox(height: AppSpacing.lg),
-        if (candidate != null)
-          Text(
-            formatProfileNameAge(
-              l10n,
-              firstName: candidate.firstName,
-              age: candidate.age,
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const SizedBox(
+            height: 36,
+            width: 36,
+            child: CircularProgressIndicator(
+              strokeWidth: 2.4,
+              valueColor: AlwaysStoppedAnimation(AppColors.brandPink),
             ),
-            style: AppTypography.h2,
-            textAlign: TextAlign.center,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
           ),
-        const SizedBox(height: 4),
-        if (match != null)
+          const SizedBox(height: AppSpacing.lg),
           Text(
-            '${match!.distanceKm} km',
-            style:
-                AppTypography.body.copyWith(color: AppColors.textSecondary),
+            'Révélation…',
+            textAlign: TextAlign.center,
+            style: AppTypography.body.copyWith(color: AppColors.textSecondary),
           ),
-        if (score != null) ...[
-          const SizedBox(height: AppSpacing.sm),
-          CompatibilityBadge(score: score),
         ],
-        const Spacer(),
-        AppButton(
-          label: l10n.postCallReveal,
-          icon: Icons.visibility_outlined,
-          size: AppButtonSize.large,
-          onPressed: onReveal,
-        ),
-        const SizedBox(height: AppSpacing.lg),
-      ],
+      ),
     );
   }
 }
@@ -750,12 +743,17 @@ class _MutualRevealView extends StatelessWidget {
   const _MutualRevealView({
     required this.match,
     required this.peerPhotoBytes,
+    required this.countdown,
     required this.onMatch,
     required this.onPass,
   });
 
   final ActiveMatch? match;
   final Uint8List? peerPhotoBytes;
+
+  /// Seconds left in the shared 15 s decision window — visible so the moment
+  /// reads as a deliberate, time-boxed choice.
+  final int countdown;
   final VoidCallback onMatch;
   final VoidCallback onPass;
 
@@ -772,6 +770,7 @@ class _MutualRevealView extends StatelessWidget {
           style: AppTypography.h2,
         ),
         const SizedBox(height: AppSpacing.sm),
+        _CountdownBadge(seconds: countdown),
         const Spacer(),
         // peerPhotoBytes lands asynchronously after the mutual outcome
         // triggers _loadPeerPhoto. While the bytes are in flight, show
@@ -941,8 +940,10 @@ class _AwaitingPeerMatchView extends StatelessWidget {
   }
 }
 
-/// Premium circular countdown badge — the number shrinks 15 → 1 inside a
-/// brand-pink ring. Pure presentation; the timer lives in the parent state.
+/// Compact countdown pill — a small brand-pink "⏱ N s" that ticks 15 → 1.
+/// Kept low-profile so it sits cleanly above the reveal photo without
+/// crowding the layout on small iPhones. Pure presentation; the timer lives
+/// in the parent state.
 class _CountdownBadge extends StatelessWidget {
   const _CountdownBadge({required this.seconds});
 
@@ -951,34 +952,30 @@ class _CountdownBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 84,
-      height: 84,
-      alignment: Alignment.center,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
       decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: AppColors.brandPink.withValues(alpha: 0.1),
-        border: Border.all(
-          color: AppColors.brandPink.withValues(alpha: 0.55),
-          width: 2,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.brandPink.withValues(alpha: 0.22),
-            blurRadius: 18,
-            spreadRadius: 1,
+        color: AppColors.brandPink.withValues(alpha: 0.12),
+        borderRadius: AppRadius.brPill,
+        border: Border.all(color: AppColors.brandPink.withValues(alpha: 0.5)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.timer_outlined,
+              size: 16, color: AppColors.brandPink),
+          const SizedBox(width: 6),
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 250),
+            child: Text(
+              '$seconds s',
+              key: ValueKey<int>(seconds),
+              style: AppTypography.bodyStrong.copyWith(
+                color: Colors.white,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
           ),
         ],
-      ),
-      child: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 250),
-        child: Text(
-          '$seconds',
-          key: ValueKey<int>(seconds),
-          style: AppTypography.h1.copyWith(
-            color: Colors.white,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
       ),
     );
   }
