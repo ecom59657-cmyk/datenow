@@ -15,6 +15,7 @@ import '../../../shared/widgets/loading_indicator.dart';
 import '../../messaging/data/messaging_repository.dart';
 import '../../profile_setup/presentation/providers/profile_provider.dart';
 import '../data/discover_repository.dart';
+import '../domain/suggestion_status.dart';
 import 'providers/discover_providers.dart';
 import 'widgets/match_card.dart';
 import 'widgets/suggestion_card.dart';
@@ -122,12 +123,36 @@ class _SuggestionsBody extends ConsumerWidget {
         child: LoadingIndicator(),
       ),
       error: (e, _) => _EmptyCard(message: '$e'),
-      data: (rawList) {
-        if (rawList.isEmpty) return _EmptyCard(message: emptyLabel);
+      data: (_) {
         final list = ref.watch(weeklySuggestionsProvider).asData!.value;
+        // A suggestion is CONSUMED the moment a date is launched with it
+        // (status callStarted) — or once it became a match. Only the
+        // still-available (pending) ones are offered; consumed ones never
+        // re-appear here (they live in Matchs effectués / Messages instead).
+        final pending = list
+            .where((s) => s.status == SuggestionStatus.pending)
+            .toList(growable: false);
+        final consumed = list
+            .where((s) =>
+                s.status == SuggestionStatus.callStarted ||
+                s.status == SuggestionStatus.matched)
+            .length;
+
+        if (pending.isEmpty) {
+          // All of this week's suggestions have been used → premium "done"
+          // state. Truly-no-batch (new user / no candidates) keeps the
+          // generic empty card.
+          return consumed > 0
+              ? _AllConsumedCard(total: consumed)
+              : _EmptyCard(message: emptyLabel);
+        }
+
         return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            for (final s in list) ...[
+            _RemainingSuggestions(remaining: pending.length),
+            const SizedBox(height: AppSpacing.sm),
+            for (final s in pending) ...[
               SuggestionCard(
                 suggestion: s,
                 onStartDate: () => startDateFromSuggestion(context, ref, s),
@@ -140,6 +165,67 @@ class _SuggestionsBody extends ConsumerWidget {
           ],
         );
       },
+    );
+  }
+}
+
+/// Subtle "X propositions restantes cette semaine" reassurance line.
+class _RemainingSuggestions extends StatelessWidget {
+  const _RemainingSuggestions({required this.remaining});
+
+  final int remaining;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = remaining <= 1
+        ? '$remaining proposition restante cette semaine'
+        : '$remaining propositions restantes cette semaine';
+    return Row(
+      children: [
+        const Icon(Icons.auto_awesome_rounded,
+            size: 15, color: AppColors.brandPink),
+        const SizedBox(width: 6),
+        Text(
+          label,
+          style: AppTypography.caption.copyWith(
+            color: AppColors.textSecondary,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Premium empty state once all of the week's suggestions have been used.
+class _AllConsumedCard extends StatelessWidget {
+  const _AllConsumedCard({required this.total});
+
+  final int total;
+
+  @override
+  Widget build(BuildContext context) {
+    return GlassCard(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      child: Column(
+        children: [
+          const Icon(Icons.celebration_rounded,
+              size: 44, color: AppColors.brandPink),
+          const SizedBox(height: AppSpacing.md),
+          Text(
+            'Tu as déjà rencontré tes $total '
+            '${total <= 1 ? 'proposition' : 'propositions'} de la semaine.',
+            textAlign: TextAlign.center,
+            style: AppTypography.bodyStrong,
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            'De nouvelles propositions arriveront bientôt.',
+            textAlign: TextAlign.center,
+            style: AppTypography.body.copyWith(color: AppColors.textSecondary),
+          ),
+        ],
+      ),
     );
   }
 }

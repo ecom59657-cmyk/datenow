@@ -58,20 +58,30 @@ typedef CandidateSource = Future<List<UserProfile>> Function(UserProfile self);
 /// in-memory path is kept untouched (tests, no-Supabase mode).
 typedef MutualMatchesSource = Stream<List<MutualMatch>> Function(String userId);
 
+/// Persistent "already dated" history: every peer the user has ever launched a
+/// call with (from the `calls` table). A launched date consumes the
+/// suggestion FOREVER — even across a kill/restart where the RAM status is
+/// lost — so the pair is never re-proposed. Null keeps the legacy RAM-only
+/// behaviour (tests / no-Supabase mode).
+typedef CalledPeerIdsSource = Future<Set<String>> Function(String selfUserId);
+
 class MockDiscoverRepository implements DiscoverRepository {
   MockDiscoverRepository(
     this._service, {
     MockCandidateFactory? factory,
     CandidateSource? candidateSource,
     MutualMatchesSource? mutualMatchesSource,
+    CalledPeerIdsSource? calledPeerIds,
   })  : _factory = factory ?? MockCandidateFactory(),
         _candidateSource = candidateSource,
-        _mutualMatchesSource = mutualMatchesSource;
+        _mutualMatchesSource = mutualMatchesSource,
+        _calledPeerIds = calledPeerIds;
 
   final WeeklySuggestionsService _service;
   final MockCandidateFactory _factory;
   final CandidateSource? _candidateSource;
   final MutualMatchesSource? _mutualMatchesSource;
+  final CalledPeerIdsSource? _calledPeerIds;
   static const _log = AppLogger('MockDiscover');
 
   // How many synthetic candidates we generate when no real source is wired.
@@ -150,7 +160,22 @@ class MockDiscoverRepository implements DiscoverRepository {
     final mutualMatchIds = (_matchesByUser[self.userId] ?? const <MutualMatch>[])
         .map((m) => m.candidate.userId)
         .toSet();
-    final excludedUserIds = {...priorSuggestedIds, ...mutualMatchIds};
+    // Persistent "already dated" history (survives kill/restart): every peer
+    // the user has launched a call with. A launched date consumes the
+    // suggestion forever, so the pair is never re-proposed even after the RAM
+    // status is gone. Best-effort — a failure just falls back to the RAM
+    // exclusions above.
+    final calledPeerIds =
+        _calledPeerIds != null ? await _calledPeerIds(self.userId) : const <String>{};
+    final excludedUserIds = {
+      ...priorSuggestedIds,
+      ...mutualMatchIds,
+      ...calledPeerIds,
+    };
+    _log.info(
+      'exclusions — suggested=${priorSuggestedIds.length} '
+      'matched=${mutualMatchIds.length} called=${calledPeerIds.length}',
+    );
 
     // Build the pool. When a real `CandidateSource` is wired (Supabase mode)
     // we ask it for every other completed profile; otherwise we fall back to
@@ -490,5 +515,35 @@ final discoverRepositoryProvider = Provider<DiscoverRepository>((ref) {
     candidateSource: (self) =>
         profiles.fetchPotentialCandidates(selfUserId: self.userId),
     mutualMatchesSource: supaMatches.watch,
+    calledPeerIds: (selfUserId) => _fetchCalledPeerIds(client, selfUserId),
   );
 });
+
+/// Every peer the user has ever launched (or received) a live date with, read
+/// from the persistent `calls` table (RLS exposes rows where the caller is a
+/// participant). Used to exclude already-dated pairs from new weekly
+/// suggestions. Best-effort — returns empty on any error so suggestion
+/// generation never breaks.
+Future<Set<String>> _fetchCalledPeerIds(
+  sb.SupabaseClient client,
+  String selfUserId,
+) async {
+  const log = AppLogger('DiscoverCalls');
+  try {
+    final rows = await client
+        .from('calls')
+        .select('caller_id, callee_id')
+        .or('caller_id.eq.$selfUserId,callee_id.eq.$selfUserId');
+    final ids = <String>{};
+    for (final row in rows.cast<Map<String, dynamic>>()) {
+      final caller = row['caller_id'] as String?;
+      final callee = row['callee_id'] as String?;
+      if (caller != null && caller != selfUserId) ids.add(caller);
+      if (callee != null && callee != selfUserId) ids.add(callee);
+    }
+    return ids;
+  } catch (e, st) {
+    log.error('fetchCalledPeerIds failed for $selfUserId', e, st);
+    return const <String>{};
+  }
+}
