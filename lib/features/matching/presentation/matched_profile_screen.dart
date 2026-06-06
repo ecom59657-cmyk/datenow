@@ -7,7 +7,7 @@ import '../../../app/theme/app_typography.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../shared/widgets/app_scaffold.dart';
 import '../../../shared/widgets/loading_indicator.dart';
-import '../../profile_setup/data/profile_repository.dart';
+import '../../profile/presentation/edit/providers/profile_photos_provider.dart';
 import '../../profile_setup/domain/interest.dart';
 import '../data/matched_profile_repository.dart';
 import '../domain/match_score.dart';
@@ -107,22 +107,19 @@ class _PhotoCard extends ConsumerWidget {
       child: SizedBox(
         height: height,
         width: double.infinity,
+        // Session-cached: fetched once per path, reused on re-entry instead
+        // of re-downloaded (loading spinner only on the first fetch).
         child: path == null
             ? const _PhotoFallback()
-            : FutureBuilder(
-                future: ref.read(profileRepositoryProvider).getPhotoBytes(path!),
-                builder: (context, snap) {
-                  final bytes = snap.data;
-                  if (bytes == null) {
-                    return snap.connectionState == ConnectionState.done
-                        ? const _PhotoFallback()
-                        : const ColoredBox(
-                            color: AppColors.surface,
-                            child: Center(child: LoadingIndicator()),
-                          );
-                  }
-                  return Image.memory(bytes, fit: BoxFit.cover);
-                },
+            : ref.watch(photoBytesProvider(path!)).when(
+                loading: () => const ColoredBox(
+                  color: AppColors.surface,
+                  child: Center(child: LoadingIndicator()),
+                ),
+                error: (_, __) => const _PhotoFallback(),
+                data: (bytes) => bytes == null
+                    ? const _PhotoFallback()
+                    : Image.memory(bytes, fit: BoxFit.cover),
               ),
       ),
     );

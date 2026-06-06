@@ -1,5 +1,3 @@
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -9,7 +7,7 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../core/utils/profile_format.dart';
 import '../../../../l10n/app_localizations.dart';
 import '../../../../shared/widgets/glass_card.dart';
-import '../../../profile_setup/data/profile_repository.dart';
+import '../../../profile/presentation/edit/providers/profile_photos_provider.dart';
 import '../../../profile_setup/domain/user_profile.dart';
 import '../../domain/mutual_match.dart';
 
@@ -167,19 +165,16 @@ class _AsyncPhoto extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return FutureBuilder<Uint8List?>(
-      future: ref.read(profileRepositoryProvider).getPhotoBytes(storagePath),
-      builder: (context, snap) {
-        final bytes = snap.data;
-        if (bytes == null) {
-          return _InitialFill.fromInitial(fallbackInitial);
-        }
-        return Image.memory(
-          bytes,
-          fit: BoxFit.cover,
-          gaplessPlayback: true,
-        );
-      },
+    // Session-cached: the same peer photo is downloaded once and reused
+    // across rebuilds / navigation instead of re-fetched every time.
+    final bytes = ref.watch(photoBytesProvider(storagePath)).asData?.value;
+    if (bytes == null) {
+      return _InitialFill.fromInitial(fallbackInitial);
+    }
+    return Image.memory(
+      bytes,
+      fit: BoxFit.cover,
+      gaplessPlayback: true,
     );
   }
 }

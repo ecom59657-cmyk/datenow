@@ -5,7 +5,7 @@ import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../l10n/app_localizations.dart';
-import '../../../profile_setup/data/profile_repository.dart';
+import '../../../profile/presentation/edit/providers/profile_photos_provider.dart';
 import '../../domain/conversation.dart';
 
 /// One row of the inbox. Shows the matched peer's photo, name, last
@@ -132,35 +132,33 @@ class _PeerAvatar extends ConsumerWidget {
         ),
       );
     }
-    return FutureBuilder(
-      future: ref.read(profileRepositoryProvider).getPhotoBytes(photoUrl!),
-      builder: (context, snap) {
-        if (snap.data != null) {
-          return Container(
-            width: size,
-            height: size,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(color: AppColors.hairline),
-              image: DecorationImage(
-                image: MemoryImage(snap.data!),
-                fit: BoxFit.cover,
-              ),
-            ),
-          );
-        }
-        return Container(
-          width: size,
-          height: size,
-          decoration: const BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: AppColors.brandGradient,
+    // Session-cached: avatar bytes fetched once and reused across inbox
+    // rebuilds / navigation instead of re-downloaded on every build.
+    final bytes = ref.watch(photoBytesProvider(photoUrl!)).asData?.value;
+    if (bytes != null) {
+      return Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(color: AppColors.hairline),
+          image: DecorationImage(
+            image: MemoryImage(bytes),
+            fit: BoxFit.cover,
           ),
-          child: const Center(
-            child: Icon(Icons.person_rounded, color: Colors.white),
-          ),
-        );
-      },
+        ),
+      );
+    }
+    return Container(
+      width: size,
+      height: size,
+      decoration: const BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: AppColors.brandGradient,
+      ),
+      child: const Center(
+        child: Icon(Icons.person_rounded, color: Colors.white),
+      ),
     );
   }
 }

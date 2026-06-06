@@ -8,6 +8,14 @@
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"/>
+    <!-- Push notifications — Android 13+ (API 33) requires this runtime
+         permission, otherwise notifications are silently dropped. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- Geolocation — coarse + fine for the "dates near you" matching.
+         Only a one-shot, coarse-precision position is used; no background
+         location is requested. -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
 
     <uses-feature android:name="android.hardware.camera"  android:required="false"/>
     <uses-feature android:name="android.hardware.microphone" android:required="false"/>
