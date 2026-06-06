@@ -14,7 +14,7 @@ import '../../../l10n/app_localizations.dart';
 import '../../../shared/widgets/app_scaffold.dart';
 import '../../../shared/widgets/loading_indicator.dart';
 import '../../auth/presentation/providers/auth_provider.dart';
-import '../../profile_setup/data/profile_repository.dart';
+import '../../profile/presentation/edit/providers/profile_photos_provider.dart';
 import '../../safety/presentation/report_sheet.dart';
 import '../data/messaging_repository.dart';
 import '../domain/conversation.dart';
@@ -361,30 +361,29 @@ class _PeerTitle extends ConsumerWidget {
     final name = conversation?.peerFirstName ?? '—';
     final photoUrl = conversation?.peerPrimaryPhotoUrl;
     final id = peerId;
+    // Session-cached: the header avatar is fetched once and reused across
+    // chat re-opens / rebuilds instead of re-downloaded every time.
+    final photoBytes = photoUrl == null
+        ? null
+        : ref.watch(photoBytesProvider(photoUrl)).asData?.value;
     final row = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (photoUrl != null)
-          FutureBuilder(
-            future: ref.read(profileRepositoryProvider).getPhotoBytes(photoUrl),
-            builder: (context, snap) {
-              if (snap.data == null) return const SizedBox.shrink();
-              return Padding(
-                padding: const EdgeInsets.only(right: AppSpacing.sm),
-                child: Container(
-                  width: 32,
-                  height: 32,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(color: AppColors.hairline),
-                    image: DecorationImage(
-                      image: MemoryImage(snap.data!),
-                      fit: BoxFit.cover,
-                    ),
-                  ),
+        if (photoBytes != null)
+          Padding(
+            padding: const EdgeInsets.only(right: AppSpacing.sm),
+            child: Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: AppColors.hairline),
+                image: DecorationImage(
+                  image: MemoryImage(photoBytes),
+                  fit: BoxFit.cover,
                 ),
-              );
-            },
+              ),
+            ),
           ),
         Flexible(
           child: Text(

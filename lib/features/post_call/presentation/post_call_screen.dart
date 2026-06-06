@@ -23,6 +23,7 @@ import '../../matching/data/matching_repository.dart';
 import '../../messaging/data/messaging_repository.dart';
 import '../../matching/domain/active_match.dart';
 import '../../matching/presentation/providers/active_match_provider.dart';
+import '../../profile/presentation/edit/providers/profile_photos_provider.dart';
 import '../../profile_setup/data/profile_repository.dart';
 import '../../profile_setup/domain/user_profile.dart';
 import '../../profile_setup/presentation/providers/profile_provider.dart';
@@ -198,13 +199,24 @@ class _PostCallScreenState extends ConsumerState<PostCallScreen> {
     Uint8List? bytes;
     try {
       bytes = await () async {
-        // Refetch through the repo so RLS-relaxed policies kick in. If
-        // the refetch fails fall back to the cached candidate.
-        final peer = await profileRepo.getProfile(peerId) ?? match.candidate;
-        final url = peer.primaryPhotoUrl;
+        // Reuse the path already carried on the match when present; only hit
+        // the profile row when it isn't known yet (pre-reveal RLS). Avoids a
+        // redundant profile read.
+        var url = match.candidate.primaryPhotoUrl;
+        if (url == null || url.isEmpty) {
+          url = (await profileRepo.getProfile(peerId))?.primaryPhotoUrl;
+        }
         _log.info('loadPeerPhoto: primaryPhotoUrl=${url ?? '∅'}');
-        if (url == null) return null;
-        return profileRepo.getPhotoBytes(url);
+        if (url == null || url.isEmpty) return null;
+        // Serve from / populate the shared session cache so the matched-
+        // profile screen reuses this download instead of fetching the same
+        // photo again. A cached null (pre-reveal RLS block) is treated as a
+        // miss → refetched, so the reveal still loads once access opens.
+        final current = ref.read(photoBytesProvider(url));
+        final cached = current.asData?.value;
+        if (cached != null) return cached;
+        if (current.hasValue) ref.invalidate(photoBytesProvider(url));
+        return ref.read(photoBytesProvider(url).future);
       }()
           .timeout(_photoLoadTimeout);
       _log.info(
