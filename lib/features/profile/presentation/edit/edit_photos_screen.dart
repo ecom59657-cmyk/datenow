@@ -60,7 +60,7 @@ class _EditPhotosScreenState extends ConsumerState<EditPhotosScreen> {
       if (picked == null) return null;
       return picked.readAsBytes();
     } catch (e) {
-      if (mounted) context.showSnack('$e');
+      if (mounted) context.showSnack(AppLocalizations.of(context).errorPhotoLoad);
       return null;
     }
   }
@@ -249,7 +249,8 @@ class _EditPhotosScreenState extends ConsumerState<EditPhotosScreen> {
       loading: () => const AppScaffold(
         body: Center(child: CircularProgressIndicator()),
       ),
-      error: (e, _) => AppScaffold(body: Center(child: Text('$e'))),
+      error: (e, _) => AppScaffold(
+          body: Center(child: Text(AppLocalizations.of(context).errorLoadProfile))),
       data: (profile) {
         if (profile == null) return const AppScaffold(body: SizedBox.shrink());
 

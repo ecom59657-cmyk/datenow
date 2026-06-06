@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../../../app/router/app_routes.dart';
 import '../../../app/scaffold/active_tab.dart';
@@ -365,6 +366,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       'Location ready (${locResult is LocationCaptured ? "captured+pushed" : "cached fresh"})',
     );
 
+    // 3.6. Camera + microphone gate — validated HERE, before the first
+    //       date, instead of mid-call inside the Agora bootstrap. Asking
+    //       after the user matched + waited is the worst possible moment;
+    //       a refusal there is a dead-end. We request up-front and, on
+    //       refusal, surface a dialog with an "Ouvrir les réglages" deep
+    //       link so the user is never stuck.
+    if (!context.mounted) return;
+    // ignore: use_build_context_synchronously
+    final permsOk = await _ensureCallPermissions(context);
+    if (!permsOk) {
+      _log.warn('Camera/mic not granted — blocking find date');
+      return;
+    }
+    _log.info('Camera + mic granted — gate cleared');
+
     // 4. Navigate to the matching screen. The matching screen owns the
     //    "find candidate → start call session → open call screen" chain.
     if (!context.mounted) return;
@@ -376,6 +392,63 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       if (!context.mounted) return;
       context.showSnack(l10n.findDateError);
     }
+  }
+
+  /// Ensures camera + microphone are granted BEFORE the first date.
+  /// Returns true only when both are granted. On refusal it shows a
+  /// dialog with "Autoriser" (re-request) and "Ouvrir les réglages"
+  /// (deep link via `openAppSettings()`), so the user always has a way
+  /// forward — never a dead-end at the call screen.
+  Future<bool> _ensureCallPermissions(BuildContext context) async {
+    final cam = await Permission.camera.status;
+    final mic = await Permission.microphone.status;
+    if (cam.isGranted && mic.isGranted) return true;
+
+    // First, try the native prompt (no-op if iOS already denied for good
+    // — that path falls through to the settings dialog below).
+    final results = await [Permission.camera, Permission.microphone].request();
+    final camOk = results[Permission.camera]?.isGranted ?? false;
+    final micOk = results[Permission.microphone]?.isGranted ?? false;
+    if (camOk && micOk) return true;
+
+    if (!context.mounted) return false;
+    final retry = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Autorisation requise'),
+        content: const Text(
+          'DateNow a besoin de la caméra et du micro pour lancer une date '
+          'vidéo.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              await openAppSettings();
+              if (ctx.mounted) Navigator.of(ctx).pop(false);
+            },
+            child: const Text('Ouvrir les réglages'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Autoriser'),
+          ),
+        ],
+      ),
+    );
+
+    // "Autoriser" → one more request pass (covers the not-yet-permanent
+    // case). "Ouvrir les réglages" / dismiss → don't proceed this round;
+    // the user re-taps "Lancer un date" when they come back.
+    if (retry == true) {
+      final r =
+          await [Permission.camera, Permission.microphone].request();
+      return (r[Permission.camera]?.isGranted ?? false) &&
+          (r[Permission.microphone]?.isGranted ?? false);
+    }
+    return false;
   }
 
   /// Premium bottom sheet shown when the user taps "Find a date" without

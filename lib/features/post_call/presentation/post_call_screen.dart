@@ -63,11 +63,21 @@ class _PostCallScreenState extends ConsumerState<PostCallScreen> {
 
   /// How long to wait on the peer's reveal decision before offering the
   /// user a way out — prevents an infinite "waiting" spinner when the
-  /// peer closed the app or never decides.
-  static const _revealTimeout = Duration(minutes: 2);
+  /// peer closed the app or never decides. Kept short (30 s): past that
+  /// the screen reads as "broken / ghosted" rather than "still loading".
+  static const _revealTimeout = Duration(seconds: 30);
+
+  /// Hard cap on the peer-photo fetch. On timeout / 404 / RLS block the
+  /// reveal must still be usable, so we stop showing a spinner and fall
+  /// back to a premium initial avatar — the decision is never blocked.
+  static const _photoLoadTimeout = Duration(seconds: 10);
 
   _Stage _stage = _Stage.decide;
   Uint8List? _peerPhotoBytes;
+  // True while the peer-photo fetch is in flight. Flips false once the
+  // fetch resolves (success, null, error or timeout) so the reveal card
+  // can swap its spinner for the fallback avatar instead of hanging.
+  bool _peerPhotoLoading = true;
   Timer? _peerDecisionTimer;
   Timer? _revealTimeoutTimer;
   bool _revealTimedOut = false;
@@ -179,19 +189,37 @@ class _PostCallScreenState extends ConsumerState<PostCallScreen> {
     final peerId = match.candidate.userId;
     final profileRepo = ref.read(profileRepositoryProvider);
     _log.info('loadPeerPhoto: peerId=$peerId');
+    if (mounted) setState(() => _peerPhotoLoading = true);
 
-    // Refetch through the repo so RLS-relaxed policies kick in. If the
-    // refetch fails fall back to the cached candidate.
-    final peer = await profileRepo.getProfile(peerId) ?? match.candidate;
-    final url = peer.primaryPhotoUrl;
-    _log.info('loadPeerPhoto: primaryPhotoUrl=${url ?? '∅'}');
-    if (url == null) return;
-
-    final bytes = await profileRepo.getPhotoBytes(url);
-    _log.info(
-      'loadPeerPhoto: bytes=${bytes == null ? '∅ (null)' : '${bytes.length} bytes'}',
-    );
-    if (mounted) setState(() => _peerPhotoBytes = bytes);
+    // The whole fetch (profile refetch + bytes download) is hard-capped
+    // at [_photoLoadTimeout]. On timeout / RLS block / 404 / network
+    // error we keep bytes null and let the reveal card show its premium
+    // fallback avatar — the user is NEVER left on an endless spinner.
+    Uint8List? bytes;
+    try {
+      bytes = await () async {
+        // Refetch through the repo so RLS-relaxed policies kick in. If
+        // the refetch fails fall back to the cached candidate.
+        final peer = await profileRepo.getProfile(peerId) ?? match.candidate;
+        final url = peer.primaryPhotoUrl;
+        _log.info('loadPeerPhoto: primaryPhotoUrl=${url ?? '∅'}');
+        if (url == null) return null;
+        return profileRepo.getPhotoBytes(url);
+      }()
+          .timeout(_photoLoadTimeout);
+      _log.info(
+        'loadPeerPhoto: bytes=${bytes == null ? '∅ (null)' : '${bytes.length} bytes'}',
+      );
+    } catch (e, st) {
+      _log.warn('loadPeerPhoto failed/timed out: $e');
+      DebugLog.reveal('peer photo load failed → fallback avatar');
+      if (e is! Exception) _log.error('loadPeerPhoto', e, st);
+    }
+    if (!mounted) return;
+    setState(() {
+      if (bytes != null) _peerPhotoBytes = bytes;
+      _peerPhotoLoading = false;
+    });
   }
 
   /// Writes the user's `revealed = true` row. The actual transition to
@@ -663,6 +691,7 @@ class _PostCallScreenState extends ConsumerState<PostCallScreen> {
       _Stage.mutual => _MutualRevealView(
           match: match,
           peerPhotoBytes: _peerPhotoBytes,
+          peerPhotoLoading: _peerPhotoLoading,
           countdown: _awaitCountdown,
           onMatch: _confirmMatch,
           onPass: _passAfterReveal,
@@ -775,6 +804,7 @@ class _MutualRevealView extends StatelessWidget {
   const _MutualRevealView({
     required this.match,
     required this.peerPhotoBytes,
+    required this.peerPhotoLoading,
     required this.countdown,
     required this.onMatch,
     required this.onPass,
@@ -782,6 +812,11 @@ class _MutualRevealView extends StatelessWidget {
 
   final ActiveMatch? match;
   final Uint8List? peerPhotoBytes;
+
+  /// True while the photo is still being fetched (bounded by the 10 s
+  /// load timeout). Once false with null bytes the card shows the
+  /// fallback avatar instead of a spinner.
+  final bool peerPhotoLoading;
 
   /// Seconds left in the 15 s decision window (starts once the reveal anim
   /// has played) — shown in the neon circle.
@@ -811,7 +846,11 @@ class _MutualRevealView extends StatelessWidget {
           child: Center(
             child: AspectRatio(
               aspectRatio: 4 / 5,
-              child: _RevealPhotoCard(bytes: peerPhotoBytes),
+              child: _RevealPhotoCard(
+                bytes: peerPhotoBytes,
+                loading: peerPhotoLoading,
+                fallbackName: candidate?.firstName,
+              ),
             ),
           ),
         ),
@@ -907,26 +946,40 @@ class _CountdownCircle extends StatelessWidget {
 /// from blur to sharp with a subtle zoom-settle — the "I finally see them"
 /// moment. Fills whatever box it's given (used inside an AspectRatio).
 class _RevealPhotoCard extends StatelessWidget {
-  const _RevealPhotoCard({required this.bytes});
+  const _RevealPhotoCard({
+    required this.bytes,
+    this.loading = false,
+    this.fallbackName,
+  });
 
   final Uint8List? bytes;
+
+  /// While true (and bytes still null) we show a brief spinner. Bounded
+  /// by the parent's 10 s photo-load timeout — it can never hang.
+  final bool loading;
+
+  /// Peer first name, used to render the fallback initial when the photo
+  /// can't be loaded (timeout / 404 / RLS block).
+  final String? fallbackName;
 
   @override
   Widget build(BuildContext context) {
     final Widget content = bytes == null
-        ? const ColoredBox(
-            color: AppColors.surface,
-            child: Center(
-              child: SizedBox(
-                width: 28,
-                height: 28,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2.5,
-                  valueColor: AlwaysStoppedAnimation(AppColors.brandPink),
+        ? (loading
+            ? const ColoredBox(
+                color: AppColors.surface,
+                child: Center(
+                  child: SizedBox(
+                    width: 28,
+                    height: 28,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.5,
+                      valueColor: AlwaysStoppedAnimation(AppColors.brandPink),
+                    ),
+                  ),
                 ),
-              ),
-            ),
-          )
+              )
+            : _PhotoFallback(name: fallbackName))
         : TweenAnimationBuilder<double>(
             tween: Tween<double>(begin: 24, end: 0),
             duration: const Duration(milliseconds: 1100),
@@ -978,6 +1031,49 @@ class _RevealPhotoCard extends StatelessWidget {
           curve: Curves.easeOutCubic,
         )
         .fadeIn(duration: 350.ms);
+  }
+}
+
+/// Premium fallback shown inside the reveal card when the peer photo
+/// can't be loaded (timeout / 404 / RLS block). Keeps the same glow
+/// frame as the real photo — only the inner content changes — so the
+/// reveal stays usable and on-brand instead of an endless spinner. The
+/// decision countdown keeps running underneath.
+class _PhotoFallback extends StatelessWidget {
+  const _PhotoFallback({required this.name});
+
+  final String? name;
+
+  @override
+  Widget build(BuildContext context) {
+    final trimmed = name?.trim() ?? '';
+    final initial =
+        trimmed.isEmpty ? '?' : trimmed.substring(0, 1).toUpperCase();
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [AppColors.brandViolet, AppColors.brandPink],
+        ),
+      ),
+      child: Center(
+        child: Text(
+          initial,
+          style: AppTypography.h1.copyWith(
+            color: Colors.white,
+            fontSize: 84,
+            fontWeight: FontWeight.w800,
+            shadows: [
+              Shadow(
+                color: AppColors.brandPink.withValues(alpha: 0.6),
+                blurRadius: 28,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 

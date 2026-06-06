@@ -55,7 +55,7 @@ class SettingsScreen extends ConsumerWidget {
       // Surface the failure so the user knows nothing happened and can
       // retry or contact support — silently sliding back to settings
       // after a "delete forever" tap would be misleading.
-      context.showSnack('$e');
+      context.showSnack(l10n.errorGeneric);
     }
   }
 

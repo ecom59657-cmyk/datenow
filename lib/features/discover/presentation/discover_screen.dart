@@ -122,7 +122,7 @@ class _SuggestionsBody extends ConsumerWidget {
         padding: EdgeInsets.all(AppSpacing.lg),
         child: LoadingIndicator(),
       ),
-      error: (e, _) => _EmptyCard(message: '$e'),
+      error: (e, _) => _EmptyCard(message: AppLocalizations.of(context).errorLoadContent),
       data: (_) {
         final list = ref.watch(weeklySuggestionsProvider).asData!.value;
         // A suggestion is CONSUMED the moment a date is launched with it
@@ -243,7 +243,7 @@ class _MatchesBody extends ConsumerWidget {
         padding: EdgeInsets.all(AppSpacing.lg),
         child: LoadingIndicator(),
       ),
-      error: (e, _) => _EmptyCard(message: '$e'),
+      error: (e, _) => _EmptyCard(message: AppLocalizations.of(context).errorLoadContent),
       data: (_) {
         final list = ref.watch(mutualMatchesProvider).asData!.value;
         if (list.isEmpty) return _EmptyCard(message: emptyLabel);

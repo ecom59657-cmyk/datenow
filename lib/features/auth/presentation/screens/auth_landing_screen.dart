@@ -9,6 +9,7 @@ import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/config/env.dart';
+import '../../../../core/errors/failures.dart';
 import '../../../../core/utils/extensions.dart';
 import '../../../../l10n/app_localizations.dart';
 import '../../../../shared/widgets/app_button.dart';
@@ -74,18 +75,13 @@ class _AuthLandingScreenState extends ConsumerState<AuthLandingScreen> {
     final err = ref.read(authControllerProvider).error;
     if (err is OAuthCancelledFailure) return;
     final l10n = AppLocalizations.of(context);
-    // TEMP — `includeRaw: true` appends the underlying Supabase /
-    // SDK message after the humane string so on-screen errors carry
-    // the real cause during the OAuth diagnostic phase. Flip back to
-    // false (or drop the param entirely) once Apple + Google are
-    // green end-to-end on TestFlight.
+    // Never leak the raw Supabase / SDK message to the user. A network
+    // drop gets its own dedicated copy; everything else falls back to
+    // the calm humane string for the Apple path.
     context.showSnack(
-      humaneAuthError(
-        err,
-        l10n,
-        fallback: AuthFallback.oauthApple,
-        includeRaw: true,
-      ),
+      err is NetworkFailure
+          ? l10n.errorNetwork
+          : humaneAuthError(err, l10n, fallback: AuthFallback.oauthApple),
     );
   }
 
@@ -100,15 +96,12 @@ class _AuthLandingScreenState extends ConsumerState<AuthLandingScreen> {
     final err = ref.read(authControllerProvider).error;
     if (err is OAuthCancelledFailure) return;
     final l10n = AppLocalizations.of(context);
-    // TEMP — same diagnostic mode as the Apple path above. Drop
-    // `includeRaw: true` once OAuth is stable.
+    // Same policy as the Apple path: no raw error ever reaches the UI;
+    // network drops get the dedicated connection message.
     context.showSnack(
-      humaneAuthError(
-        err,
-        l10n,
-        fallback: AuthFallback.oauthGoogle,
-        includeRaw: true,
-      ),
+      err is NetworkFailure
+          ? l10n.errorNetwork
+          : humaneAuthError(err, l10n, fallback: AuthFallback.oauthGoogle),
     );
   }
 

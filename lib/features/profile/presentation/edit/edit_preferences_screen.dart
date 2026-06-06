@@ -125,7 +125,8 @@ class _EditPreferencesScreenState
       loading: () => const AppScaffold(
         body: Center(child: CircularProgressIndicator()),
       ),
-      error: (e, _) => AppScaffold(body: Center(child: Text('$e'))),
+      error: (e, _) => AppScaffold(
+          body: Center(child: Text(AppLocalizations.of(context).errorLoadProfile))),
       data: (profile) {
         if (profile == null) return const AppScaffold(body: SizedBox.shrink());
         _populateFrom(profile);

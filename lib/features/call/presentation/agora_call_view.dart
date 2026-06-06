@@ -725,7 +725,7 @@ class _AgoraCallViewState extends ConsumerState<AgoraCallView> {
   @override
   Widget build(BuildContext context) {
     if (_error != null) {
-      return _ErrorPanel(error: _error!);
+      return _ErrorPanel(error: _error!, onOpenSettings: openAppSettings);
     }
     final c = _client;
     if (c == null) {
@@ -1134,9 +1134,13 @@ class _LoadingPanel extends StatelessWidget {
 }
 
 class _ErrorPanel extends StatelessWidget {
-  const _ErrorPanel({required this.error});
+  const _ErrorPanel({required this.error, this.onOpenSettings});
 
   final String error;
+
+  /// Deep link to the OS settings — shown only on the permission-denied
+  /// branch so a refusal at the call screen is never a dead-end.
+  final Future<bool> Function()? onOpenSettings;
 
   @override
   Widget build(BuildContext context) {
@@ -1193,6 +1197,19 @@ class _ErrorPanel extends StatelessWidget {
             textAlign: TextAlign.center,
             style: AppTypography.body.copyWith(color: AppColors.textSecondary),
           ),
+          if (error == 'permission_denied' && onOpenSettings != null) ...[
+            const SizedBox(height: AppSpacing.lg),
+            TextButton(
+              onPressed: () => onOpenSettings!(),
+              child: Text(
+                'Ouvrir les réglages',
+                style: AppTypography.body.copyWith(
+                  color: AppColors.brandPink,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );

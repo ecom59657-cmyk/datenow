@@ -230,7 +230,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
           .addPostFrameCallback((_) => _scrollToBottom());
     } catch (e) {
       if (!mounted) return;
-      context.showSnack('$e');
+      context.showSnack(AppLocalizations.of(context).errorMessageNotSent);
     }
   }
 

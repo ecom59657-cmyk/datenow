@@ -54,7 +54,7 @@ class BlockedAccountsScreen extends ConsumerWidget {
               padding: EdgeInsets.all(AppSpacing.lg),
               child: Center(child: CircularProgressIndicator()),
             ),
-            error: (e, _) => Text('$e'),
+            error: (e, _) => Text(AppLocalizations.of(context).errorLoadContent),
             data: (list) {
               if (list.isEmpty) {
                 return GlassCard(
