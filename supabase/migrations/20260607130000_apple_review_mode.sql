@@ -63,8 +63,12 @@ BEGIN
   -- Reviewer preferences (women, 25-40, 50 km, immediate) ---------------------
   INSERT INTO public.user_preferences
     (user_id, seeking_genders, seeking_age_min, seeking_age_max, max_distance_km, intentions, interests, availability)
+    -- NB: intentions/interests MUST be valid Dart enum .name values, else the
+    -- profile mapper drops them and isComplete() fails (→ forced profile-setup).
+    -- Intention.feeling + Interest.{music,travel,foodie,cooking} are all valid;
+    -- 4 interests give a safety margin over the "≥ 3" completeness rule.
   VALUES
-    (p_review, ARRAY['female'], 25, 40, 50, ARRAY['feeling'], ARRAY['music','travel','food'], 'immediate')
+    (p_review, ARRAY['female'], 25, 40, 50, ARRAY['feeling'], ARRAY['music','travel','foodie','cooking'], 'immediate')
   ON CONFLICT (user_id) DO UPDATE SET
     seeking_genders = EXCLUDED.seeking_genders,
     seeking_age_min = EXCLUDED.seeking_age_min,
