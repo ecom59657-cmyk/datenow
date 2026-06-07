@@ -1,0 +1,269 @@
+/* =========================================================================
+   DateNow — public website
+   Static, no JS required, no tracking, no cookies.
+   Design language mirrors the app: deep black, violet → magenta gradients,
+   soft glows, premium/Apple-like restraint.
+   ========================================================================= */
+
+:root {
+  --bg: #0a0a0f;
+  --bg-2: #0e0e16;
+  --surface: rgba(255, 255, 255, 0.04);
+  --surface-2: rgba(255, 255, 255, 0.06);
+  --hairline: rgba(255, 255, 255, 0.10);
+  --text: #ffffff;
+  --text-2: rgba(255, 255, 255, 0.66);
+  --text-3: rgba(255, 255, 255, 0.42);
+  --violet: #7c5cff;
+  --pink: #ff4f8b;
+  --grad: linear-gradient(135deg, #7c5cff 0%, #ff4f8b 100%);
+  --radius: 20px;
+  --maxw: 1080px;
+  --maxw-text: 760px;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+    Arial, "Apple Color Emoji", "Segoe UI Emoji", sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+
+body {
+  margin: 0;
+  font-family: var(--font);
+  color: var(--text);
+  background: var(--bg);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow-x: hidden;
+}
+
+/* Ambient brand glows behind everything */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(60% 50% at 50% -10%, rgba(124, 92, 255, 0.22), transparent 70%),
+    radial-gradient(50% 40% at 90% 10%, rgba(255, 79, 139, 0.16), transparent 70%),
+    radial-gradient(40% 40% at 0% 80%, rgba(124, 92, 255, 0.10), transparent 70%);
+  pointer-events: none;
+}
+
+a { color: inherit; text-decoration: none; }
+a:hover { color: #fff; }
+
+img { max-width: 100%; display: block; }
+
+/* ----------------------------------------------------------------- Layout */
+.container { width: 100%; max-width: var(--maxw); margin: 0 auto; padding: 0 22px; }
+.narrow { max-width: var(--maxw-text); }
+
+section { padding: 72px 0; }
+
+/* ----------------------------------------------------------------- Header */
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  backdrop-filter: saturate(140%) blur(14px);
+  -webkit-backdrop-filter: saturate(140%) blur(14px);
+  background: rgba(10, 10, 15, 0.72);
+  border-bottom: 1px solid var(--hairline);
+}
+.nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 14px 22px;
+  max-width: var(--maxw);
+  margin: 0 auto;
+}
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: -0.02em; }
+.brand .logo { width: 30px; height: 30px; }
+.brand .word { font-size: 1.12rem; }
+.brand .word b { background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.nav-links { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; }
+.nav-links a { color: var(--text-2); font-size: 0.93rem; font-weight: 500; }
+.nav-links a:hover { color: #fff; }
+
+/* ----------------------------------------------------------------- Hero */
+.hero { text-align: center; padding: 96px 0 64px; }
+.eyebrow {
+  display: inline-block;
+  font-size: 0.78rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  padding: 7px 14px;
+  margin-bottom: 26px;
+}
+.hero h1 {
+  font-size: clamp(2.2rem, 6vw, 3.8rem);
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+  margin: 0 0 20px;
+  font-weight: 800;
+}
+.hero h1 .grad { background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.hero p.lead {
+  font-size: clamp(1.05rem, 2.4vw, 1.28rem);
+  color: var(--text-2);
+  max-width: 620px;
+  margin: 0 auto 34px;
+}
+
+/* The blurred-camera orb motif */
+.orb-wrap { display: flex; justify-content: center; margin: 8px 0 36px; }
+.orb {
+  position: relative;
+  width: 150px;
+  height: 150px;
+  border-radius: 50%;
+  background: var(--grad);
+  display: grid;
+  place-items: center;
+  box-shadow: 0 0 60px rgba(255, 79, 139, 0.45), 0 0 120px rgba(124, 92, 255, 0.35);
+  animation: float 6s ease-in-out infinite;
+}
+.orb::after {
+  content: "";
+  position: absolute;
+  inset: 14px;
+  border-radius: 50%;
+  background: rgba(10, 10, 15, 0.35);
+  backdrop-filter: blur(6px);
+}
+.orb svg { position: relative; z-index: 1; width: 56px; height: 56px; color: #fff; }
+@keyframes float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+@media (prefers-reduced-motion: reduce) { .orb { animation: none; } }
+
+/* Buttons / badges */
+.cta-row { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+.badge-soft {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  color: var(--text-2);
+  border-radius: 999px;
+  padding: 12px 22px;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--grad); }
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--grad);
+  color: #fff;
+  border-radius: 999px;
+  padding: 13px 26px;
+  font-weight: 700;
+  font-size: 0.98rem;
+  border: none;
+  cursor: pointer;
+}
+.btn:hover { color: #fff; filter: brightness(1.06); }
+
+/* ----------------------------------------------------------------- Features */
+.features { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; }
+.card {
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  padding: 28px;
+}
+.card .ic {
+  width: 46px; height: 46px;
+  border-radius: 13px;
+  display: grid; place-items: center;
+  background: rgba(124, 92, 255, 0.16);
+  color: var(--pink);
+  margin-bottom: 16px;
+}
+.card .ic svg { width: 24px; height: 24px; }
+.card h3 { margin: 0 0 8px; font-size: 1.12rem; letter-spacing: -0.01em; }
+.card p { margin: 0; color: var(--text-2); font-size: 0.97rem; }
+
+.section-head { text-align: center; margin-bottom: 40px; }
+.section-head h2 { font-size: clamp(1.6rem, 4vw, 2.3rem); letter-spacing: -0.02em; margin: 0 0 10px; }
+.section-head p { color: var(--text-2); margin: 0; }
+
+/* ----------------------------------------------------------------- Legal / text pages */
+.page { padding: 56px 0 24px; }
+.page h1 { font-size: clamp(1.9rem, 5vw, 2.7rem); letter-spacing: -0.03em; margin: 0 0 8px; }
+.page .updated { color: var(--text-3); font-size: 0.9rem; margin: 0 0 36px; }
+.prose h2 { font-size: 1.28rem; letter-spacing: -0.01em; margin: 38px 0 12px; }
+.prose h3 { font-size: 1.05rem; margin: 24px 0 8px; }
+.prose p, .prose li { color: var(--text-2); }
+.prose ul { padding-left: 20px; }
+.prose li { margin: 6px 0; }
+.prose strong { color: #fff; }
+.prose a { color: var(--pink); }
+.prose a:hover { text-decoration: underline; }
+
+.callout {
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-left: 3px solid var(--pink);
+  border-radius: 14px;
+  padding: 18px 20px;
+  margin: 24px 0;
+}
+.callout p:last-child { margin-bottom: 0; }
+.callout p:first-child { margin-top: 0; }
+
+/* Numbered steps (delete-account) */
+.steps { list-style: none; counter-reset: step; padding: 0; margin: 26px 0; }
+.steps li {
+  counter-increment: step;
+  position: relative;
+  padding: 16px 18px 16px 62px;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 14px;
+  margin-bottom: 12px;
+  color: var(--text);
+}
+.steps li::before {
+  content: counter(step);
+  position: absolute;
+  left: 16px; top: 50%;
+  transform: translateY(-50%);
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  background: var(--grad);
+  display: grid; place-items: center;
+  font-weight: 800; font-size: 0.95rem; color: #fff;
+}
+
+.support-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; margin: 26px 0; }
+.support-grid .card p { font-size: 0.95rem; }
+.mail-btn { margin-top: 8px; }
+
+/* ----------------------------------------------------------------- Footer */
+.site-footer { border-top: 1px solid var(--hairline); padding: 40px 0 56px; margin-top: 40px; }
+.footer-inner { display: flex; justify-content: space-between; gap: 24px; flex-wrap: wrap; }
+.footer-inner .brand { margin-bottom: 6px; }
+.footer-col h4 { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-3); margin: 0 0 12px; }
+.footer-col a { display: block; color: var(--text-2); font-size: 0.95rem; margin: 7px 0; }
+.footer-col a:hover { color: #fff; }
+.copyright { color: var(--text-3); font-size: 0.85rem; margin-top: 28px; }
+
+/* ----------------------------------------------------------------- Responsive */
+@media (max-width: 760px) {
+  section { padding: 56px 0; }
+  .features, .support-grid { grid-template-columns: 1fr; }
+  .nav-links { gap: 16px; }
+  .nav-links a:not(.nav-cta) { display: none; }
+  .footer-inner { flex-direction: column; }
+}
