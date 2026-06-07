@@ -15,6 +15,13 @@ import '../../../core/utils/age.dart';
 import '../../../core/utils/logger.dart';
 import '../domain/auth_user.dart';
 
+/// The single demo account used by Apple App Review. Sign-in for THIS email
+/// only is routed through the `review-login` Edge Function (documented fixed
+/// code), so reviewers can test without real OTP delivery. Every other email
+/// keeps the normal passwordless OTP flow untouched. See migration
+/// 20260607130000_apple_review_mode.sql + functions/review-login.
+const kReviewEmail = 'review@datenow.app';
+
 /// Abstract auth repository. Speaks the auth language of the rest of the
 /// app while hiding which backend (Supabase, mock, …) is actually serving
 /// it.
@@ -166,6 +173,13 @@ class SupabaseAuthRepository implements AuthRepository {
   @override
   Future<void> requestSigninOtp({required String email}) async {
     _log.info('requestSigninOtp email=$email');
+    // Apple Review demo account: no real inbox, so we skip sending an OTP and
+    // let the UI advance to the code screen. The code is validated server-side
+    // by the review-login Edge Function in verifyOtp. Scoped to this email.
+    if (email.trim().toLowerCase() == kReviewEmail) {
+      _log.info('requestSigninOtp: Apple Review demo — skipping OTP send');
+      return;
+    }
     try {
       await _client.auth.signInWithOtp(
         email: email,
@@ -214,6 +228,11 @@ class SupabaseAuthRepository implements AuthRepository {
     required String token,
   }) async {
     _log.info('verifyOtp email=$email token_len=${token.length}');
+    // Apple Review demo account: validate the documented fixed code through
+    // the review-login Edge Function and install the returned session.
+    if (email.trim().toLowerCase() == kReviewEmail) {
+      return _reviewLogin(token);
+    }
     try {
       final res = await _client.auth.verifyOTP(
         email: email,
@@ -237,6 +256,43 @@ class SupabaseAuthRepository implements AuthRepository {
         st,
       );
       throw _mapAuthFailure(e);
+    }
+  }
+
+  /// Apple Review demo-account sign-in — scoped to [kReviewEmail] ONLY.
+  ///
+  /// Sends the entered code to the `review-login` Edge Function, which (with
+  /// the service role, gated on a fixed server-side secret) mints a real
+  /// session for the demo account and returns its refresh token. We install
+  /// it with [setSession]. Any other account never reaches this path, and the
+  /// global OTP security is untouched. A wrong code makes the function return
+  /// 401 → invoke throws → we surface a generic 'otp_invalid' like a normal
+  /// mistyped code.
+  Future<AuthUser> _reviewLogin(String code) async {
+    _log.info('verifyOtp: Apple Review demo login');
+    try {
+      final res = await _client.functions.invoke(
+        'review-login',
+        body: {'code': code.trim()},
+      );
+      final data = res.data;
+      final refresh = data is Map ? data['refresh_token'] as String? : null;
+      if (refresh == null || refresh.isEmpty) {
+        throw const AuthFailure('Review login failed.', code: 'otp_invalid');
+      }
+      await _client.auth.setSession(refresh);
+      final user = _mapUser(_client.auth.currentUser);
+      if (user == null) {
+        throw const AuthFailure('No user after review login.', code: 'no_user');
+      }
+      await _ensureProfileExists();
+      _log.info('verifyOtp: Apple Review login success — user=${user.id}');
+      return user;
+    } on AuthFailure {
+      rethrow;
+    } catch (e, st) {
+      _log.error('review login failed', e, st);
+      throw const AuthFailure('Review login failed.', code: 'otp_invalid');
     }
   }
 
