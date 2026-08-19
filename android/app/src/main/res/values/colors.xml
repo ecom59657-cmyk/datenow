@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- DateNow splash ground (bordeauxDeep #451523) for the native launch screen
+    <!-- DateNow splash ground (bordeaux #6E2438, same as the Home hero card)
          so it matches the splash Flutter draws next. The splash is the one
          bordeaux screen outside the call; everywhere else is ivory. -->
-    <color name="launch_background">#FF451523</color>
+    <color name="launch_background">#FF6E2438</color>
 </resources>

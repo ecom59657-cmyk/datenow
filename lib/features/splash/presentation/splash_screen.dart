@@ -30,15 +30,19 @@ class SplashScreen extends StatelessWidget {
         statusBarColor: Colors.transparent,
         statusBarIconBrightness: Brightness.light,
         statusBarBrightness: Brightness.dark,
-        systemNavigationBarColor: AppColors.bordeauxDeep,
+        systemNavigationBarColor: AppColors.bordeaux,
         systemNavigationBarIconBrightness: Brightness.light,
       ),
       child: Scaffold(
-        backgroundColor: AppColors.bordeauxDeep,
+        // Flat AppColors.bordeaux — the exact colour of the Home hero card,
+        // not its gradient. The card runs signatureGradient across 330 px;
+        // stretched over a whole screen the same recipe puts its dark end
+        // right where the logo sits, so the two surfaces read as different
+        // colours. Matching the card means taking the colour, not the
+        // recipe.
+        backgroundColor: AppColors.bordeaux,
         body: DecoratedBox(
-          decoration: const BoxDecoration(
-            gradient: AppColors.signatureGradient,
-          ),
+          decoration: const BoxDecoration(color: AppColors.bordeaux),
           child: Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
