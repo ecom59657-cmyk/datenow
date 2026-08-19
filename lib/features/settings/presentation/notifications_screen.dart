@@ -96,9 +96,17 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
     final repo = ref.read(settingsRepositoryProvider);
     final current = ref.read(notificationPrefsProvider).asData?.value ??
         const NotificationPrefs();
-    await repo.updateNotificationPrefs(profile.userId, f(current));
-    if (!context.mounted) return;
-    context.showSnack(AppLocalizations.of(context).savedSnack);
+    try {
+      await repo.updateNotificationPrefs(profile.userId, f(current));
+      if (!context.mounted) return;
+      context.showSnack(AppLocalizations.of(context).savedSnack);
+    } catch (e) {
+      // The switch has already flipped optimistically; telling the user
+      // "Enregistré" on a failed write is how a preference silently
+      // reverts on the next launch.
+      if (!context.mounted) return;
+      context.showSnack(AppLocalizations.of(context).errorSaveGeneric);
+    }
   }
 
   @override

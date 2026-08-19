@@ -200,13 +200,16 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
               const SizedBox(height: AppSpacing.sm),
           ],
           const SizedBox(height: AppSpacing.xl),
+          // Was an AppButton with `onPressed: () {}` — a button that did
+          // nothing at all. Subscriptions live in iOS Settings, and we
+          // dropped url_launcher in Phase 6, so there is no honest button
+          // to offer here: the instruction replaces it. A button that
+          // lies is worse than no button.
           isPremium
-              ? AppButton(
-                  label: l10n.subscriptionManageCta,
-                  icon: Icons.workspace_premium_rounded,
-                  size: AppButtonSize.large,
-                  variant: AppButtonVariant.secondary,
-                  onPressed: () {},
+              ? Text(
+                  l10n.subscriptionManageHint,
+                  textAlign: TextAlign.center,
+                  style: AppTypography.caption,
                 )
               // Premium purchase flow is intentionally dormant.
               // The CTA looks premium (brand-pink halo preserved)

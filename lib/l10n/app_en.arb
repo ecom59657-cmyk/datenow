@@ -27,6 +27,8 @@
   "errorNetwork": "Can't connect.\nCheck your internet connection.",
   "errorGeneric": "Something went wrong. Please try again.",
   "errorMessageNotSent": "Message not sent. Try again in a moment.",
+  "commonRetry": "Try again",
+  "errorLoadGeneric": "Could not load this content.",
   "errorLoadProfile": "Couldn't load your profile.",
   "errorLoadContent": "Couldn't load this content. Pull down to refresh.",
   "errorPhotoLoad": "Couldn't load this photo. Try again.",
@@ -396,6 +398,10 @@
   "editPreferencesTitle": "Edit my preferences",
   "editPhotosTitle": "My photos",
   "saveAction": "Save",
+  "errorSaveGeneric": "Couldn't save. Try again.",
+  "discardChangesTitle": "Discard changes?",
+  "discardChangesBody": "Your changes will not be saved.",
+  "discardChangesAction": "Discard",
   "savedSnack": "Saved",
 
   "photosCount": "{count} / {max}",
@@ -573,6 +579,7 @@
   "subscriptionBenefit5Title": "Premium badge",
   "subscriptionBenefit5Body": "Visible during your video dates.",
   "subscriptionUpgradeCta": "Go Premium",
+  "subscriptionManageHint": "Manage your subscription in Settings › your Apple account › Subscriptions.",
   "subscriptionManageCta": "Manage subscription",
   "subscriptionUpgradedSnack": "Welcome to DateNow Premium",
 

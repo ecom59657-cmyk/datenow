@@ -9,6 +9,7 @@ import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../app/theme/app_typography.dart';
 import '../../../l10n/app_localizations.dart';
+import '../../../shared/widgets/app_error_state.dart';
 import '../../../shared/widgets/app_scaffold.dart';
 import '../../../shared/widgets/glass_card.dart';
 import '../../../shared/widgets/loading_indicator.dart';
@@ -122,7 +123,11 @@ class _SuggestionsBody extends ConsumerWidget {
         padding: EdgeInsets.all(AppSpacing.lg),
         child: LoadingIndicator(),
       ),
-      error: (e, _) => _EmptyCard(message: AppLocalizations.of(context).errorLoadContent),
+      error: (e, _) => AppErrorState(
+        compact: true,
+        message: AppLocalizations.of(context).errorLoadContent,
+        onRetry: () => ref.invalidate(weeklySuggestionsProvider),
+      ),
       data: (_) {
         final list = ref.watch(weeklySuggestionsProvider).asData!.value;
         // A suggestion is CONSUMED the moment a date is launched with it
@@ -243,7 +248,11 @@ class _MatchesBody extends ConsumerWidget {
         padding: EdgeInsets.all(AppSpacing.lg),
         child: LoadingIndicator(),
       ),
-      error: (e, _) => _EmptyCard(message: AppLocalizations.of(context).errorLoadContent),
+      error: (e, _) => AppErrorState(
+        compact: true,
+        message: AppLocalizations.of(context).errorLoadContent,
+        onRetry: () => ref.invalidate(mutualMatchesProvider),
+      ),
       data: (_) {
         final list = ref.watch(mutualMatchesProvider).asData!.value;
         if (list.isEmpty) return _EmptyCard(message: emptyLabel);

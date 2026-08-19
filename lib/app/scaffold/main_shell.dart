@@ -76,7 +76,17 @@ class MainShell extends ConsumerWidget {
       ),
     ];
 
-    return Scaffold(
+    // Android back from a secondary tab returns to Accueil; only a back
+    // press already on Accueil leaves the app. There was no PopScope
+    // anywhere in lib/, so the system back button closed DateNow from
+    // any tab — including mid-conversation.
+    return PopScope(
+      canPop: navigationShell.currentIndex == 0,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop || navigationShell.currentIndex == 0) return;
+        _onTap(0);
+      },
+      child: Scaffold(
       backgroundColor: AppColors.ivory,
       // The bar is an attached surface now, not a floating pill, so the
       // body must stop above it instead of scrolling underneath.
@@ -89,6 +99,7 @@ class MainShell extends ConsumerWidget {
         items: tabs,
         currentIndex: navigationShell.currentIndex,
         onTap: _onTap,
+      ),
       ),
     );
   }

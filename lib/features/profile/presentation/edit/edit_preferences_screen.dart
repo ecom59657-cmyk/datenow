@@ -6,7 +6,10 @@ import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/utils/extensions.dart';
+import '../../../../core/utils/logger.dart';
 import '../../../../l10n/app_localizations.dart';
+import '../../../settings/presentation/widgets/destructive_dialog.dart';
+import '../../../../shared/widgets/app_error_state.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_scaffold.dart';
 import '../../../profile_setup/data/profile_repository.dart';
@@ -86,6 +89,24 @@ class _EditPreferencesScreenState
       !setEquals(_interests, _initialInterests) ||
       _availability != _initialAvailability;
 
+  static const _log = AppLogger('EditPrefs');
+
+  /// System back / swipe-back with unsaved edits asks first. Nothing in
+  /// lib/ used to guard this: a back gesture on a half-filled form threw
+  /// the input away silently.
+  Future<void> _confirmDiscard(bool didPop) async {
+    if (didPop || !_isDirty || !mounted) return;
+    final l10n = AppLocalizations.of(context);
+    final discard = await showDestructiveConfirm(
+      context: context,
+      title: l10n.discardChangesTitle,
+      body: l10n.discardChangesBody,
+      confirmLabel: l10n.discardChangesAction,
+    );
+    if (!discard || !mounted) return;
+    Navigator.of(context).pop();
+  }
+
   Future<void> _save(UserProfile current) async {
     if (!_isValid || !_isDirty) return;
     setState(() => _saving = true);
@@ -98,22 +119,28 @@ class _EditPreferencesScreenState
       interests: _interests,
       availability: _availability,
     );
-    await ref.read(profileRepositoryProvider).saveProfile(updated);
-    if (!mounted) return;
-
-    // Re-baseline so the form is clean again.
-    setState(() {
+    try {
+      await ref.read(profileRepositoryProvider).saveProfile(updated);
+      if (!mounted) return;
+      // Re-baseline so the form is clean again.
+      setState(() {
       _initialSeekingGenders = {...updated.seekingGenders};
       _initialAgeMin = updated.seekingAgeMin;
       _initialAgeMax = updated.seekingAgeMax;
       _initialMaxDistance = updated.maxDistanceKm;
       _initialIntentions = {...updated.intentions};
-      _initialInterests = {...updated.interests};
-      _initialAvailability = updated.availability;
-      _saving = false;
-    });
-    final l10n = AppLocalizations.of(context);
-    context.showSnack(l10n.savedSnack);
+        _initialInterests = {...updated.interests};
+        _initialAvailability = updated.availability;
+      });
+      if (!mounted) return;
+      context.showSnack(AppLocalizations.of(context).savedSnack);
+    } catch (e, st) {
+      _log.error('savePreferences failed', e, st);
+      if (!mounted) return;
+      context.showSnack(AppLocalizations.of(context).errorSaveGeneric);
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   @override
@@ -126,14 +153,21 @@ class _EditPreferencesScreenState
         body: Center(child: CircularProgressIndicator()),
       ),
       error: (e, _) => AppScaffold(
-          body: Center(child: Text(AppLocalizations.of(context).errorLoadProfile))),
+        body: AppErrorState(
+          message: AppLocalizations.of(context).errorLoadProfile,
+          onRetry: () => ref.invalidate(currentProfileProvider),
+        ),
+      ),
       data: (profile) {
         if (profile == null) return const AppScaffold(body: SizedBox.shrink());
         _populateFrom(profile);
 
         final canSave = _isValid && _isDirty && !_saving;
 
-        return AppScaffold(
+        return PopScope(
+          canPop: !_isDirty,
+          onPopInvokedWithResult: (didPop, _) => _confirmDiscard(didPop),
+          child: AppScaffold(
           appBar: AppBar(
             title: Text(l10n.editPreferencesTitle),
             leading: const BackButton(),
@@ -266,6 +300,7 @@ class _EditPreferencesScreenState
               ),
               const SizedBox(height: AppSpacing.lg),
             ],
+          ),
           ),
         );
       },

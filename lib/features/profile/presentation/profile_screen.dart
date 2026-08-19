@@ -9,7 +9,9 @@ import '../../../app/theme/app_spacing.dart';
 import '../../../app/theme/app_typography.dart';
 import '../../../core/config/feature_flags.dart';
 import '../../../core/utils/display_name.dart';
+import '../../../core/utils/extensions.dart';
 import '../../../l10n/app_localizations.dart';
+import '../../settings/presentation/widgets/destructive_dialog.dart';
 import '../../../shared/widgets/app_button.dart';
 import '../../../shared/widgets/app_scaffold.dart';
 import '../../../shared/widgets/glass_card.dart';
@@ -30,6 +32,21 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     with TabScrollResetMixin {
   @override
   int get tabIndex => 3; // Home=0, Discover=1, Messages=2, Profile=3
+
+  Future<void> _confirmSignOut(BuildContext context, WidgetRef ref) async {
+    final l10n = AppLocalizations.of(context);
+    final confirmed = await showDestructiveConfirm(
+      context: context,
+      title: l10n.signOutConfirmTitle,
+      body: l10n.signOutConfirmBody,
+      confirmLabel: l10n.signOutConfirmAction,
+      isDangerous: false,
+    );
+    if (!confirmed || !context.mounted) return;
+    await ref.read(authControllerProvider.notifier).signOut();
+    if (!context.mounted) return;
+    context.showSnack(l10n.signedOutSnack);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -165,8 +182,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
           AppButton(
             label: l10n.profileSignOut,
             variant: AppButtonVariant.secondary,
-            onPressed: () =>
-                ref.read(authControllerProvider.notifier).signOut(),
+            // Same action, same gravity as in Settings: this used to sign
+            // the user straight out on a single tap while the identical
+            // entry under Réglages asked for confirmation first.
+            onPressed: () => _confirmSignOut(context, ref),
           ),
         ],
       ),

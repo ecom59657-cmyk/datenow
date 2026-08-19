@@ -6,6 +6,7 @@ import '../../../app/theme/app_spacing.dart';
 import '../../../app/theme/app_typography.dart';
 import '../../../core/utils/extensions.dart';
 import '../../../l10n/app_localizations.dart';
+import '../../../shared/widgets/app_error_state.dart';
 import '../../../shared/widgets/app_scaffold.dart';
 import '../../../shared/widgets/glass_card.dart';
 import '../../profile_setup/presentation/providers/profile_provider.dart';
@@ -54,7 +55,11 @@ class BlockedAccountsScreen extends ConsumerWidget {
               padding: EdgeInsets.all(AppSpacing.lg),
               child: Center(child: CircularProgressIndicator()),
             ),
-            error: (e, _) => Text(AppLocalizations.of(context).errorLoadContent),
+            error: (e, _) => AppErrorState(
+              compact: true,
+              message: AppLocalizations.of(context).errorLoadContent,
+              onRetry: () => ref.invalidate(blockedUsersProvider),
+            ),
             data: (list) {
               if (list.isEmpty) {
                 return GlassCard(

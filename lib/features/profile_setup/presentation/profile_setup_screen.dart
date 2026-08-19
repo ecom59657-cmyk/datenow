@@ -144,7 +144,16 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
       'isStep4Valid=${draft.isStep4Valid}',
     );
 
-    return AppScaffold(
+    // System back walks the wizard backwards. Without this, an Android
+    // back press on step 3 dropped the user out of onboarding entirely
+    // and lost every answer.
+    return PopScope(
+      canPop: _index == 0,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop || _index == 0) return;
+        _back();
+      },
+      child: AppScaffold(
       appBar: AppBar(
         leading: _index == 0
             ? null
@@ -182,6 +191,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
           ),
           const SizedBox(height: AppSpacing.lg),
         ],
+      ),
       ),
     );
   }

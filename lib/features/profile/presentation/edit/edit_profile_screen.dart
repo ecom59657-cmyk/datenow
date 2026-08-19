@@ -8,7 +8,10 @@ import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/utils/extensions.dart';
+import '../../../../core/utils/logger.dart';
 import '../../../../l10n/app_localizations.dart';
+import '../../../settings/presentation/widgets/destructive_dialog.dart';
+import '../../../../shared/widgets/app_error_state.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_scaffold.dart';
 import '../../../../shared/widgets/app_text_field.dart';
@@ -73,6 +76,24 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
       _gender != _initialGender ||
       _orientation != _initialOrientation;
 
+  static const _log = AppLogger('EditProfile');
+
+  /// System back / swipe-back with unsaved edits asks first. Nothing in
+  /// lib/ used to guard this: a back gesture on a half-filled form threw
+  /// the input away silently.
+  Future<void> _confirmDiscard(bool didPop) async {
+    if (didPop || !_isDirty || !mounted) return;
+    final l10n = AppLocalizations.of(context);
+    final discard = await showDestructiveConfirm(
+      context: context,
+      title: l10n.discardChangesTitle,
+      body: l10n.discardChangesBody,
+      confirmLabel: l10n.discardChangesAction,
+    );
+    if (!discard || !mounted) return;
+    Navigator.of(context).pop();
+  }
+
   Future<void> _save(UserProfile current) async {
     final name = _nameCtrl.text.trim();
     if (name.isEmpty || _gender == null || _orientation == null) {
@@ -85,19 +106,28 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
       gender: _gender,
       orientation: _orientation,
     );
-    await ref.read(profileRepositoryProvider).saveProfile(updated);
-    if (!mounted) return;
-
-    // Re-baseline so the form is clean again and the button goes back to its
-    // disabled state until the next edit.
-    setState(() {
-      _initialName = updated.firstName ?? '';
-      _initialGender = updated.gender;
-      _initialOrientation = updated.orientation;
-      _saving = false;
-    });
-    final l10n = AppLocalizations.of(context);
-    context.showSnack(l10n.savedSnack);
+    // Without the try/catch a failed write left the button spinning for
+    // good; without the else-branch it said "Enregistré" over data that
+    // never left the device.
+    try {
+      await ref.read(profileRepositoryProvider).saveProfile(updated);
+      if (!mounted) return;
+      // Re-baseline so the form is clean again and the button goes back
+      // to its disabled state until the next edit.
+      setState(() {
+        _initialName = updated.firstName ?? '';
+        _initialGender = updated.gender;
+        _initialOrientation = updated.orientation;
+      });
+      if (!mounted) return;
+      context.showSnack(AppLocalizations.of(context).savedSnack);
+    } catch (e, st) {
+      _log.error('saveProfile failed', e, st);
+      if (!mounted) return;
+      context.showSnack(AppLocalizations.of(context).errorSaveGeneric);
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   @override
@@ -110,7 +140,11 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
         body: Center(child: CircularProgressIndicator()),
       ),
       error: (e, _) => AppScaffold(
-          body: Center(child: Text(AppLocalizations.of(context).errorLoadProfile))),
+        body: AppErrorState(
+          message: AppLocalizations.of(context).errorLoadProfile,
+          onRetry: () => ref.invalidate(currentProfileProvider),
+        ),
+      ),
       data: (profile) {
         if (profile == null) {
           return const AppScaffold(body: SizedBox.shrink());
@@ -119,7 +153,10 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
 
         final canSave = _isValid && _isDirty && !_saving;
 
-        return AppScaffold(
+        return PopScope(
+          canPop: !_isDirty,
+          onPopInvokedWithResult: (didPop, _) => _confirmDiscard(didPop),
+          child: AppScaffold(
           appBar: AppBar(
             title: Text(l10n.editProfileTitle),
             leading: const BackButton(),
@@ -175,6 +212,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
               ),
               const SizedBox(height: AppSpacing.lg),
             ],
+          ),
           ),
         );
       },

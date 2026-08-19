@@ -29,9 +29,17 @@ class PrivacyScreen extends ConsumerWidget {
     final repo = ref.read(settingsRepositoryProvider);
     final current =
         ref.read(privacyPrefsProvider).asData?.value ?? const PrivacyPrefs();
-    await repo.updatePrivacyPrefs(profile.userId, f(current));
-    if (!context.mounted) return;
-    context.showSnack(AppLocalizations.of(context).savedSnack);
+    try {
+      await repo.updatePrivacyPrefs(profile.userId, f(current));
+      if (!context.mounted) return;
+      context.showSnack(AppLocalizations.of(context).savedSnack);
+    } catch (e) {
+      // The switch has already flipped optimistically; telling the user
+      // "Enregistré" on a failed write is how a preference silently
+      // reverts on the next launch.
+      if (!context.mounted) return;
+      context.showSnack(AppLocalizations.of(context).errorSaveGeneric);
+    }
   }
 
   @override

@@ -1,7 +1,7 @@
 import 'dart:async';
-import 'dart:math';
 import 'dart:ui';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -267,14 +267,25 @@ class _PostCallScreenState extends ConsumerState<PostCallScreen> {
       return;
     }
 
-    // Fallback (no Supabase / no call id): keep the demo alive with a
-    // mocked peer reveal so the flow is testable offline. Lands on the
-    // mutual-reveal stage so the tester can still tap Match/Pass.
-    _log.warn('No callId/revealRepo — falling back to mock peer reveal');
+    // No callId / no repo. In release this is a broken session, not a
+    // demo: fabricating the other person's decision — which is what a
+    // coin flip on Random() did here — invents an outcome about a real
+    // human being. Nothing is written either way (_confirmMatch bails on
+    // a null callId), but the user was still shown "they revealed" or
+    // "they passed" as if it had happened. Release now says the reveal
+    // could not complete; debug keeps a deterministic path so the flow
+    // stays walkable offline.
+    _log.warn('No callId/revealRepo — reveal cannot resolve');
+    if (!kDebugMode) {
+      _peerDecisionTimer = Timer(const Duration(milliseconds: 600), () {
+        if (!mounted) return;
+        setState(() => _revealTimedOut = true);
+      });
+      return;
+    }
     _peerDecisionTimer = Timer(const Duration(milliseconds: 1600), () {
       if (!mounted) return;
-      final peerReveals = Random().nextDouble() < 0.6;
-      setState(() => _stage = peerReveals ? _Stage.mutual : _Stage.noMatch);
+      setState(() => _stage = _Stage.mutual);
     });
   }
 

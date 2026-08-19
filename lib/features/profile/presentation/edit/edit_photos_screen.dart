@@ -11,6 +11,7 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../core/utils/extensions.dart';
 import '../../../../core/utils/logger.dart';
 import '../../../../l10n/app_localizations.dart';
+import '../../../../shared/widgets/app_error_state.dart';
 import '../../../../shared/widgets/app_scaffold.dart';
 import '../../../profile_moderation/data/photo_moderation_repository.dart';
 import '../../../profile_moderation/domain/photo_moderation_status.dart';
@@ -120,12 +121,23 @@ class _EditPhotosScreenState extends ConsumerState<EditPhotosScreen> {
     final bytes = await _pickBytes();
     if (bytes == null) return;
     final repo = ref.read(profileRepositoryProvider);
-    final newUrl = await repo.uploadPhoto(profile.userId, bytes);
+    final String newUrl;
     final oldUrl = profile.photoUrls[index];
-    final next = [...profile.photoUrls];
-    next[index] = newUrl;
-    await repo.saveProfile(profile.copyWith(photoUrls: next));
-    await repo.deletePhoto(oldUrl);
+    // Unguarded, a failed upload here threw out of an async gesture
+    // handler: no message, no rollback, and the old photo still in place
+    // while the user believes it was replaced.
+    try {
+      newUrl = await repo.uploadPhoto(profile.userId, bytes);
+      final next = [...profile.photoUrls];
+      next[index] = newUrl;
+      await repo.saveProfile(profile.copyWith(photoUrls: next));
+      await repo.deletePhoto(oldUrl);
+    } catch (e, st) {
+      _log.error('replacePhoto failed at index=$index', e, st);
+      if (!mounted) return;
+      context.showSnack(AppLocalizations.of(context).errorSaveGeneric);
+      return;
+    }
     // Moderation on the new photo — old one was already approved by
     // grandfather (or by a prior moderation pass) and gets deleted
     // server-side. The new photo enters the pipeline.
@@ -178,7 +190,14 @@ class _EditPhotosScreenState extends ConsumerState<EditPhotosScreen> {
     // single user gesture. The saveProfile call is dropped — it was
     // a no-op for photoUrls anyway and re-UPSERTing the profile row
     // on every photo delete was wasteful.
-    await repo.deletePhoto(removedUrl);
+    try {
+      await repo.deletePhoto(removedUrl);
+    } catch (e, st) {
+      _log.error('deletePhoto failed for $removedUrl', e, st);
+      if (!mounted) return;
+      context.showSnack(AppLocalizations.of(context).errorSaveGeneric);
+      return;
+    }
     // Force a re-emission on `watchProfile` WITHOUT invalidating the
     // StreamProvider — `ref.invalidate(currentProfileProvider)` would
     // push the provider through AsyncLoading, which cascades through
@@ -250,7 +269,11 @@ class _EditPhotosScreenState extends ConsumerState<EditPhotosScreen> {
         body: Center(child: CircularProgressIndicator()),
       ),
       error: (e, _) => AppScaffold(
-          body: Center(child: Text(AppLocalizations.of(context).errorLoadProfile))),
+        body: AppErrorState(
+          message: AppLocalizations.of(context).errorLoadProfile,
+          onRetry: () => ref.invalidate(currentProfileProvider),
+        ),
+      ),
       data: (profile) {
         if (profile == null) return const AppScaffold(body: SizedBox.shrink());
 

@@ -35,12 +35,17 @@ class _SecurityScreenState extends ConsumerState<SecurityScreen> {
     final repo = ref.read(settingsRepositoryProvider);
     final current =
         ref.read(privacyPrefsProvider).asData?.value ?? const PrivacyPrefs();
-    await repo.updatePrivacyPrefs(
-      profile.userId,
-      current.copyWith(twoFactorEnabled: value),
-    );
-    if (!mounted) return;
-    context.showSnack(AppLocalizations.of(context).savedSnack);
+    try {
+      await repo.updatePrivacyPrefs(
+        profile.userId,
+        current.copyWith(twoFactorEnabled: value),
+      );
+      if (!mounted) return;
+      context.showSnack(AppLocalizations.of(context).savedSnack);
+    } catch (e) {
+      if (!mounted) return;
+      context.showSnack(AppLocalizations.of(context).errorSaveGeneric);
+    }
   }
 
   /// Triggers Supabase's voluntary identity-linking flow for [provider].
@@ -178,13 +183,14 @@ class _SecurityScreenState extends ConsumerState<SecurityScreen> {
           SettingSection(
             title: l10n.securitySessions,
             children: [
+              // No "signed in X ago": the timestamp was DateTime.now(),
+              // i.e. always "1 min ago" whatever the real session age —
+              // a fabricated fact, and rendered in English inside a
+              // French screen. We list the device we can actually vouch
+              // for, and nothing more.
               SettingTile(
                 icon: Icons.devices_rounded,
                 title: l10n.securityThisDevice,
-                subtitle: l10n.securitySignInEntry(
-                  l10n.securityThisDevice,
-                  _humanWhen(DateTime.now()),
-                ),
               ),
             ],
           ),
@@ -193,13 +199,6 @@ class _SecurityScreenState extends ConsumerState<SecurityScreen> {
     );
   }
 
-  String _humanWhen(DateTime d) {
-    final now = DateTime.now();
-    final diff = now.difference(d);
-    if (diff.inHours < 1) return '${diff.inMinutes.clamp(1, 60)} min ago';
-    if (diff.inDays < 1) return '${diff.inHours}h ago';
-    return '${diff.inDays}d ago';
-  }
 }
 
 /// One row of the "Linked accounts" section. Shows a "Linked"

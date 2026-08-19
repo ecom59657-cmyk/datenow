@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+
+import '../../../../app/router/app_routes.dart';
 
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
@@ -71,16 +74,25 @@ class _QuotaLimitSheet extends StatelessWidget {
                   AppTypography.body.copyWith(color: AppColors.textSecondary),
             ),
             const SizedBox(height: AppSpacing.xl),
+            // "Débloquer plus de dates" used to just close the sheet —
+            // a button that names an outcome it does not deliver. It now
+            // opens the subscription screen, which is the only place that
+            // outcome can come from. The second button was a duplicate of
+            // the same pop(), so "Revenir demain" is the honest single
+            // action left.
             AppButton(
               label: l10n.quotaUnlockCta,
               icon: Icons.bolt_rounded,
               size: AppButtonSize.large,
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: () {
+                Navigator.of(context).pop();
+                context.pushNamed(AppRoute.settingsSubscription.name);
+              },
             ),
             const SizedBox(height: AppSpacing.sm),
             AppButton(
               label: l10n.quotaComeBackCta,
-              variant: AppButtonVariant.secondary,
+              variant: AppButtonVariant.ghost,
               onPressed: () => Navigator.of(context).pop(),
             ),
             const SizedBox(height: AppSpacing.xs),

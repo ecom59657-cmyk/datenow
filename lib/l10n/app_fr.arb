@@ -27,6 +27,8 @@
   "errorNetwork": "Connexion impossible.\nVérifiez votre connexion internet.",
   "errorGeneric": "Une erreur est survenue. Réessaie.",
   "errorMessageNotSent": "Message non envoyé. Réessaie dans quelques instants.",
+  "commonRetry": "Réessayer",
+  "errorLoadGeneric": "Impossible de charger le contenu.",
   "errorLoadProfile": "Impossible de charger ton profil.",
   "errorLoadContent": "Impossible de charger le contenu. Tire pour rafraîchir.",
   "errorPhotoLoad": "Impossible de charger cette photo. Réessaie.",
@@ -350,6 +352,10 @@
   "editPreferencesTitle": "Modifier mes préférences",
   "editPhotosTitle": "Mes photos",
   "saveAction": "Enregistrer",
+  "errorSaveGeneric": "Impossible d'enregistrer. Réessaie.",
+  "discardChangesTitle": "Abandonner les modifications ?",
+  "discardChangesBody": "Tes changements ne seront pas enregistrés.",
+  "discardChangesAction": "Abandonner",
   "savedSnack": "Enregistré",
 
   "photosCount": "{count} sur {max}",
@@ -498,6 +504,7 @@
   "subscriptionBenefit5Title": "Badge Premium",
   "subscriptionBenefit5Body": "Visible pendant vos dates vidéo.",
   "subscriptionUpgradeCta": "Passer Premium",
+  "subscriptionManageHint": "Ton abonnement se gère depuis Réglages › ton compte Apple › Abonnements.",
   "subscriptionManageCta": "Gérer l'abonnement",
   "subscriptionUpgradedSnack": "Bienvenue sur DateNow Premium",
 
