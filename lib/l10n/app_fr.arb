@@ -398,6 +398,7 @@
 
   "discoverSuggestionsSection": "Propositions de la semaine",
   "discoverMatchesSection": "Matchs effectués",
+  "suggestionPhotoLocked": "Photo visible après l'appel",
   "suggestionStartDate": "Lancer un date",
   "suggestionDismiss": "Supprimer",
   "suggestionsEmpty": "Tes 3 rencontres de la semaine arrivent bientôt.",

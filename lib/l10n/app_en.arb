@@ -455,6 +455,7 @@
 
   "discoverSuggestionsSection": "This week's suggestions",
   "discoverMatchesSection": "Confirmed matches",
+  "suggestionPhotoLocked": "Photo unlocks after the call",
   "suggestionStartDate": "Start a date",
   "suggestionDismiss": "Remove",
   "suggestionsEmpty": "Your 3 weekly matches arrive soon.",

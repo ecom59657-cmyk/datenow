@@ -30,6 +30,9 @@ class AppCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final decorated = Container(
+      // Clip so a full-bleed child — a Veil header, a photo — follows the
+      // card's corners instead of squaring them off.
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: color ?? AppColors.paper,
         borderRadius: borderRadius,
