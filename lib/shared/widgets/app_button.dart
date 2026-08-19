@@ -55,10 +55,13 @@ class AppButton extends StatelessWidget {
       isLoading: isLoading,
       // A disabled primary used to be white text over bordeaux at 50 %
       // opacity — pale pink under white, which fails contrast and reads
-      // as "loading" rather than "not yet available".
+      // as "loading" rather than "not yet available". It then became sand
+      // on ivory with an ink3 label, which was legible but so quiet that
+      // people stopped seeing a button at all: it now keeps a border and
+      // a darker label so the shape still reads as an action.
       color: switch (variant) {
         AppButtonVariant.primary =>
-          _enabled ? Colors.white : AppColors.ink3,
+          _enabled ? Colors.white : AppColors.ink2,
         AppButtonVariant.secondary => AppColors.ink,
         AppButtonVariant.ghost => AppColors.bordeaux,
       },
@@ -127,6 +130,11 @@ class _PrimaryButton extends StatelessWidget {
           // a sand fill, not a faded bordeaux.
           color: enabled ? AppColors.bordeaux : AppColors.sand,
           borderRadius: AppRadius.brPill,
+          border: enabled
+              ? null
+              : const Border.fromBorderSide(
+                  BorderSide(color: AppColors.sandDeep),
+                ),
         ),
         child: Material(
           color: Colors.transparent,

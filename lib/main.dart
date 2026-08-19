@@ -1,3 +1,4 @@
+import 'core/debug/screen_tour.dart';
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
@@ -52,6 +53,7 @@ Future<void> main() async {
       await PushNotificationsService.instance.initialize();
 
       runApp(const ProviderScope(child: DateNowApp()));
+      startScreenTour(); // TEMP
     },
     (error, stack) {
       _log.error('Uncaught zone error', error, stack);

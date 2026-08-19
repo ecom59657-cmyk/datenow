@@ -53,7 +53,31 @@ void main() {
     );
   });
 
-  testWidgets('an existing answer opens with its text in place',
+  testWidgets('an answer already written shows as a finished card, not a field',
+      (tester) async {
+    // The complaint this encodes: a caret still blinking in something you
+    // already wrote reads as "not saved yet", and people go looking for a
+    // confirmation that was never missing.
+    await tester.pumpWidget(_host(
+      PromptSlotEditor(
+        answer: const PromptAnswer(
+          question: PromptQuestion.perfectSunday,
+          answer: 'Un marché, puis rien du tout.',
+        ),
+        taken: const {},
+        onChanged: (_, _) {},
+      ),
+    ));
+
+    expect(find.text('Un marché, puis rien du tout.'), findsOneWidget);
+    expect(
+      find.byType(TextField),
+      findsNothing,
+      reason: 'at rest an answered slot is a card, not an open field',
+    );
+  });
+
+  testWidgets('tapping a finished card reopens it for editing',
       (tester) async {
     await tester.pumpWidget(_host(
       PromptSlotEditor(
@@ -65,7 +89,10 @@ void main() {
         onChanged: (_, _) {},
       ),
     ));
+
+    await tester.tap(find.text('Un marché, puis rien du tout.'));
+    await tester.pumpAndSettle();
+
     expect(find.byType(TextField), findsOneWidget);
-    expect(find.text('Un marché, puis rien du tout.'), findsOneWidget);
   });
 }
