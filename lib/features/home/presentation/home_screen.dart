@@ -9,6 +9,7 @@ import '../../../app/scaffold/active_tab.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
 import '../../../app/theme/app_typography.dart';
+import '../../../core/config/app_config.dart';
 import '../../../core/config/feature_flags.dart';
 import '../../../core/services/location_service.dart';
 import '../../../core/utils/display_name.dart';
@@ -29,6 +30,7 @@ import '../../quota/presentation/widgets/quota_limit_sheet.dart';
 import '../../subscription/presentation/providers/subscription_provider.dart';
 import 'widgets/available_dates_display.dart';
 import 'widgets/home_discover_link.dart';
+import 'widgets/people_online_display.dart';
 import 'widgets/home_header.dart';
 import 'widgets/home_hero_card.dart';
 import 'widgets/stat_tile.dart';
@@ -104,18 +106,35 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           Row(
             children: [
               Expanded(
-                child: StatTile(
-                  icon: Icons.people_alt_rounded,
-                  value: '1.2k',
-                  label: l10n.peopleOnline,
-                ),
+                child: Builder(builder: (context) {
+                  // "Personnes en ligne" — live count from the
+                  // active_profiles_count() RPC (server clock, 60 s
+                  // freshness window), same wiring as the "dates
+                  // proposes" tile below. Never a hard-coded audience
+                  // figure: a fake real-time counter is misleading
+                  // metadata (2.3.1) and would undercut the
+                  // availability-based matching claim itself.
+                  final state = ref.watch(activeProfilesCountProvider);
+                  final display = formatPeopleOnline(l10n, state);
+                  return StatTile(
+                    icon: Icons.people_alt_rounded,
+                    value: display.value,
+                    label: display.label,
+                  );
+                }),
               ),
               const SizedBox(width: AppSpacing.sm),
               Expanded(
                 child: StatTile(
                   icon: Icons.bolt_rounded,
-                  value: '38s',
-                  label: l10n.avgMatchTime,
+                  // Product fact (a date lasts 5 min), not a measured
+                  // audience stat — replaces the old hard-coded "38s
+                  // temps de match moyen", which we could not back with
+                  // real data at launch volume.
+                  value: l10n.dateDurationValue(
+                    AppConfig.maxCallDuration.inMinutes,
+                  ),
+                  label: l10n.dateDurationLabel,
                   accent: AppColors.brandViolet,
                 ),
               ),
@@ -396,7 +415,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
 
   /// Ensures camera + microphone are granted BEFORE the first date.
   /// Returns true only when both are granted. On refusal it shows a
-  /// dialog with "Autoriser" (re-request) and "Ouvrir les réglages"
+  /// dialog with "Continuer" (re-request) and "Ouvrir les réglages"
   /// (deep link via `openAppSettings()`), so the user always has a way
   /// forward — never a dead-end at the call screen.
   Future<bool> _ensureCallPermissions(BuildContext context) async {
@@ -433,13 +452,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Autoriser'),
+            child: const Text('Continuer'),
           ),
         ],
       ),
     );
 
-    // "Autoriser" → one more request pass (covers the not-yet-permanent
+    // "Continuer" → one more request pass (covers the not-yet-permanent
     // case). "Ouvrir les réglages" / dismiss → don't proceed this round;
     // the user re-taps "Lancer un date" when they come back.
     if (retry == true) {

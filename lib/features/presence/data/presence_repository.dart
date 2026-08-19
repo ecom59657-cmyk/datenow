@@ -119,6 +119,17 @@ final presenceRepositoryProvider = Provider<PresenceRepository?>((ref) {
   return PresenceRepository(ref.watch(supabaseClientProvider));
 });
 
+/// Live "personnes en ligne" count for the Home card. Backed by the
+/// `active_profiles_count` RPC (server clock, 60 s freshness window), so
+/// the tile only ever shows peers actually reachable right now — never a
+/// hard-coded audience figure. Returns null when Supabase isn't
+/// configured or the RPC failed.
+final activeProfilesCountProvider = FutureProvider<int?>((ref) async {
+  final repo = ref.watch(presenceRepositoryProvider);
+  if (repo == null) return null;
+  return repo.activeProfilesCount();
+});
+
 /// Live "dates proposés aujourd'hui" count for the Home card. Returns
 /// null when Supabase isn't configured or the RPC failed.
 final availableDateProposalsCountProvider = FutureProvider<int?>((ref) async {

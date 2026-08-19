@@ -134,8 +134,9 @@ class _PermissionsScreenState extends ConsumerState<PermissionsScreen> {
               ),
               const SizedBox(height: AppSpacing.sm),
               Text(
-                'Pour vivre tes dates de 5 minutes, autorise DateNow à '
-                'utiliser ta caméra et ton micro.',
+                'Tes dates de 5 minutes se déroulent en vidéo en direct. '
+                'DateNow utilise ta caméra et ton micro pour les rendre '
+                'possibles.',
                 textAlign: TextAlign.center,
                 style: AppTypography.body.copyWith(
                   color: AppColors.textSecondary,
@@ -174,9 +175,11 @@ class _PermissionsScreenState extends ConsumerState<PermissionsScreen> {
                 ),
               ] else ...[
                 AppButton(
-                  label: _bothGranted
-                      ? 'Continuer'
-                      : 'Autoriser caméra et micro',
+                  // Neutral label per Apple Guideline 5.1.1(iv): the
+                  // pre-permission screen must not pressure the user to
+                  // grant access. The native iOS camera/mic prompt is
+                  // still fired by [_request] on tap.
+                  label: 'Continuer',
                   icon: Icons.lock_open_rounded,
                   size: AppButtonSize.large,
                   isLoading: _busy,

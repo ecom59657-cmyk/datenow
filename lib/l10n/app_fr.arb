@@ -101,8 +101,19 @@
   "findDatePhotoRequiredCancel": "Plus tard",
   "findDateError": "Impossible de lancer un date. Réessaie.",
   "tonightOnDatenow": "Ce soir sur DateNow",
-  "peopleOnline": "Personnes en ligne près de vous",
-  "avgMatchTime": "Temps de match moyen",
+  "peopleOnlineValueLoading": "…",
+  "peopleOnlineValueEmpty": "—",
+  "peopleOnlineLabelLoading": "Personnes en ligne près de vous",
+  "peopleOnlineLabelEmpty": "Personne en ligne pour l'instant",
+  "peopleOnlineLabel": "{count, plural, =1{personne en ligne près de vous} other{personnes en ligne près de vous}}",
+  "@peopleOnlineLabel": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "dateDurationValue": "{minutes} min",
+  "@dateDurationValue": {
+    "placeholders": { "minutes": { "type": "int" } }
+  },
+  "dateDurationLabel": "Durée d'un date vidéo",
   "newLikesValue": "{count} nouveau(x)",
   "newLikesLabel": "Personnes qui vous ont liké en retour",
   "availableDatesValueLoading": "…",

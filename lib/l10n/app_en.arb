@@ -101,8 +101,19 @@
   "findDatePhotoRequiredCancel": "Later",
   "findDateError": "Couldn't start a date. Try again.",
   "tonightOnDatenow": "Tonight on DateNow",
-  "peopleOnline": "People online near you",
-  "avgMatchTime": "Avg. match time",
+  "peopleOnlineValueLoading": "…",
+  "peopleOnlineValueEmpty": "—",
+  "peopleOnlineLabelLoading": "People online near you",
+  "peopleOnlineLabelEmpty": "Nobody online right now",
+  "peopleOnlineLabel": "{count, plural, =1{person online near you} other{people online near you}}",
+  "@peopleOnlineLabel": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "dateDurationValue": "{minutes} min",
+  "@dateDurationValue": {
+    "placeholders": { "minutes": { "type": "int" } }
+  },
+  "dateDurationLabel": "Length of a video date",
   "newLikesValue": "{count} new",
   "@newLikesValue": {
     "placeholders": {
