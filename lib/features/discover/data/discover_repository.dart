@@ -499,6 +499,13 @@ class SupabaseDiscoverRepository implements DiscoverRepository {
     // Realtime gives us the row set; each emission re-hydrates, because
     // `weekly_suggestions` stores only the peer's id — the card needs the
     // whole profile. Cardinality is 3, so the N+1 is irrelevant.
+    //
+    // Stream errors are deliberately left to surface: StreamProvider turns
+    // them into an AsyncError, which Discover renders as AppErrorState with
+    // a working Réessayer. Swallowing them into an empty list would show
+    // "your suggestions are coming soon" while the table is unreachable —
+    // a lie the user cannot act on. Verified on device against the missing
+    // `weekly_suggestions` table (PGRST205).
     return _client
         .from(_table)
         .stream(primaryKey: ['id'])
@@ -556,12 +563,21 @@ class SupabaseDiscoverRepository implements DiscoverRepository {
     final weekStart = _currentWeekStart();
     final week = _weekKey(weekStart);
 
-    final current = await _client
-        .from(_table)
-        .select('id')
-        .eq('user_id', self.userId)
-        .eq('week_start_date', week)
-        .neq('status', 'dismissed');
+    // Unguarded, this select threw out of a fire-and-forget call and
+    // escaped to the zone — it killed the app on the device run when the
+    // table turned out to be missing from the deployed schema (PGRST205).
+    final List<Map<String, dynamic>> current;
+    try {
+      current = await _client
+          .from(_table)
+          .select('id')
+          .eq('user_id', self.userId)
+          .eq('week_start_date', week)
+          .neq('status', 'dismissed');
+    } catch (e, st) {
+      _log.error('cannot read week $week — no batch generated', e, st);
+      return;
+    }
 
     final missing = WeeklySuggestionsService.weeklySlots - current.length;
     if (missing <= 0) {
