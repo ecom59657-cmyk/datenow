@@ -26,6 +26,8 @@ import '../../presence/data/presence_repository.dart';
 import '../../profile_setup/presentation/providers/profile_provider.dart';
 import '../../quota/data/quota_repository.dart';
 import '../../quota/presentation/widgets/quota_limit_sheet.dart';
+import '../../subscription/data/date_milestone_repository.dart';
+import '../../../core/services/preferences_service.dart';
 import '../../subscription/presentation/providers/subscription_provider.dart';
 import 'widgets/available_dates_display.dart';
 import 'widgets/home_discover_link.dart';
@@ -46,8 +48,42 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   @override
   int get tabIndex => 0; // Home=0, Discover=1, Profile=2
 
+  /// Guards against a second push while the first is still animating —
+  /// the provider can settle again before the route is on screen.
+  bool _pitching = false;
+
+  /// Opens the Premium page once, after the third completed date.
+  ///
+  /// Placed on Home rather than at the end of the call: the moment a date
+  /// ends is the reveal, and putting a price in front of someone deciding
+  /// whether they liked a person is both crass and bad selling. Coming back
+  /// to Home, dates behind you, is when the offer means something.
+  Future<void> _maybePitchPremium() async {
+    if (_pitching) return;
+    final should = ref.read(shouldPitchPremiumProvider).asData?.value ?? false;
+    final isPremium =
+        ref.read(subscriptionStateProvider).asData?.value.isPremium ?? false;
+    if (!should || isPremium) return;
+
+    _pitching = true;
+    final prefs = ref.read(sharedPreferencesProvider).asData?.value;
+    // Marked BEFORE showing: a crash or a swipe-away must not turn the
+    // pitch into something that returns on every launch.
+    if (prefs != null) await PremiumPitchSeen.mark(prefs);
+    if (!mounted) return;
+    await context.pushNamed(AppRoute.settingsSubscription.name);
+    if (mounted) _pitching = false;
+  }
+
   @override
   Widget build(BuildContext context) {
+    // Fires when the counter and the subscription state have both settled.
+    ref.listen(shouldPitchPremiumProvider, (_, next) {
+      if (next.asData?.value == true) {
+        WidgetsBinding.instance
+            .addPostFrameCallback((_) => _maybePitchPremium());
+      }
+    });
     final l10n = AppLocalizations.of(context);
     final user = ref.watch(currentUserProvider);
     // currentProfileProvider streams from public.profiles in realtime,
