@@ -68,10 +68,12 @@ class SplashScreen extends StatelessWidget {
   }
 }
 
-/// Soft radial brand glow behind the wordmark. Fades in with the logo, then
-/// breathes slowly (opacity only) for a subtle premium pulse. Decorative —
-/// wrapped in [IgnorePointer] and given a fixed size so it never shifts the
-/// centred column.
+/// Faint warm halo behind the wordmark. It used to be bordeaux at 22 %
+/// over near-black, which read as a glow; the same recipe over ivory read
+/// as a stain around the logo. It is now a [AppColors.tint] wash — barely
+/// there, just enough to keep the centre of the screen from feeling flat.
+/// Decorative: wrapped in [IgnorePointer] and given a fixed size so it
+/// never shifts the centred column.
 class _LogoHalo extends StatelessWidget {
   const _LogoHalo();
 
@@ -85,9 +87,9 @@ class _LogoHalo extends StatelessWidget {
           shape: BoxShape.circle,
           gradient: RadialGradient(
             colors: [
-              AppColors.bordeaux.withValues(alpha: 0.22),
-              AppColors.bordeauxLight.withValues(alpha: 0.10),
-              AppColors.bordeauxLight.withValues(alpha: 0),
+              AppColors.tint,
+              AppColors.tint.withValues(alpha: 0.45),
+              AppColors.tint.withValues(alpha: 0),
             ],
             stops: const [0.0, 0.55, 1.0],
           ),
