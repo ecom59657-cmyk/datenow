@@ -240,19 +240,28 @@ class _CompatibilityPill extends StatelessWidget {
             size: 13,
           ),
           const SizedBox(width: 5),
-          Text(
-            kShowExactCompatibility
-                ? l10n.compatibilityValue(score)
-                : MatchScore.bandFor(score).label(l10n),
-            style: AppTypography.caption.copyWith(
-              color: AppColors.bordeaux,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.2,
-              fontSize: 12,
+          // Flexible, not a bare Text: `Row(mainAxisSize.min)` lays its
+          // children out with unbounded width, so an intrinsically wider
+          // label used to overflow the Container — whose decoration stops
+          // at the clamped width. The bordeaux ground ended short while the
+          // text ran on over the message button. Shrinking here keeps the
+          // pill and its background the same shape, whatever the label or
+          // the user's text-size setting.
+          Flexible(
+            child: Text(
+              kShowExactCompatibility
+                  ? l10n.compatibilityValue(score)
+                  : MatchScore.bandFor(score).label(l10n),
+              style: AppTypography.caption.copyWith(
+                color: AppColors.bordeaux,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.2,
+                fontSize: 12,
+              ),
+              maxLines: 1,
+              softWrap: false,
+              overflow: TextOverflow.ellipsis,
             ),
-            maxLines: 1,
-            softWrap: false,
-            overflow: TextOverflow.fade,
           ),
         ],
       ),

@@ -33,7 +33,7 @@ class MatchScore {
   /// Thresholds were 90 / 70 / 50 when the orientation axis handed every
   /// completed profile a free 15 points. Removing it deflates every score
   /// by exactly that much, so the thresholds move with it — otherwise
-  /// "Très grande compatibilité" would become practically unreachable and
+  /// "Très compatible" would become practically unreachable and
   /// the bands would quietly all shift down one notch.
   MatchBand get band => bandFor(percentage);
 

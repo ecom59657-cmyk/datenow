@@ -420,10 +420,10 @@
 
   "compatibilityLabel": "Compatibilité",
   "compatibilityValue": "{value} % compatible",
-  "compatibilityBandVeryHigh": "Très grande compatibilité",
+  "compatibilityBandVeryHigh": "Très compatible",
   "compatibilityBandHigh": "Forte compatibilité",
-  "compatibilityBandMedium": "Compatibilité correcte",
-  "compatibilityBandLow": "Ça vaut le coup d'essayer",
+  "compatibilityBandMedium": "Bonne compatibilité",
+  "compatibilityBandLow": "Ça vaut le détour",
 
   "matchingFoundTitle": "Match trouvé",
   "matchingFoundSubtitle": "On vous connecte en direct dans un instant",

@@ -466,7 +466,7 @@
       "value": {"type": "int"}
     }
   },
-  "compatibilityBandVeryHigh": "Very high compatibility",
+  "compatibilityBandVeryHigh": "Very compatible",
   "compatibilityBandHigh": "Strong compatibility",
   "compatibilityBandMedium": "Decent match",
   "compatibilityBandLow": "Worth a try",
