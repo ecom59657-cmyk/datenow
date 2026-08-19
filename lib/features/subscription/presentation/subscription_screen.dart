@@ -61,16 +61,9 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
                 width: 80,
                 height: 80,
                 alignment: Alignment.center,
-                decoration: BoxDecoration(
+                decoration: const BoxDecoration(
                   shape: BoxShape.circle,
                   gradient: AppColors.signatureGradient,
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.bordeaux.withValues(alpha: 0.4),
-                      blurRadius: 24,
-                      spreadRadius: 2,
-                    ),
-                  ],
                 ),
                 child: const Icon(
                   Icons.auto_awesome_rounded,
@@ -157,17 +150,9 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
                 horizontal: AppSpacing.md,
                 vertical: 7,
               ),
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                 gradient: AppColors.signatureGradient,
                 borderRadius: AppRadius.brPill,
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.bordeaux.withValues(alpha: 0.35),
-                    blurRadius: 24,
-                    spreadRadius: 1,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
               ),
               child: Text(
                 l10n.subscriptionBrand,
@@ -345,17 +330,9 @@ class _BenefitTile extends StatelessWidget {
           Container(
             width: 40,
             height: 40,
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               gradient: AppColors.signatureGradient,
               borderRadius: AppRadius.brSm,
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.bordeaux.withValues(alpha: 0.28),
-                  blurRadius: 16,
-                  spreadRadius: 0,
-                  offset: const Offset(0, 6),
-                ),
-              ],
             ),
             child: Icon(icon, color: Colors.white, size: 20),
           ),
@@ -404,16 +381,8 @@ class _PremiumComingSoonCta extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         borderRadius: AppRadius.brSm,
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.bordeaux.withValues(alpha: 0.45),
-            blurRadius: 30,
-            spreadRadius: 1,
-            offset: const Offset(0, 12),
-          ),
-        ],
       ),
       child: AppButton(
         label: 'Bientôt disponible',

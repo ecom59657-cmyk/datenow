@@ -125,10 +125,10 @@ class _PeerAvatar extends ConsumerWidget {
         height: size,
         decoration: const BoxDecoration(
           shape: BoxShape.circle,
-          gradient: AppColors.signatureGradient,
+          gradient: AppColors.avatarGradient,
         ),
         child: const Center(
-          child: Icon(Icons.person_rounded, color: Colors.white),
+          child: Icon(Icons.person_rounded, color: AppColors.paper),
         ),
       );
     }
@@ -154,10 +154,10 @@ class _PeerAvatar extends ConsumerWidget {
       height: size,
       decoration: const BoxDecoration(
         shape: BoxShape.circle,
-        gradient: AppColors.signatureGradient,
+        gradient: AppColors.avatarGradient,
       ),
       child: const Center(
-        child: Icon(Icons.person_rounded, color: Colors.white),
+        child: Icon(Icons.person_rounded, color: AppColors.paper),
       ),
     );
   }
@@ -173,8 +173,8 @@ class _UnreadBadge extends StatelessWidget {
     final l10n = AppLocalizations.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        gradient: AppColors.signatureGradient,
+      decoration: const BoxDecoration(
+        color: AppColors.bordeaux,
         borderRadius: AppRadius.brPill,
       ),
       child: Text(

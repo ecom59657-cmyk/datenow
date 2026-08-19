@@ -987,13 +987,6 @@ class _CountdownCircle extends StatelessWidget {
         shape: BoxShape.circle,
         color: AppColors.bordeaux.withValues(alpha: 0.1),
         border: Border.all(color: AppColors.bordeaux, width: 2),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.bordeaux.withValues(alpha: 0.45),
-            blurRadius: 22,
-            spreadRadius: 1,
-          ),
-        ],
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -1547,17 +1540,9 @@ class _MatchAvatar extends StatelessWidget {
     return Container(
       width: _size,
       height: _size,
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         shape: BoxShape.circle,
-        gradient: AppColors.signatureGradient,
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.bordeaux.withValues(alpha: 0.42),
-            blurRadius: 40,
-            spreadRadius: 4,
-            offset: const Offset(0, 14),
-          ),
-        ],
+        color: AppColors.tint,
       ),
       child: ClipOval(
         child: bytes == null

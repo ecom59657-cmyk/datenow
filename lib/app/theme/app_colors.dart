@@ -63,6 +63,15 @@ class AppColors {
     colors: [bordeaux, bordeauxDeep],
   );
 
+  /// Placeholder ground for an avatar with no photo. Warm sand → clay,
+  /// never bordeaux: a person-shaped hole in the layout should read as
+  /// paper, not as a call to action.
+  static const LinearGradient avatarGradient = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0xFFEFE3D8), Color(0xFFB98B79)],
+  );
+
   // ---------------------------------------------------------------------
   // Text
   // ---------------------------------------------------------------------

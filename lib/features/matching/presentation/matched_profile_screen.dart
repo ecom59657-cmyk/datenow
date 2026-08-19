@@ -132,9 +132,9 @@ class _PhotoFallback extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const DecoratedBox(
-      decoration: BoxDecoration(gradient: AppColors.signatureGradient),
+      decoration: BoxDecoration(gradient: AppColors.avatarGradient),
       child: Center(
-        child: Icon(Icons.person_rounded, color: Colors.white, size: 72),
+        child: Icon(Icons.person_rounded, color: AppColors.paper, size: 72),
       ),
     );
   }

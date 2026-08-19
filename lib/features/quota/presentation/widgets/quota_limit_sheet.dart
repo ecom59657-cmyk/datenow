@@ -31,13 +31,6 @@ class _QuotaLimitSheet extends StatelessWidget {
           color: AppColors.surfaceElevated,
           borderRadius: AppRadius.brXl,
           border: Border.all(color: AppColors.hairline),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.bordeaux.withValues(alpha: 0.15),
-              blurRadius: 40,
-              spreadRadius: 4,
-            ),
-          ],
         ),
         padding: const EdgeInsets.fromLTRB(
           AppSpacing.lg,
@@ -53,20 +46,13 @@ class _QuotaLimitSheet extends StatelessWidget {
               child: Container(
                 width: 64,
                 height: 64,
-                decoration: BoxDecoration(
+                decoration: const BoxDecoration(
                   shape: BoxShape.circle,
-                  gradient: AppColors.signatureGradient,
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.bordeaux.withValues(alpha: 0.35),
-                      blurRadius: 24,
-                      offset: const Offset(0, 10),
-                    ),
-                  ],
+                  color: AppColors.tint,
                 ),
                 child: const Icon(
                   Icons.hourglass_top_rounded,
-                  color: Colors.white,
+                  color: AppColors.bordeaux,
                   size: 28,
                 ),
               ),

@@ -878,16 +878,9 @@ class _RippleAvatar extends StatelessWidget {
           Container(
             width: 112,
             height: 112,
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               shape: BoxShape.circle,
               gradient: AppColors.signatureGradient,
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.bordeaux.withValues(alpha: 0.5),
-                  blurRadius: 40,
-                  spreadRadius: 6,
-                ),
-              ],
             ),
             child: const Icon(Icons.favorite_rounded,
                 color: Colors.white, size: 48),
@@ -910,7 +903,8 @@ class _Ripple extends StatelessWidget {
       height: 120,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        border: Border.all(color: AppColors.bordeaux, width: 1.5),
+        // Tint ring: the ripples are ambience, the orb is the subject.
+        border: Border.all(color: AppColors.sandDeep, width: 1.5),
       ),
     )
         .animate(onPlay: (c) => c.repeat())

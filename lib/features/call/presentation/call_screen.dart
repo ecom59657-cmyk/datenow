@@ -437,7 +437,7 @@ class _CallScreenState extends ConsumerState<CallScreen>
           statusBarIconBrightness: Brightness.light,
         ),
         child: Scaffold(
-          backgroundColor: AppColors.background,
+          backgroundColor: AppColors.bordeauxDeep,
           body: _ConnectingView(
             phase: _bootstrapFailed ? null : _precall,
             peerName: candidate?.firstName,
@@ -454,7 +454,7 @@ class _CallScreenState extends ConsumerState<CallScreen>
         statusBarBrightness: Brightness.dark,
       ),
       child: Scaffold(
-        backgroundColor: AppColors.background,
+        backgroundColor: AppColors.bordeauxDeep,
         resizeToAvoidBottomInset: false,
         body: Stack(
           fit: StackFit.expand,
@@ -589,7 +589,7 @@ class _Header extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
         decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.45),
+          color: AppColors.bordeauxDeep.withValues(alpha: 0.55),
           borderRadius: AppRadius.brPill,
           border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
         ),
@@ -621,7 +621,7 @@ class _Header extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.45),
+        color: AppColors.bordeauxDeep.withValues(alpha: 0.55),
         borderRadius: AppRadius.brPill,
         border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
       ),
@@ -777,7 +777,7 @@ class _CircleButton extends StatelessWidget {
         ? AppColors.bordeaux
         : active
             ? AppColors.bordeaux.withValues(alpha: 0.85)
-            : Colors.black.withValues(alpha: 0.55);
+            : AppColors.bordeauxDeep.withValues(alpha: 0.62);
     final border = accent
         ? AppColors.bordeaux
         : Colors.white.withValues(alpha: active ? 0.0 : 0.2);
@@ -801,16 +801,6 @@ class _CircleButton extends StatelessWidget {
               shape: BoxShape.circle,
               color: bg,
               border: Border.all(color: border, width: 1),
-              boxShadow: accent
-                  ? [
-                      BoxShadow(
-                        color: AppColors.bordeaux.withValues(alpha: 0.45),
-                        blurRadius: 16,
-                        spreadRadius: 1,
-                        offset: const Offset(0, 4),
-                      ),
-                    ]
-                  : null,
             ),
             alignment: Alignment.center,
             child: Icon(icon, color: iconColor, size: 22),
@@ -959,16 +949,9 @@ class _PulseHeart extends StatelessWidget {
     final core = Container(
       width: 108,
       height: 108,
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         shape: BoxShape.circle,
         gradient: AppColors.signatureGradient,
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.bordeaux.withValues(alpha: active ? 0.6 : 0.4),
-            blurRadius: active ? 48 : 32,
-            spreadRadius: active ? 8 : 4,
-          ),
-        ],
       ),
       child: const Icon(Icons.favorite_rounded,
           color: Colors.white, size: 46),

@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
-import '../../../../shared/widgets/glass_card.dart';
+import '../../../../shared/widgets/app_card.dart';
 
 class StatTile extends StatelessWidget {
   const StatTile({
@@ -27,7 +27,7 @@ class StatTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = accent ?? AppColors.bordeaux;
-    return GlassCard(
+    return AppCard(
       padding: const EdgeInsets.all(AppSpacing.md),
       onTap: onTap,
       child: Column(
@@ -38,7 +38,11 @@ class StatTile extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.18),
+                  // Fixed tint ground rather than an alpha wash of the
+                  // accent, which turned muddy on paper.
+                  color: color == AppColors.bordeaux
+                      ? AppColors.tint
+                      : AppColors.clayTint,
                   borderRadius: AppRadius.brSm,
                 ),
                 child: Icon(icon, color: color, size: 18),
@@ -47,7 +51,7 @@ class StatTile extends StatelessWidget {
                 const Spacer(),
                 const Icon(
                   Icons.chevron_right_rounded,
-                  color: AppColors.textTertiary,
+                  color: AppColors.ink3,
                   size: 22,
                 ),
               ],

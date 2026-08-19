@@ -239,7 +239,7 @@ class _EmptyCard extends StatelessWidget {
         children: [
           Container(
             padding: const EdgeInsets.all(AppSpacing.sm),
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               color: AppColors.violetSoft,
               borderRadius: AppRadius.brSm,
             ),
@@ -289,20 +289,13 @@ class _PushPermissionSheet extends StatelessWidget {
               width: 80,
               height: 80,
               alignment: Alignment.center,
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                 shape: BoxShape.circle,
-                gradient: AppColors.signatureGradient,
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.bordeaux.withValues(alpha: 0.4),
-                    blurRadius: 24,
-                    spreadRadius: 2,
-                  ),
-                ],
+                color: AppColors.tint,
               ),
               child: const Icon(
                 Icons.notifications_active_rounded,
-                color: Colors.white,
+                color: AppColors.bordeaux,
                 size: 36,
               ),
             ),

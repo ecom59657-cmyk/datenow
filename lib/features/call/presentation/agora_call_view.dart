@@ -816,7 +816,7 @@ class _AgoraCallViewState extends ConsumerState<AgoraCallView> {
   Widget _buildFullscreenVideo(AgoraClient client, int? remoteUid) {
     final engine = client.sessionController.value.engine;
     if (engine == null) {
-      return Container(color: AppColors.background);
+      return Container(color: AppColors.bordeauxDeep);
     }
     if (remoteUid != null) {
       return rtc.AgoraVideoView(
@@ -954,7 +954,7 @@ class _LocalPip extends StatelessWidget {
                 borderRadius: BorderRadius.circular(_radius),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.35),
+                    color: AppColors.bordeauxDeep.withValues(alpha: 0.45),
                     blurRadius: 24,
                     offset: const Offset(0, 8),
                   ),
@@ -1011,7 +1011,7 @@ class _LocalPip extends StatelessWidget {
                     height: 28,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: Colors.black.withValues(alpha: 0.55),
+                      color: AppColors.bordeauxDeep.withValues(alpha: 0.62),
                       border: Border.all(
                         color: Colors.white.withValues(alpha: 0.25),
                       ),
@@ -1085,7 +1085,7 @@ class _StatusBanner extends StatelessWidget {
           vertical: 8,
         ),
         decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.55),
+          color: AppColors.bordeauxDeep.withValues(alpha: 0.62),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
         ),
@@ -1107,7 +1107,7 @@ class _LoadingPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: AppColors.background,
+      color: AppColors.bordeauxDeep,
       alignment: Alignment.center,
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -1178,7 +1178,7 @@ class _ErrorPanel extends StatelessWidget {
         ),
     };
     return Container(
-      color: AppColors.background,
+      color: AppColors.bordeauxDeep,
       alignment: Alignment.center,
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
       child: Column(

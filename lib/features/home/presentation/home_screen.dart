@@ -20,7 +20,7 @@ import '../../profile_moderation/data/photo_moderation_repository.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../shared/widgets/app_button.dart';
 import '../../../shared/widgets/app_scaffold.dart';
-import '../../../shared/widgets/glass_card.dart';
+import '../../../shared/widgets/app_card.dart';
 import '../../auth/presentation/providers/auth_provider.dart';
 import '../../presence/data/presence_repository.dart';
 import '../../profile_setup/presentation/providers/profile_provider.dart';
@@ -134,7 +134,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                     AppConfig.maxCallDuration.inMinutes,
                   ),
                   label: l10n.dateDurationLabel,
-                  accent: AppColors.bordeauxLight,
+                  accent: AppColors.clay,
                 ),
               ),
             ],
@@ -509,21 +509,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                 width: 80,
                 height: 80,
                 alignment: Alignment.center,
-                decoration: BoxDecoration(
+                decoration: const BoxDecoration(
                   shape: BoxShape.circle,
-                  gradient: AppColors.signatureGradient,
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.bordeaux.withValues(alpha: 0.4),
-                      blurRadius: 24,
-                      spreadRadius: 2,
-                    ),
-                  ],
+                  color: AppColors.tint,
                 ),
                 child: const Icon(
                   Icons.camera_alt_rounded,
-                  color: Colors.white,
-                  size: 36,
+                  color: AppColors.bordeaux,
+                  size: 34,
                 ),
               ),
               const SizedBox(height: AppSpacing.lg),
@@ -598,21 +591,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                 width: 80,
                 height: 80,
                 alignment: Alignment.center,
-                decoration: BoxDecoration(
+                decoration: const BoxDecoration(
                   shape: BoxShape.circle,
-                  gradient: AppColors.signatureGradient,
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.bordeaux.withValues(alpha: 0.4),
-                      blurRadius: 24,
-                      spreadRadius: 2,
-                    ),
-                  ],
+                  color: AppColors.tint,
                 ),
                 child: const Icon(
                   Icons.verified_user_outlined,
-                  color: Colors.white,
-                  size: 36,
+                  color: AppColors.bordeaux,
+                  size: 34,
                 ),
               ),
               const SizedBox(height: AppSpacing.lg),
@@ -664,7 +650,7 @@ class _HowItWorksCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GlassCard(
+    return AppCard(
       padding: const EdgeInsets.all(AppSpacing.lg),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -677,14 +663,14 @@ class _HowItWorksCard extends StatelessWidget {
                   width: 28,
                   height: 28,
                   decoration: const BoxDecoration(
-                    gradient: AppColors.signatureGradient,
+                    color: AppColors.tint,
                     borderRadius: AppRadius.brSm,
                   ),
                   alignment: Alignment.center,
                   child: Text(
                     '${i + 1}',
                     style: AppTypography.caption.copyWith(
-                      color: Colors.white,
+                      color: AppColors.bordeaux,
                       fontWeight: FontWeight.w700,
                       fontSize: 13,
                     ),
@@ -734,40 +720,11 @@ class _PremiumTeaserCard extends ConsumerWidget {
 
   final VoidCallback onTap;
 
-  /// Muted champagne gold. Used only as a thin tint over the brand
-  /// pink/violet — never as a fill. Keeps the dark/pink/purple DA
-  /// intact, only signals "this is the premium card" subliminally.
-  static const Color _gold = Color(0xFFE2C68C);
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
-    // Soft halo around the whole card — brand-pink dominant + a tiny
-    // champagne tint underneath. Stays well below the live-date CTA
-    // in visual weight.
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: AppRadius.brLg,
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.bordeaux.withValues(alpha: 0.18),
-            blurRadius: 28,
-            spreadRadius: 0,
-            offset: const Offset(0, 10),
-          ),
-          BoxShadow(
-            color: _gold.withValues(alpha: 0.06),
-            blurRadius: 24,
-            spreadRadius: 0,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: GlassCard(
-        onTap: onTap,
-        // Thin champagne-tinted outline. ~40 % alpha so it reads as
-        // a subtle ring on the dark surface, never as a hard line.
-        borderColor: _gold.withValues(alpha: 0.38),
+    return AppCard(
+      onTap: onTap,
         padding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.md,
           vertical: 18,
@@ -775,37 +732,18 @@ class _PremiumTeaserCard extends ConsumerWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            // Premium icon — brand gradient fill, gold ring, dual
-            // glow (pink dominant, gold ambient). The gold ring is
-            // 1 dp, deliberately under-saturated.
+            // Clay chip: Premium is warm-accent territory, not a second
+            // bordeaux CTA competing with the hero.
             Container(
               width: 46,
               height: 46,
-              decoration: BoxDecoration(
-                gradient: AppColors.signatureGradient,
+              decoration: const BoxDecoration(
+                color: AppColors.clayTint,
                 borderRadius: AppRadius.brSm,
-                border: Border.all(
-                  color: _gold.withValues(alpha: 0.55),
-                  width: 1,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.bordeaux.withValues(alpha: 0.34),
-                    blurRadius: 18,
-                    spreadRadius: 0,
-                    offset: const Offset(0, 6),
-                  ),
-                  BoxShadow(
-                    color: _gold.withValues(alpha: 0.18),
-                    blurRadius: 14,
-                    spreadRadius: 0,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
               ),
               child: const Icon(
                 Icons.workspace_premium_rounded,
-                color: Colors.white,
+                color: AppColors.clay,
                 size: 22,
               ),
             ),
@@ -840,21 +778,13 @@ class _PremiumTeaserCard extends ConsumerWidget {
               ),
             ),
             const SizedBox(width: AppSpacing.sm),
-            // Mini gradient CTA pill. Carries its own brand-pink glow
-            // so it reads as the action target even when scanned at
-            // a glance. Text + chevron sit on one baseline.
+            // Outlined pill: the row is already tappable, so this only
+            // has to name the action — filling it would put a second
+            // bordeaux block on a screen that already has the hero.
             Container(
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                 borderRadius: AppRadius.brPill,
-                gradient: AppColors.signatureGradient,
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.bordeaux.withValues(alpha: 0.42),
-                    blurRadius: 16,
-                    spreadRadius: 0,
-                    offset: const Offset(0, 6),
-                  ),
-                ],
+                color: AppColors.tint,
               ),
               child: Padding(
                 padding: const EdgeInsets.symmetric(
@@ -867,23 +797,21 @@ class _PremiumTeaserCard extends ConsumerWidget {
                     Text(
                       l10n.homePremiumTeaserCta,
                       style: AppTypography.button.copyWith(
-                        color: Colors.white,
+                        color: AppColors.bordeaux,
                         fontWeight: FontWeight.w700,
-                        letterSpacing: 0.3,
                       ),
                     ),
                     const SizedBox(width: 4),
                     const Icon(
                       Icons.arrow_forward_rounded,
                       size: 16,
-                      color: Colors.white,
+                      color: AppColors.bordeaux,
                     ),
                   ],
                 ),
               ),
             ),
           ],
-        ),
       ),
     );
   }
@@ -935,16 +863,9 @@ class _HomeIdentityNudge extends ConsumerWidget {
                 width: 44,
                 height: 44,
                 alignment: Alignment.center,
-                decoration: BoxDecoration(
+                decoration: const BoxDecoration(
                   shape: BoxShape.circle,
                   gradient: AppColors.signatureGradient,
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.bordeaux.withValues(alpha: 0.30),
-                      blurRadius: 16,
-                      spreadRadius: 1,
-                    ),
-                  ],
                 ),
                 child: const Icon(
                   Icons.shield_outlined,

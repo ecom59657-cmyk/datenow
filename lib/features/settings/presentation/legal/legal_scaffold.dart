@@ -198,13 +198,6 @@ class _LastUpdatedPill extends StatelessWidget {
           color: AppColors.bordeaux.withValues(alpha: 0.28),
           width: 0.6,
         ),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.bordeaux.withValues(alpha: 0.14),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
       ),
       child: Text(
         label,

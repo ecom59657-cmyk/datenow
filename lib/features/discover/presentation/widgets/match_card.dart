@@ -126,17 +126,9 @@ class _MatchAvatar extends ConsumerWidget {
       height: _size,
       // The gradient ring lives in the outer container's background; the
       // inner ClipOval carves out a pixel of padding for the ring effect.
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         shape: BoxShape.circle,
         gradient: AppColors.signatureGradient,
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.bordeaux.withValues(alpha: 0.22),
-            blurRadius: 14,
-            spreadRadius: 0,
-            offset: const Offset(0, 6),
-          ),
-        ],
       ),
       padding: const EdgeInsets.all(_ringThickness),
       child: ClipOval(
@@ -190,12 +182,12 @@ class _InitialFill extends StatelessWidget {
   Widget build(BuildContext context) {
     final letter = _initial ?? _firstInitial(firstName);
     return DecoratedBox(
-      decoration: const BoxDecoration(gradient: AppColors.signatureGradient),
+      decoration: const BoxDecoration(gradient: AppColors.avatarGradient),
       child: Center(
         child: Text(
           letter,
           style: AppTypography.bodyStrong.copyWith(
-            color: Colors.white,
+            color: AppColors.paper,
             fontSize: 22,
             letterSpacing: 0.5,
           ),
@@ -234,14 +226,6 @@ class _CompatibilityPill extends StatelessWidget {
           color: AppColors.bordeaux.withValues(alpha: 0.28),
           width: 0.6,
         ),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.bordeaux.withValues(alpha: 0.16),
-            blurRadius: 12,
-            spreadRadius: 0,
-            offset: const Offset(0, 4),
-          ),
-        ],
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -304,14 +288,6 @@ class _MessageButton extends StatelessWidget {
               color: AppColors.bordeaux.withValues(alpha: 0.34),
               width: 1,
             ),
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.bordeaux.withValues(alpha: 0.18),
-                blurRadius: 10,
-                spreadRadius: 0,
-                offset: const Offset(0, 4),
-              ),
-            ],
           ),
           child: const Icon(
             Icons.chat_bubble_rounded,

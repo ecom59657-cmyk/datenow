@@ -81,11 +81,15 @@ class _AvatarBadge extends ConsumerWidget {
             height: size,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              gradient: AppColors.signatureGradient,
-              border: Border.all(color: AppColors.hairline, width: 2),
+              gradient: AppColors.avatarGradient,
+              border: Border.all(color: AppColors.line, width: 2),
             ),
             child: const Center(
-              child: Icon(Icons.person_rounded, color: Colors.white, size: 28),
+              child: Icon(
+                Icons.person_rounded,
+                color: AppColors.paper,
+                size: 28,
+              ),
             ),
           );
 

@@ -32,24 +32,16 @@ class MessageBubble extends StatelessWidget {
         vertical: AppSpacing.sm + 2,
       ),
       decoration: BoxDecoration(
-        gradient: fromMe ? AppColors.signatureGradient : null,
-        color: fromMe ? null : AppColors.surfaceElevated,
-        border: fromMe ? null : Border.all(color: AppColors.hairline),
+        // Sent = flat bordeaux, received = paper with a hairline. A
+        // gradient on a chat bubble reads as a button, not as speech.
+        color: fromMe ? AppColors.bordeaux : AppColors.paper,
+        border: fromMe ? null : Border.all(color: AppColors.line),
         borderRadius: BorderRadius.only(
           topLeft: const Radius.circular(18),
           topRight: const Radius.circular(18),
           bottomLeft: Radius.circular(fromMe ? 18 : 4),
           bottomRight: Radius.circular(fromMe ? 4 : 18),
         ),
-        boxShadow: fromMe
-            ? [
-                BoxShadow(
-                  color: AppColors.bordeaux.withValues(alpha: 0.18),
-                  blurRadius: 14,
-                  offset: const Offset(0, 4),
-                ),
-              ]
-            : null,
       ),
       child: Text(
         message.body,

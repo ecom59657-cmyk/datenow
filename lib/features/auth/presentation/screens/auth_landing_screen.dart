@@ -113,7 +113,7 @@ class _AuthLandingScreenState extends ConsumerState<AuthLandingScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const Spacer(flex: 2),
-          Center(child: const AppLogo(fontSize: 44))
+          const Center(child: AppLogo(fontSize: 44))
               .animate()
               .fadeIn(duration: 600.ms)
               .slideY(begin: 0.15, end: 0, curve: Curves.easeOutCubic),
@@ -234,10 +234,11 @@ class _AuthLandingScreenState extends ConsumerState<AuthLandingScreen> {
             padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
             child: Text.rich(
               TextSpan(
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w400,
-                  color: Colors.white.withValues(alpha: 0.45),
+                  // Was white at 45 % — invisible on the ivory ground.
+                  color: AppColors.ink3,
                   height: 1.55,
                   letterSpacing: 0.05,
                 ),
@@ -246,20 +247,24 @@ class _AuthLandingScreenState extends ConsumerState<AuthLandingScreen> {
                   const TextSpan(text: '\n'),
                   TextSpan(
                     text: l10n.settingsTerms,
-                    style: TextStyle(
+                    style: const TextStyle(
                       fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      color: Colors.white.withValues(alpha: 0.72),
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.bordeaux,
+                      decoration: TextDecoration.underline,
+                      decorationColor: AppColors.bordeaux,
                     ),
                     recognizer: _termsRecognizer,
                   ),
                   TextSpan(text: l10n.authLegalConjunction),
                   TextSpan(
                     text: l10n.settingsPrivacyPolicy,
-                    style: TextStyle(
+                    style: const TextStyle(
                       fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      color: Colors.white.withValues(alpha: 0.72),
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.bordeaux,
+                      decoration: TextDecoration.underline,
+                      decorationColor: AppColors.bordeaux,
                     ),
                     recognizer: _privacyRecognizer,
                   ),

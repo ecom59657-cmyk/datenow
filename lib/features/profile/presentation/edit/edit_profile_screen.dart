@@ -202,7 +202,7 @@ class _BirthDateLockedCard extends StatelessWidget {
             width: 36,
             height: 36,
             alignment: Alignment.center,
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               color: AppColors.pinkSoft,
               borderRadius: AppRadius.brSm,
             ),

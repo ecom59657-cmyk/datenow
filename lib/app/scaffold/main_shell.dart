@@ -207,14 +207,6 @@ class _NavButton extends StatelessWidget {
                 ? BoxDecoration(
                     gradient: AppColors.signatureGradient,
                     borderRadius: BorderRadius.circular(22),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppColors.bordeaux.withValues(alpha: 0.45),
-                        blurRadius: 18,
-                        spreadRadius: 1,
-                        offset: const Offset(0, 6),
-                      ),
-                    ],
                   )
                 : null,
             child: AnimatedScale(

@@ -65,17 +65,10 @@ class _IconHero extends StatelessWidget {
       width: 96,
       height: 96,
       decoration: BoxDecoration(
-        gradient: AppColors.signatureGradient,
+        color: AppColors.tint,
         borderRadius: BorderRadius.circular(28),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.bordeaux.withValues(alpha: 0.35),
-            blurRadius: 30,
-            offset: const Offset(0, 16),
-          ),
-        ],
       ),
-      child: Icon(icon, color: Colors.white, size: 44),
+      child: Icon(icon, color: AppColors.bordeaux, size: 40),
     );
   }
 }

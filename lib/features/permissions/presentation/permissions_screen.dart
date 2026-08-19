@@ -262,7 +262,7 @@ class _PermRow extends StatelessWidget {
             child: Text(
               label,
               style: AppTypography.body.copyWith(
-                color: Colors.white,
+                color: AppColors.ink,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -306,24 +306,17 @@ class _GlowingDuo extends StatelessWidget {
     );
   }
 
+  /// Was a radial glow with a 38 px halo — on paper that reads as a
+  /// printing defect. A flat tint disc does the same job.
   Widget _glow(Color color, IconData icon) {
     return Container(
       width: 88,
       height: 88,
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         shape: BoxShape.circle,
-        gradient: RadialGradient(
-          colors: [color.withValues(alpha: 0.9), color.withValues(alpha: 0)],
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: color.withValues(alpha: 0.55),
-            blurRadius: 38,
-            spreadRadius: 6,
-          ),
-        ],
+        color: AppColors.tint,
       ),
-      child: Icon(icon, color: Colors.white, size: 32),
+      child: Icon(icon, color: color, size: 32),
     );
   }
 }

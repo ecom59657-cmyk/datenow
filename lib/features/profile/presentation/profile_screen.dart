@@ -195,13 +195,6 @@ class _ProfileAvatar extends ConsumerWidget {
           shape: BoxShape.circle,
           image: DecorationImage(image: image, fit: BoxFit.cover),
           border: Border.all(color: AppColors.hairline, width: 2),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.bordeaux.withValues(alpha: 0.25),
-              blurRadius: 18,
-              spreadRadius: 1,
-            ),
-          ],
         ),
       );
     }
@@ -245,7 +238,7 @@ class _SectionTile extends StatelessWidget {
           children: [
             Container(
               padding: const EdgeInsets.all(AppSpacing.sm),
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                 color: AppColors.pinkSoft,
                 borderRadius: AppRadius.brSm,
               ),
