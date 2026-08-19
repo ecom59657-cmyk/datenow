@@ -16,6 +16,8 @@ import '../../onboarding/presentation/providers/onboarding_provider.dart';
 import 'providers/profile_setup_controller.dart';
 import 'steps/finalize_step.dart';
 import 'steps/identity_step.dart';
+import '../domain/prompt_moderation.dart';
+import 'widgets/prompt_rejected_sheet.dart';
 import 'steps/prompts_step.dart';
 import 'steps/seeking_step.dart';
 import 'steps/vibe_step.dart';
@@ -55,6 +57,23 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
   bool get _isLast => _index == _stepCount - 1;
 
   Future<void> _next() async {
+    // Prompts are checked before leaving their step, not at submit.
+    // saveProfile deliberately swallows a prompts write failure — losing a
+    // whole signup over one answer would be worse — so a refused answer
+    // would otherwise vanish in silence and the user would finish signup
+    // without the sentences they just wrote.
+    if (_index == 3) {
+      final draft = ref.read(profileSetupControllerProvider);
+      for (final answer in draft.filledPrompts) {
+        final reason = PromptModeration.check(answer.answer);
+        if (reason != null) {
+          if (!mounted) return;
+          await showPromptRejectedSheet(context, reason);
+          return;
+        }
+      }
+    }
+
     if (_isLast) {
       await _submit();
       return;

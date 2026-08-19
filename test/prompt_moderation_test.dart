@@ -99,4 +99,58 @@ void main() {
       expect(dart.contains('moderation_blocklist'), isFalse);
     });
   });
+
+  refusalStopsTheFlowTests();
+}
+
+// ---------------------------------------------------------------------------
+// A refusal must stop the flow, on both surfaces
+// ---------------------------------------------------------------------------
+//
+// The trap this covers: saveProfile swallows a prompts write failure on
+// purpose — losing a whole signup over one answer would be worse. Which
+// means that without a check BEFORE submit, a refused answer would vanish
+// in silence and the user would finish signup without the sentences they
+// had just written, with nothing on screen to explain it.
+
+void refusalStopsTheFlowTests() {
+  group('a refusal is surfaced and blocks', () {
+    test('the editor shows the sheet and does not save', () {
+      final src = File(
+        'lib/features/profile/presentation/edit/edit_prompts_screen.dart',
+      ).readAsStringSync();
+      final save = src.substring(src.indexOf('Future<void> _save()'));
+      final check = save.indexOf('PromptModeration.check');
+      final call = save.indexOf('savePrompts(');
+      expect(check, greaterThan(-1), reason: 'no local check before saving');
+      expect(check, lessThan(call), reason: 'the check must gate the write');
+      expect(save, contains('showPromptRejectedSheet'));
+    });
+
+    test('the wizard checks before leaving the prompts step', () {
+      final src = File(
+        'lib/features/profile_setup/presentation/profile_setup_screen.dart',
+      ).readAsStringSync();
+      expect(src, contains('PromptModeration.check'));
+      expect(src, contains('showPromptRejectedSheet'));
+    });
+
+    test('neither surface uses a snackbar for it', () {
+      // A snackbar slides away by itself; this is the one message that has
+      // to be acknowledged before anything is written.
+      for (final path in [
+        'lib/features/profile/presentation/edit/edit_prompts_screen.dart',
+        'lib/features/profile_setup/presentation/profile_setup_screen.dart',
+      ]) {
+        final src = File(path).readAsStringSync();
+        final rejection = src.contains('PromptRejection');
+        if (!rejection) continue;
+        expect(
+          RegExp(r'showSnack\([^)]*[Rr]eject').hasMatch(src),
+          isFalse,
+          reason: '$path should use the sheet',
+        );
+      }
+    });
+  });
 }
