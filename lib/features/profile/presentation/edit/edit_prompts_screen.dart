@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/utils/extensions.dart';
@@ -158,13 +159,40 @@ class _EditPromptsScreenState extends ConsumerState<EditPromptsScreen> {
                     ],
                   ),
                 ),
-                AppButton(
-                  label: l10n.saveAction,
-                  size: AppButtonSize.large,
-                  isLoading: _saving,
-                  onPressed: _isDirty && !_saving ? _save : null,
+                // Action bar rather than a button adrift at the bottom of
+                // an empty screen: the hairline gives it a home, and the
+                // line above says what state the answers are in, which is
+                // the question people were asking when they went looking
+                // for a confirmation.
+                Container(
+                  decoration: const BoxDecoration(
+                    border: Border(
+                      top: BorderSide(color: AppColors.line),
+                    ),
+                  ),
+                  padding: const EdgeInsets.only(top: AppSpacing.sm),
+                  child: Column(
+                    children: [
+                      Text(
+                        _isDirty
+                            ? l10n.editPromptsUnsaved
+                            : l10n.editPromptsSaved,
+                        style: AppTypography.caption.copyWith(
+                          color: _isDirty ? AppColors.amber : AppColors.sage,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.xs),
+                      AppButton(
+                        label: l10n.saveAction,
+                        size: AppButtonSize.large,
+                        isLoading: _saving,
+                        onPressed: _isDirty && !_saving ? _save : null,
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                    ],
+                  ),
                 ),
-                const SizedBox(height: AppSpacing.lg),
               ],
             ),
           ),

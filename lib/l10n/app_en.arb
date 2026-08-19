@@ -417,6 +417,8 @@
   "promptsChangeQuestion": "Change",
   "promptsDone": "Done",
   "promptsPickerHint": "It appears above your answer.",
+  "editPromptsUnsaved": "Unsaved changes",
+  "editPromptsSaved": "Up to date",
   "postCallTitle": "Your date is over 🎉",
   "postCallSubtitle": "Now you've had a real conversation, here's their photo.",
   "postCallReveal": "Reveal photo",
