@@ -203,3 +203,27 @@ flutter clean                          # purge build/ + caches
 - ☐ Test sur **2 devices physiques** : permissions, date vidéo, blur,
       reveal — voir `docs/TEST_PROTOCOL_MVP.md`.
 - ☐ Refus de permission testé → message propre, pas de crash.
+
+---
+
+## Tests SQL en local (sans Docker)
+
+`flutter test` prouve que l'app n'envoie jamais une mauvaise valeur. Il ne
+prouve pas que la base la refuserait, ni que la politique de lecture cache
+bien ce qu'elle prétend cacher — ce sont des affirmations sur Postgres, et
+seul Postgres y répond.
+
+```bash
+./scripts/test_user_background_sql.sh     # 16 contrôles, ~10 s
+```
+
+Le script monte un cluster Postgres jetable (`initdb` dans un dossier
+temporaire, écoute sur 127.0.0.1:55432, supprimé à la sortie), y applique la
+migration **telle quelle**, puis vérifie que les valeurs inconnues sont
+refusées, qu'une personne ne peut ni écrire ni inventer la ligne d'une autre,
+et qu'un blocage coupe la lecture dans les deux sens.
+
+Requiert `brew install postgresql@17`. Aucun Docker.
+
+C'est le harnais qui aurait attrapé l'erreur de syntaxe `ENABL` avant de la
+coller dans l'éditeur Supabase.
