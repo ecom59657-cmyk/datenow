@@ -84,6 +84,7 @@ void main() {
   });
 
   reachabilityTests();
+  surfaceTests();
 }
 
 // ---------------------------------------------------------------------------
@@ -123,6 +124,48 @@ void reachabilityTests() {
           contains('PromptSlotEditor'),
           reason: '$path should reuse the shared editor',
         );
+      }
+    });
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Where an answer is visible
+// ---------------------------------------------------------------------------
+//
+// Answers were writable and then invisible: the only display was the
+// Discover card, i.e. other people's screens. You could write three
+// sentences and never see them again. These pin down which surfaces render
+// them, so a future refactor cannot quietly drop one.
+
+void surfaceTests() {
+  group('answers are rendered where they should be', () {
+    test('on your own profile', () {
+      final src = File('lib/features/profile/presentation/profile_screen.dart')
+          .readAsStringSync();
+      expect(src, contains('PromptCard('));
+      expect(src, contains('filledPrompts'));
+    });
+
+    test('on the Discover card seen by others', () {
+      final src = File(
+        'lib/features/discover/presentation/widgets/suggestion_card.dart',
+      ).readAsStringSync();
+      expect(src, contains('leadPrompt'));
+      expect(src, contains('PromptCard('));
+    });
+
+    test('all three surfaces share one card widget', () {
+      // Sand ground, clay overline, serif answer: three hand-rolled copies
+      // would drift, and the point is that what you type already looks
+      // like what the other person reads.
+      for (final path in [
+        'lib/features/profile/presentation/profile_screen.dart',
+        'lib/features/discover/presentation/widgets/suggestion_card.dart',
+        'lib/features/profile_setup/presentation/widgets/prompt_slot_editor.dart',
+      ]) {
+        expect(File(path).readAsStringSync(), contains('PromptCard'),
+            reason: '$path should reuse the shared card');
       }
     });
   });

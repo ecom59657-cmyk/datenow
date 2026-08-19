@@ -17,6 +17,8 @@ import '../../../shared/widgets/app_scaffold.dart';
 import '../../../shared/widgets/glass_card.dart';
 import '../../auth/presentation/providers/auth_provider.dart';
 import '../../identity/data/identity_repository.dart';
+import '../../profile_setup/domain/prompt_answer.dart';
+import '../../profile_setup/presentation/widgets/prompt_card.dart';
 import '../../profile_setup/presentation/providers/profile_provider.dart';
 import '../../subscription/presentation/providers/subscription_provider.dart';
 import 'edit/providers/profile_photos_provider.dart';
@@ -121,6 +123,39 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
               },
             ),
           ],
+          // Your own answers, shown as the other person will read them.
+          // Without this you could write three sentences and never see
+          // them again outside the editor — the profile showed rows to
+          // tap and nothing of what you had actually written.
+          Consumer(
+            builder: (context, ref, _) {
+              final prompts =
+                  ref.watch(currentProfileProvider).asData?.value?.filledPrompts ??
+                      const <PromptAnswer>[];
+              if (prompts.isEmpty) return const SizedBox.shrink();
+              return Padding(
+                padding: const EdgeInsets.only(top: AppSpacing.lg),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      l10n.profilePromptsTitle.toUpperCase(),
+                      style: AppTypography.overline,
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    for (final prompt in prompts) ...[
+                      PromptCard(
+                        answer: prompt,
+                        onTap: () =>
+                            context.pushNamed(AppRoute.editPrompts.name),
+                      ),
+                      const SizedBox(height: AppSpacing.xs),
+                    ],
+                  ],
+                ),
+              );
+            },
+          ),
           const SizedBox(height: AppSpacing.lg),
           _SectionTile(
             icon: Icons.person_outline_rounded,

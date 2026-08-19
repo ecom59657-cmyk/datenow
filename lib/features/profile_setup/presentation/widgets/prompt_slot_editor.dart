@@ -6,6 +6,7 @@ import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../l10n/app_localizations.dart';
 import '../../domain/prompt.dart';
+import 'prompt_card.dart';
 import '../../domain/prompt_answer.dart';
 
 /// One prompt slot: pick a question, type an answer.
@@ -253,43 +254,13 @@ class _PromptSlotEditorState extends State<PromptSlotEditor> {
     // other person will read — sand ground, clay overline, serif answer —
     // so what you are editing already looks like the result.
     if (!_editing && text.isNotEmpty) {
-      return InkWell(
+      return PromptCard(
+        answer: PromptAnswer(question: question, answer: text),
         onTap: _edit,
-        borderRadius: AppRadius.brLg,
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(AppSpacing.md),
-          decoration: const BoxDecoration(
-            color: AppColors.sand,
-            borderRadius: AppRadius.brLg,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      question.label(l10n).toUpperCase(),
-                      style: AppTypography.overline.copyWith(
-                        color: AppColors.clay,
-                        fontSize: 10,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  const Icon(
-                    Icons.edit_outlined,
-                    size: 15,
-                    color: AppColors.ink3,
-                  ),
-                ],
-              ),
-              const SizedBox(height: AppSpacing.xs),
-              Text(text, style: AppTypography.h3.copyWith(fontSize: 17)),
-            ],
-          ),
+        trailing: const Icon(
+          Icons.edit_outlined,
+          size: 15,
+          color: AppColors.ink3,
         ),
       );
     }
