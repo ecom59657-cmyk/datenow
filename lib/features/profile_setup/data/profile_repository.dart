@@ -22,6 +22,12 @@ abstract class ProfileRepository {
   /// Best-effort one-shot fetch.
   Future<UserProfile?> getProfile(String userId);
 
+  /// Just the prompt answers of [userId], for surfaces that show someone
+  /// else's profile without needing the rest of it. Read access is scoped
+  /// by the `user_prompts_select_not_blocked` policy: any signed-in user
+  /// except where a block exists either way.
+  Future<List<PromptAnswer>> fetchPrompts(String userId);
+
   /// Persists the profile. Implementations should emit the new value on the
   /// matching `watchProfile` stream so reactive consumers refresh.
   Future<void> saveProfile(UserProfile profile);
@@ -93,6 +99,10 @@ class MockProfileRepository implements ProfileRepository {
 
   @override
   Future<UserProfile?> getProfile(String userId) async => _byUser[userId];
+
+  @override
+  Future<List<PromptAnswer>> fetchPrompts(String userId) async =>
+      _byUser[userId]?.filledPrompts ?? const <PromptAnswer>[];
 
   @override
   Future<void> saveProfile(UserProfile profile) async {
@@ -235,6 +245,23 @@ class SupabaseProfileRepository implements ProfileRepository {
     }
 
     return _mapToProfile(userId, profileRow, prefsRow, photoRows, promptRows);
+  }
+
+  @override
+  Future<List<PromptAnswer>> fetchPrompts(String userId) async {
+    try {
+      final rows = await _client
+          .from('user_prompts')
+          .select()
+          .eq('user_id', userId)
+          .order('position');
+      return _mapPrompts(rows);
+    } catch (e) {
+      // Best effort: a profile without its answers is worth showing, a
+      // profile screen that fails to open is not.
+      _log.warn('fetchPrompts failed for $userId: $e');
+      return const <PromptAnswer>[];
+    }
   }
 
   // ---------------------------------------------------------------------

@@ -419,6 +419,7 @@
   "promptsPickerHint": "It appears above your answer.",
   "editPromptsUnsaved": "Unsaved changes",
   "editPromptsSaved": "Up to date",
+  "profilePromptsPeerTitle": "Their answers",
   "postCallTitle": "Your date is over 🎉",
   "postCallSubtitle": "Now you've had a real conversation, here's their photo.",
   "postCallReveal": "Reveal photo",

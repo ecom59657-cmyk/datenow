@@ -11,6 +11,9 @@ import '../../profile/presentation/edit/providers/profile_photos_provider.dart';
 import '../../profile_setup/domain/interest.dart';
 import '../data/matched_profile_repository.dart';
 import '../domain/match_score.dart';
+import '../../profile_setup/domain/prompt_answer.dart';
+import '../../profile_setup/presentation/providers/profile_provider.dart';
+import '../../profile_setup/presentation/widgets/prompt_card.dart';
 import '../domain/matched_profile.dart';
 import 'widgets/compatibility_badge.dart';
 
@@ -79,6 +82,35 @@ class _Content extends StatelessWidget {
               breakdown: const {},
             ),
           ),
+        ),
+        // All three answers here, where the Discover card shows only the
+        // first: a card is a glance, a profile is where you read someone.
+        // Fetched separately from the get_matched_profile RPC, whose column
+        // list is fixed — the user_prompts policy already scopes the read.
+        Consumer(
+          builder: (context, ref, _) {
+            final prompts =
+                ref.watch(peerPromptsProvider(profile.userId)).asData?.value ??
+                    const <PromptAnswer>[];
+            if (prompts.isEmpty) return const SizedBox.shrink();
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: AppSpacing.lg),
+                Text(
+                  AppLocalizations.of(context)
+                      .profilePromptsPeerTitle
+                      .toUpperCase(),
+                  style: AppTypography.overline,
+                ),
+                const SizedBox(height: AppSpacing.xs),
+                for (final prompt in prompts) ...[
+                  PromptCard(answer: prompt, maxLines: 5),
+                  const SizedBox(height: AppSpacing.xs),
+                ],
+              ],
+            );
+          },
         ),
         if (profile.interests.isNotEmpty) ...[
           const SizedBox(height: AppSpacing.lg),

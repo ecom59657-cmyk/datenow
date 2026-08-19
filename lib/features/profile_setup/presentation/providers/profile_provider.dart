@@ -1,3 +1,4 @@
+import '../../domain/prompt_answer.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../auth/presentation/providers/auth_provider.dart';
@@ -28,3 +29,14 @@ final profileSetupCompletedProvider = Provider<bool>((ref) {
     orElse: () => false,
   );
 });
+
+/// Prompt answers of someone else — a suggested candidate, a match.
+///
+/// Separate from [currentProfileProvider] because the surfaces that need
+/// them (the matched profile, built from the fixed-column
+/// `get_matched_profile` RPC) do not carry a full [UserProfile]. AutoDispose
+/// so a profile screen fetches once and frees on pop.
+final peerPromptsProvider =
+    FutureProvider.autoDispose.family<List<PromptAnswer>, String>(
+  (ref, userId) => ref.watch(profileRepositoryProvider).fetchPrompts(userId),
+);
