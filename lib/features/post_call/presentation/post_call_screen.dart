@@ -29,6 +29,7 @@ import '../../profile_setup/data/profile_repository.dart';
 import '../../profile_setup/domain/user_profile.dart';
 import '../../profile_setup/presentation/providers/profile_provider.dart';
 import '../../profile_setup/presentation/widgets/blurred_avatar.dart';
+import '../../settings/presentation/widgets/destructive_dialog.dart';
 import '../../safety/presentation/report_sheet.dart';
 import '../data/reveal_repository.dart';
 
@@ -75,6 +76,12 @@ class _PostCallScreenState extends ConsumerState<PostCallScreen> {
   static const _photoLoadTimeout = Duration(seconds: 10);
 
   _Stage _stage = _Stage.decide;
+
+  /// How many times the user has asked for another waiting window. Bounded
+  /// so the screen cannot become an infinite hold: past [_maxRearms] the
+  /// only remaining choices are to come back later or to decline.
+  int _waitRearmCount = 0;
+  static const _maxRearms = 3;
   Uint8List? _peerPhotoBytes;
   // True while the peer-photo fetch is in flight. Flips false once the
   // fetch resolves (success, null, error or timeout) so the reveal card
@@ -358,11 +365,46 @@ class _PostCallScreenState extends ConsumerState<PostCallScreen> {
     });
   }
 
-  /// "Continuer à attendre" — give the peer another full window.
+  /// "Continuer à attendre" — give the peer another full window, up to
+  /// [_maxRearms] times.
   void _keepWaiting() {
-    _log.info('User chose to keep waiting for the reveal');
+    if (_waitRearmCount >= _maxRearms) return;
+    _waitRearmCount++;
+    _log.info('Keep waiting ($_waitRearmCount/$_maxRearms)');
     setState(() => _revealTimedOut = false);
     _startRevealTimeout();
+  }
+
+  /// Leaves the screen WITHOUT declining — the difference that matters.
+  ///
+  /// The user's `reveals` row stays at `revealed: true`, so the pair is
+  /// still possible if the peer decides later. Until then the only exit
+  /// offered besides waiting was "Passer", which writes
+  /// `revealed: false` — an irreversible refusal presented as a way off a
+  /// screen. People leave because they are done looking at a spinner, not
+  /// because they said no.
+  ///
+  /// Note it does not promise a notification: push is UX plan point 6.
+  /// The copy says the answer is kept, which is exactly what happens.
+  void _comeBackLater() {
+    _log.info('User left the reveal wait without declining');
+    _revealTimeoutTimer?.cancel();
+    _revealSub?.cancel();
+    ref.read(activeMatchProvider.notifier).state = null;
+    _backHome();
+  }
+
+  /// Explicit, confirmed refusal. Irreversible, so it asks first.
+  Future<void> _declineExplicitly() async {
+    final l10n = AppLocalizations.of(context);
+    final confirmed = await showDestructiveConfirm(
+      context: context,
+      title: l10n.postCallDeclineConfirmTitle,
+      body: l10n.postCallDeclineConfirmBody,
+      confirmLabel: l10n.postCallDeclineConfirmAction,
+    );
+    if (!confirmed || !mounted) return;
+    _pass();
   }
 
   /// Starts the visible 15 s peer-match-decision countdown. Idempotent.
@@ -707,8 +749,10 @@ class _PostCallScreenState extends ConsumerState<PostCallScreen> {
       _Stage.decide => const _RevealingView(),
       _Stage.waiting => _WaitingView(
           timedOut: _revealTimedOut,
+          canKeepWaiting: _waitRearmCount < _maxRearms,
           onKeepWaiting: _keepWaiting,
-          onGiveUp: _pass,
+          onComeBackLater: _comeBackLater,
+          onDecline: _declineExplicitly,
         ),
       // Mutual reveal — BOTH peers revealed. Photo shown large-format with the
       // 15 s decision countdown + Match/Pass buttons.
@@ -1348,18 +1392,26 @@ class _PhotoLoadingSkeleton extends StatelessWidget {
 class _WaitingView extends StatelessWidget {
   const _WaitingView({
     required this.timedOut,
+    required this.canKeepWaiting,
     required this.onKeepWaiting,
-    required this.onGiveUp,
+    required this.onComeBackLater,
+    required this.onDecline,
   });
 
   /// True once the reveal wait has exceeded its timeout — surfaces an
   /// explicit way out instead of an endless spinner.
   final bool timedOut;
+
+  /// False once the user has used up their waiting windows.
+  final bool canKeepWaiting;
+
   final VoidCallback onKeepWaiting;
-  final VoidCallback onGiveUp;
+  final VoidCallback onComeBackLater;
+  final VoidCallback onDecline;
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return Center(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
@@ -1376,33 +1428,50 @@ class _WaitingView extends StatelessWidget {
             ),
             const SizedBox(height: AppSpacing.lg),
             Text(
-              'Votre date réfléchit…',
+              l10n.postCallWaitingTitle,
               textAlign: TextAlign.center,
-              style:
-                  AppTypography.body.copyWith(color: AppColors.textSecondary),
+              style: AppTypography.body.copyWith(color: AppColors.ink2),
             ),
             if (timedOut) ...[
               const SizedBox(height: AppSpacing.sm),
               Text(
-                'Cette personne n\'a pas encore répondu.',
+                l10n.postCallWaitingNoAnswer,
                 textAlign: TextAlign.center,
-                style: AppTypography.caption.copyWith(
-                  color: AppColors.textTertiary,
-                ),
+                style: AppTypography.caption,
               ),
               const SizedBox(height: AppSpacing.lg),
+              // Three separate intentions, where there used to be two
+              // buttons covering three meanings — and where "leave" was
+              // wired to the irreversible one.
+              if (canKeepWaiting) ...[
+                AppButton(
+                  label: l10n.postCallKeepWaiting,
+                  icon: Icons.hourglass_bottom_rounded,
+                  size: AppButtonSize.large,
+                  onPressed: onKeepWaiting,
+                ),
+                const SizedBox(height: AppSpacing.sm),
+              ],
               AppButton(
-                label: 'Continuer à attendre',
-                icon: Icons.hourglass_bottom_rounded,
+                label: l10n.postCallComeBackLater,
+                variant: canKeepWaiting
+                    ? AppButtonVariant.secondary
+                    : AppButtonVariant.primary,
                 size: AppButtonSize.large,
-                onPressed: onKeepWaiting,
+                onPressed: onComeBackLater,
+              ),
+              const SizedBox(height: AppSpacing.xs),
+              Text(
+                l10n.postCallComeBackLaterHint,
+                textAlign: TextAlign.center,
+                style: AppTypography.caption,
               ),
               const SizedBox(height: AppSpacing.sm),
               AppButton(
-                label: 'Passer',
-                variant: AppButtonVariant.secondary,
+                label: l10n.postCallDecline,
+                variant: AppButtonVariant.ghost,
                 size: AppButtonSize.large,
-                onPressed: onGiveUp,
+                onPressed: onDecline,
               ),
             ],
           ],
