@@ -1,6 +1,4 @@
-import 'dart:ui';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -9,7 +7,6 @@ import '../../core/notifications/notification_scope.dart';
 import '../../features/messaging/presentation/providers/messaging_providers.dart';
 import '../../l10n/app_localizations.dart';
 import '../theme/app_colors.dart';
-import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
 import 'active_tab.dart';
 
@@ -43,26 +40,27 @@ class MainShell extends ConsumerWidget {
         notifier.state = navigationShell.currentIndex;
       }
     });
-    // Sober, premium Material glyphs — no emoji, so nothing renders as a
-    // colored "cartoon" icon. Tinted white to match the home avatar; the
-    // Discover heart keeps a rose accent. Accessible names via Semantics.
+    // Sober Material glyphs — no emoji, so nothing renders as a coloured
+    // "cartoon" icon. Inactive tabs sit on ink3, the active one on
+    // bordeaux; the white tints these carried were invisible the moment
+    // the bar stopped being dark glass. Accessible names via Semantics.
     final tabs = <_NavItem>[
       _NavItem(
         label: l10n.navHome,
         icon: Icons.home_rounded,
-        tint: Colors.white,
+        tint: AppColors.ink3,
       ),
       _NavItem(
         label: l10n.navDiscover,
         icon: Icons.favorite_rounded,
-        tint: AppColors.bordeaux,
+        tint: AppColors.ink3,
       ),
       // Messages — reached only after a confirmed mutual match, so we
       // place it right next to Discover (the pre-match surface).
       _NavItem(
         label: l10n.navMessages,
         icon: Icons.chat_bubble_rounded,
-        tint: Colors.white,
+        tint: AppColors.ink3,
         // Live unread badge. 0 = no badge, 1-9 = number, 10+ = "9+".
         badge: ref.watch(unreadMessagesCountProvider).maybeWhen(
               data: (n) => n,
@@ -74,13 +72,15 @@ class MainShell extends ConsumerWidget {
       _NavItem(
         label: l10n.navProfile,
         icon: Icons.person_rounded,
-        tint: Colors.white,
+        tint: AppColors.ink3,
       ),
     ];
 
     return Scaffold(
-      backgroundColor: AppColors.background,
-      extendBody: true,
+      backgroundColor: AppColors.ivory,
+      // The bar is an attached surface now, not a floating pill, so the
+      // body must stop above it instead of scrolling underneath.
+      extendBody: false,
       // Listens to inboxProvider — fires sound + haptic + snackbar on
       // fresh incoming messages while the app is foreground. No-op
       // until the user is signed in (inboxProvider returns []).
@@ -131,40 +131,31 @@ class _GlassNavBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      top: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(
-          AppSpacing.lg,
-          0,
-          AppSpacing.lg,
-          AppSpacing.sm,
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(28),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 22, sigmaY: 22),
-            child: Container(
-              height: 68,
-              decoration: BoxDecoration(
-                color: AppColors.surface.withValues(alpha: 0.85),
-                borderRadius: BorderRadius.circular(28),
-                border: Border.all(color: AppColors.hairline),
-              ),
-              child: Row(
-                children: List.generate(items.length, (i) {
-                  final item = items[i];
-                  final selected = i == currentIndex;
-                  return Expanded(
-                    child: _NavButton(
-                      item: item,
-                      selected: selected,
-                      onTap: () => onTap(i),
-                    ),
-                  );
-                }),
-              ),
-            ),
+    // Attached ivory bar with a hairline on top — the same "filets plutôt
+    // qu'ombres" rule as everywhere else. It used to be a floating glass
+    // pill with a 22 px backdrop blur, which cost a saveLayer on every
+    // frame of every scroll and clipped the last card of each list.
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        color: AppColors.ivory,
+        border: Border(top: BorderSide(color: AppColors.line)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: SizedBox(
+          height: 60,
+          child: Row(
+            children: List.generate(items.length, (i) {
+              final item = items[i];
+              final selected = i == currentIndex;
+              return Expanded(
+                child: _NavButton(
+                  item: item,
+                  selected: selected,
+                  onTap: () => onTap(i),
+                ),
+              );
+            }),
           ),
         ),
       ),
@@ -185,9 +176,9 @@ class _NavButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Active: a luminous brand-gradient pill with a soft pink glow.
-    // Inactive: no pill, just the icon dimmed down so it stays visible
-    // but clearly secondary.
+    // Active tab = bordeaux glyph + label. No filled pill: the nav is not
+    // where the screen's one filled element belongs.
+    final color = selected ? AppColors.bordeaux : item.tint;
     return Semantics(
       label: item.label,
       button: true,
@@ -197,32 +188,26 @@ class _NavButton extends StatelessWidget {
         color: Colors.transparent,
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(28),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 220),
-            curve: Curves.easeOut,
-            margin: const EdgeInsets.all(6),
-            alignment: Alignment.center,
-            decoration: selected
-                ? BoxDecoration(
-                    gradient: AppColors.signatureGradient,
-                    borderRadius: BorderRadius.circular(22),
-                  )
-                : null,
-            child: AnimatedScale(
-              duration: const Duration(milliseconds: 220),
-              curve: Curves.easeOutBack,
-              scale: selected ? 1.18 : 1.0,
-              child: AnimatedOpacity(
-                duration: const Duration(milliseconds: 220),
-                opacity: selected ? 1.0 : 0.45,
-                child: _IconWithBadge(
-                  icon: item.icon,
-                  color: selected ? Colors.white : item.tint,
-                  badge: item.badge,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _IconWithBadge(
+                icon: item.icon,
+                color: color,
+                badge: item.badge,
+              ),
+              const SizedBox(height: 3),
+              Text(
+                item.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTypography.caption.copyWith(
+                  fontSize: 10,
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                  color: color,
                 ),
               ),
-            ),
+            ],
           ),
         ),
       ),

@@ -48,7 +48,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     return AppScaffold(
       body: ListView(
         controller: tabScrollController,
-        padding: const EdgeInsets.only(bottom: 120),
+        padding: const EdgeInsets.only(bottom: AppSpacing.xl),
         physics: const BouncingScrollPhysics(),
         children: [
           const SizedBox(height: AppSpacing.md),
