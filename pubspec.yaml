@@ -120,7 +120,9 @@ flutter:
 
   assets:
     - .env
-    - assets/logo/
+    # assets/logo/ is no longer bundled: nothing in lib/ loads it since the
+    # wordmark dropped the icon tile. The file stays on disk as the master
+    # flutter_launcher_icons builds the iOS/Android icon sets from.
 
   # Fonts are loaded via google_fonts at runtime — no bundled assets needed.
 
