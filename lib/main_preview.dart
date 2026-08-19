@@ -19,6 +19,7 @@
 
 import 'dart:async';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -31,13 +32,16 @@ import 'features/discover/domain/suggestion_status.dart';
 import 'features/discover/domain/weekly_suggestion.dart';
 import 'features/discover/presentation/widgets/match_card.dart';
 import 'features/discover/presentation/widgets/suggestion_card.dart';
+import 'features/call/presentation/widgets/prompt_lifeline.dart';
 import 'features/profile_setup/domain/enums.dart' as domain;
 import 'features/profile_setup/domain/interest.dart';
 import 'features/profile_setup/domain/prompt.dart';
 import 'features/profile_setup/domain/prompt_answer.dart';
 import 'features/profile_setup/domain/user_profile.dart';
+import 'features/profile_setup/presentation/providers/profile_provider.dart';
 import 'features/profile_setup/presentation/widgets/prompt_card.dart';
 import 'l10n/app_localizations.dart';
+import 'shared/widgets/veil.dart';
 
 // ---------------------------------------------------------------------------
 // Mock — one plausible person, filled the way the rules allow: three answers
@@ -105,7 +109,19 @@ final _match = MutualMatch(
   matchedAt: DateTime(2026, 8, 19),
 );
 
-void main() => runApp(const ProviderScope(child: _PreviewApp()));
+void main() => runApp(
+      ProviderScope(
+        // The lifeline reads the peer's answers through `peerPromptsProvider`,
+        // which goes to the `get_matched_profile` RPC — server-gated, and the
+        // preview has no session. Overriding the provider is the only mock in
+        // the widget tree: the widget below is the production one, taking the
+        // production code path.
+        overrides: [
+          peerPromptsProvider.overrideWith((ref, userId) async => _prompts),
+        ],
+        child: const _PreviewApp(),
+      ),
+    );
 
 class _PreviewApp extends StatelessWidget {
   const _PreviewApp();
@@ -133,6 +149,7 @@ class _PreviewScreen extends StatefulWidget {
 
 class _PreviewScreenState extends State<_PreviewScreen> {
   final _controller = ScrollController();
+  final _lifelineKey = GlobalKey();
   Timer? _timer;
   int _step = 0;
 
@@ -141,7 +158,7 @@ class _PreviewScreenState extends State<_PreviewScreen> {
   /// that only ever shows its first screenful is a preview of one third of
   /// the work. Five seconds a stop is long enough to catch any position
   /// with a single `screenshot` call.
-  static const _stops = <double>[0, 700, 1400, 2100];
+  static const _stops = <double>[0, 620, 1240, 1860, 2480];
 
   @override
   void initState() {
@@ -154,7 +171,32 @@ class _PreviewScreenState extends State<_PreviewScreen> {
         duration: const Duration(milliseconds: 450),
         curve: Curves.easeOutCubic,
       );
+      Future.delayed(const Duration(milliseconds: 600), _openLifeline);
     });
+  }
+
+  /// Opens the lifeline the way a thumb would.
+  ///
+  /// `PromptLifeline` is collapsed by default and keeps that in private
+  /// state — correct, since nothing in the product opens it but a tap. So
+  /// the preview sends a real pointer event rather than growing the widget
+  /// an `initiallyOpen` flag that only a preview would ever pass. The
+  /// production file stays untouched and the state is reached through the
+  /// same path it is reached through on a call.
+  ///
+  /// `currentContext` is null whenever the lifeline is scrolled off and the
+  /// ListView has dropped it, so an off-screen tick lands nowhere instead of
+  /// landing on whatever is under those coordinates.
+  void _openLifeline() {
+    final box = _lifelineKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) return;
+    final centre = box.localToGlobal(box.size.center(Offset.zero));
+    const pointer = 7;
+    GestureBinding.instance
+      ..handlePointerEvent(
+          const PointerDownEvent(pointer: pointer).copyWith(position: centre))
+      ..handlePointerEvent(
+          const PointerUpEvent(pointer: pointer).copyWith(position: centre));
   }
 
   @override
@@ -188,6 +230,16 @@ class _PreviewScreenState extends State<_PreviewScreen> {
             const SizedBox(height: AppSpacing.xl),
 
             const _Section(
+              title: 'Pendant l’appel',
+              note: 'Le filet de secours, ouvert. Il vit au-dessus de la '
+                  'barre de contrôle, sur le flux vidéo flouté — jamais '
+                  'dedans, sous peine d’éteindre le flou.',
+            ),
+            _CallGround(child: PromptLifeline(key: _lifelineKey,
+                peerUserId: _candidate.userId)),
+            const SizedBox(height: AppSpacing.xl),
+
+            const _Section(
               title: 'Le profil',
               note: 'Les trois réponses, en entier. Une carte est un coup '
                   'd’œil, un profil est là où on lit quelqu’un.',
@@ -210,6 +262,45 @@ class _PreviewScreenState extends State<_PreviewScreen> {
             ),
             MatchCard(match: _match, onTap: () {}, onAvatarTap: () {}),
             const SizedBox(height: AppSpacing.xl),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The call's ground, so the panel is judged against what it sits on.
+///
+/// [Veil] at v4 is the same treatment the video feed gets — a warm dark
+/// field, never black. The control bar is not drawn: it is built inline in
+/// CallScreen, and a lookalike here would be a copy that drifts. What the
+/// spacing shows is that the panel clears the bottom of the frame.
+class _CallGround extends StatelessWidget {
+  const _CallGround({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: AppRadius.brXl,
+      child: SizedBox(
+        height: 300,
+        child: Stack(
+          children: [
+            const Positioned.fill(
+              child: Veil(
+                level: VeilLevel.v4,
+                shape: VeilShape.card,
+                child: VeilPlaceholder(icon: null),
+              ),
+            ),
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: AppSpacing.md,
+              child: child,
+            ),
           ],
         ),
       ),

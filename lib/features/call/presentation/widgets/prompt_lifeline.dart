@@ -42,7 +42,7 @@ class _PromptLifelineState extends ConsumerState<PromptLifeline> {
     final l10n = AppLocalizations.of(context);
     final prompts =
         ref.watch(peerPromptsProvider(widget.peerUserId)).asData?.value ??
-            const <PromptAnswer>[];
+        const <PromptAnswer>[];
     if (prompts.isEmpty) return const SizedBox.shrink();
 
     return Padding(
@@ -162,35 +162,51 @@ class _Panel extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.xs),
           Flexible(
-            child: ListView.separated(
-              shrinkWrap: true,
-              itemCount: prompts.length,
-              separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.sm),
-              itemBuilder: (_, i) {
-                final p = prompts[i];
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      p.question.label(l10n).toUpperCase(),
-                      style: AppTypography.overline.copyWith(
-                        color: AppColors.paper.withValues(alpha: 0.55),
-                        fontSize: 9,
+            // The panel is capped at 220 so it can never crowd the control
+            // bar, which means three answers do not always fit — the list
+            // scrolls. Without a fade the last one is simply sliced, and a
+            // sliced sentence reads as a rendering fault rather than as
+            // "there is more below". This is a lull in a live call: nobody
+            // is going to test-scroll a panel to find out.
+            child: ShaderMask(
+              shaderCallback: (bounds) => const LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Colors.white, Colors.white, Colors.transparent],
+                stops: [0, 0.88, 1],
+              ).createShader(bounds),
+              blendMode: BlendMode.dstIn,
+              child: ListView.separated(
+                shrinkWrap: true,
+                itemCount: prompts.length,
+                separatorBuilder: (_, _) =>
+                    const SizedBox(height: AppSpacing.sm),
+                itemBuilder: (_, i) {
+                  final p = prompts[i];
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        p.question.label(l10n).toUpperCase(),
+                        style: AppTypography.overline.copyWith(
+                          color: AppColors.paper.withValues(alpha: 0.55),
+                          fontSize: 9,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      p.answer,
-                      style: AppTypography.h3.copyWith(
-                        fontSize: 15,
-                        color: AppColors.paper,
+                      const SizedBox(height: 2),
+                      Text(
+                        p.answer,
+                        style: AppTypography.h3.copyWith(
+                          fontSize: 15,
+                          color: AppColors.paper,
+                        ),
                       ),
-                    ),
-                  ],
-                );
-              },
+                    ],
+                  );
+                },
+              ),
             ),
           ),
         ],
