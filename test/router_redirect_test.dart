@@ -20,6 +20,8 @@ String? r({
   bool profileHasValue = true,
   bool profileComplete = true,
   bool splashMinElapsed = true,
+  bool hasActiveMatch = true,
+  bool Function(String)? canOpenConversation,
   String location = '/splash',
 }) {
   return decideRedirect(
@@ -31,6 +33,8 @@ String? r({
     profileHasValue: profileHasValue,
     profileComplete: profileComplete,
     splashMinElapsed: splashMinElapsed,
+    hasActiveMatch: hasActiveMatch,
+    canOpenConversation: canOpenConversation,
     location: location,
   );
 }
@@ -290,6 +294,85 @@ void main() {
 
     test('signed in + complete + on /messages → stay (null)', () {
       expect(r(location: '/messages'), isNull);
+    });
+  });
+
+  // -------------------------------------------------------------------
+  // Live-only surfaces and conversation membership (UX plan, point 13c)
+  // -------------------------------------------------------------------
+  //
+  // Before these, /call, /post-call and /messages/:id were reachable
+  // cold — a stale deep link, a route restored after a kill, a typed URL
+  // on web — and built screens that waited forever on state that would
+  // never arrive.
+
+  group('decideRedirect — live-only surfaces', () {
+    test('/call without an active match goes home', () {
+      expect(
+        r(location: '/call', hasActiveMatch: false),
+        AppRoute.home.path,
+      );
+    });
+
+    test('/post-call without an active match goes home', () {
+      expect(
+        r(location: '/post-call', hasActiveMatch: false),
+        AppRoute.home.path,
+      );
+    });
+
+    test('with a match in flight both stay put', () {
+      expect(r(location: '/call', hasActiveMatch: true), isNull);
+      expect(r(location: '/post-call', hasActiveMatch: true), isNull);
+    });
+
+    test('the gate does not touch other routes', () {
+      expect(r(location: '/home', hasActiveMatch: false), isNull);
+      expect(r(location: '/discover', hasActiveMatch: false), isNull);
+    });
+
+    test('it never fires before the profile gates', () {
+      // A signed-out user on /call must land on auth, not home: the
+      // live-only gate sits after the auth and profile gates on purpose.
+      expect(
+        r(location: '/call', signedIn: false, hasActiveMatch: false),
+        AppRoute.authLanding.path,
+      );
+    });
+  });
+
+  group('decideRedirect — conversation membership', () {
+    test('a conversation the user is not in bounces to the inbox', () {
+      expect(
+        r(
+          location: '/messages/other-conv',
+          canOpenConversation: (id) => id == 'mine',
+        ),
+        AppRoute.messages.path,
+      );
+    });
+
+    test('a conversation the user is in opens', () {
+      expect(
+        r(
+          location: '/messages/mine',
+          canOpenConversation: (id) => id == 'mine',
+        ),
+        isNull,
+      );
+    });
+
+    test('an unknown inbox lets it through rather than bouncing', () {
+      // The inbox is still loading: bouncing here would throw the user out
+      // of a chat that is merely slow.
+      expect(r(location: '/messages/mine'), isNull);
+    });
+
+    test('the inbox list itself is never gated', () {
+      expect(
+        r(location: '/messages', canOpenConversation: (_) => false),
+        isNull,
+      );
     });
   });
 }

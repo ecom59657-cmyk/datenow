@@ -363,6 +363,8 @@
   "unmatchConfirmAction": "Unmatch",
   "unmatchedSnack": "You are no longer matched",
   "unmatchFailedSnack": "Couldn't do that right now. Try again later.",
+  "routeNotFoundTitle": "Page not found",
+  "routeNotFoundBody": "This link doesn't lead anywhere. Back home?",
   "postCallTitle": "Your date is over 🎉",
   "postCallSubtitle": "Now you've had a real conversation, here's their photo.",
   "postCallReveal": "Reveal photo",

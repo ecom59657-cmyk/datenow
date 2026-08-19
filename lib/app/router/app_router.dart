@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -12,7 +12,16 @@ import '../../features/auth/presentation/screens/sign_up_screen.dart';
 import '../../features/auth/presentation/screens/email_otp_screen.dart';
 import '../../features/call/presentation/call_interrupted_screen.dart';
 import '../../features/call/presentation/call_screen.dart';
+import '../../core/utils/logger.dart';
+import '../../l10n/app_localizations.dart';
+import '../../shared/widgets/app_button.dart';
+import '../../shared/widgets/app_scaffold.dart';
+import '../theme/app_colors.dart';
+import '../theme/app_spacing.dart';
+import '../theme/app_typography.dart';
 import '../../features/discover/presentation/discover_screen.dart';
+import '../../features/messaging/presentation/providers/messaging_providers.dart';
+import '../../features/matching/presentation/providers/active_match_provider.dart';
 import '../../features/home/presentation/home_screen.dart';
 import '../../features/identity/presentation/identity_verification_screen.dart';
 import '../../features/matching/presentation/matched_profile_screen.dart';
@@ -75,6 +84,10 @@ final routerProvider = Provider<GoRouter>((ref) {
     initialLocation: AppRoute.splash.path,
     refreshListenable: notifier,
     redirect: notifier.redirect,
+    // An unknown path used to land on go_router's raw error page — English,
+    // unstyled, with a stack trace and no way out. Any deep link that
+    // outlives a route rename reaches this.
+    errorBuilder: (context, state) => _RouteNotFound(location: state.uri.toString()),
     routes: [
       GoRoute(
         path: AppRoute.splash.path,
@@ -327,9 +340,25 @@ class _RouterNotifier extends ChangeNotifier {
     _ref.listen(currentProfileProvider, (_, _) => notifyListeners());
     // Re-run the redirect when the splash min-duration floor elapses.
     _ref.listen(splashGateProvider, (_, _) => notifyListeners());
+    // Gates 7 and 8 read these. Without a listen the redirect would not
+    // re-run when they change — the user would stay bounced off a
+    // conversation that has just loaded, or stuck on /call after the match
+    // was cleared. Same class of bug as the cold-start one
+    // router_redirect_test.dart guards against.
+    _ref.listen(activeMatchProvider, (_, _) => notifyListeners());
+    _ref.listen(inboxProvider, (_, _) => notifyListeners());
   }
 
   final Ref _ref;
+
+  /// `null` inbox (still loading, or errored) means "don't know" — gate 8
+  /// lets those through rather than bouncing a user off a chat that is
+  /// merely slow.
+  bool _canOpenConversation(String conversationId) {
+    final inbox = _ref.read(inboxProvider).valueOrNull;
+    if (inbox == null) return true;
+    return inbox.any((c) => c.id == conversationId);
+  }
 
   String? redirect(BuildContext context, GoRouterState state) {
     final auth = _ref.read(authStateProvider);
@@ -346,6 +375,8 @@ class _RouterNotifier extends ChangeNotifier {
       profileHasValue: profile.hasValue,
       profileComplete: profile.value?.isComplete ?? false,
       splashMinElapsed: splashMinElapsed,
+      hasActiveMatch: _ref.read(activeMatchProvider) != null,
+      canOpenConversation: _canOpenConversation,
       location: state.matchedLocation,
     );
   }
@@ -392,6 +423,15 @@ String? decideRedirect({
   // `true` so the historic call sites (and the pure-function tests) keep
   // their exact behaviour — only the live router passes the real value.
   bool splashMinElapsed = true,
+  // Live-only surfaces: /call and /post-call only mean something with a
+  // match in flight. Passed in rather than read from a provider so this
+  // stays a pure function the tests can drive without mounting anything.
+  // Defaults keep every existing call site behaving exactly as before.
+  bool hasActiveMatch = true,
+  // Whether the user participates in the conversation they are opening.
+  // `null` = unknown (inbox not loaded yet) → let it through rather than
+  // bounce someone off a chat that is merely still loading.
+  bool Function(String conversationId)? canOpenConversation,
 }) {
   final isOnSplash = location == AppRoute.splash.path;
   final isOnOnboarding = location == AppRoute.onboarding.path;
@@ -452,5 +492,76 @@ String? decideRedirect({
     return AppRoute.home.path;
   }
 
+  // 7. Live-only surfaces. /call and /post-call are meaningless without a
+  //    match in flight: reaching them cold (a stale deep link, a restored
+  //    route after a kill, a hand-typed URL on web) built a screen that
+  //    waits forever on state that will never arrive.
+  if (!hasActiveMatch &&
+      (location == AppRoute.call.path ||
+          location == AppRoute.postCall.path)) {
+    return AppRoute.home.path;
+  }
+
+  // 8. A conversation is only openable by a participant. RLS already
+  //    refuses the rows server-side, so this is not the security boundary
+  //    — it just spares the user an empty thread and a log full of denied
+  //    reads. Unknown (inbox still loading) is treated as allowed.
+  if (location.startsWith('/messages/') && canOpenConversation != null) {
+    final id = location.substring('/messages/'.length);
+    if (id.isNotEmpty && !canOpenConversation(id)) {
+      return AppRoute.messages.path;
+    }
+  }
+
   return null;
+}
+
+/// Shown for any path the router does not know. Deliberately plain: one
+/// sentence and one way out.
+class _RouteNotFound extends StatelessWidget {
+  const _RouteNotFound({required this.location});
+
+  final String location;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    const AppLogger('Router').warn('no route for "$location"');
+    return AppScaffold(
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.xl),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.explore_off_rounded,
+                size: 32,
+                color: AppColors.ink3,
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                l10n.routeNotFoundTitle,
+                textAlign: TextAlign.center,
+                style: AppTypography.h3,
+              ),
+              const SizedBox(height: AppSpacing.xs),
+              Text(
+                l10n.routeNotFoundBody,
+                textAlign: TextAlign.center,
+                style: AppTypography.body,
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              AppButton(
+                label: l10n.postCallBackHome,
+                icon: Icons.home_rounded,
+                expanded: false,
+                onPressed: () => context.goNamed(AppRoute.home.name),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
