@@ -472,7 +472,7 @@
   "settingsDangerSection": "Account",
 
   "settingsSecurity": "Security",
-  "settingsSecuritySubtitle": "Password, two-factor, sessions",
+  "settingsSecuritySubtitle": "Linked accounts, two-factor, sessions",
   "settingsBlocked": "Blocked accounts",
   "settingsBlockedSubtitle": "People you've blocked",
   "settingsSubscription": "Subscription",

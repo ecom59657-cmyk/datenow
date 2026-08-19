@@ -53,8 +53,12 @@ class AppButton extends StatelessWidget {
       label: label,
       icon: icon,
       isLoading: isLoading,
+      // A disabled primary used to be white text over bordeaux at 50 %
+      // opacity — pale pink under white, which fails contrast and reads
+      // as "loading" rather than "not yet available".
       color: switch (variant) {
-        AppButtonVariant.primary => Colors.white,
+        AppButtonVariant.primary =>
+          _enabled ? Colors.white : AppColors.ink3,
         AppButtonVariant.secondary => AppColors.ink,
         AppButtonVariant.ghost => AppColors.bordeaux,
       },
@@ -115,14 +119,13 @@ class _PrimaryButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Opacity(
-      opacity: enabled ? 1 : 0.5,
-      child: DecoratedBox(
-        decoration: const BoxDecoration(
+    return DecoratedBox(
+        decoration: BoxDecoration(
           // Flat bordeaux, not the signature gradient: the gradient is for
           // large surfaces (hero cards, the call ground), and a shadow
-          // under every CTA is what made the old look heavy.
-          color: AppColors.bordeaux,
+          // under every CTA is what made the old look heavy. Disabled is
+          // a sand fill, not a faded bordeaux.
+          color: enabled ? AppColors.bordeaux : AppColors.sand,
           borderRadius: AppRadius.brPill,
         ),
         child: Material(
@@ -139,7 +142,6 @@ class _PrimaryButton extends StatelessWidget {
             ),
           ),
         ),
-      ),
     );
   }
 }

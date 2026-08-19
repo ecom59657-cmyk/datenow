@@ -223,9 +223,15 @@ class _ProfileAvatar extends ConsumerWidget {
       height: size,
       decoration: const BoxDecoration(
         shape: BoxShape.circle,
-        gradient: AppColors.signatureGradient,
+        // Same warm placeholder as the Home avatar — the two sat side by
+        // side in the same session showing two different fills.
+        gradient: AppColors.avatarGradient,
       ),
-      child: const Icon(Icons.person_rounded, color: Colors.white, size: 32),
+      child: const Icon(
+        Icons.person_rounded,
+        color: AppColors.paper,
+        size: 32,
+      ),
     );
   }
 }
@@ -315,10 +321,12 @@ class _IdentityBanner extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(AppSpacing.md),
           decoration: BoxDecoration(
-            color: AppColors.warning.withValues(alpha: 0.10),
+            // amberTint, not a 10 % wash of amber: the wash came out
+            // as a muddy khaki on the ivory ground.
+            color: AppColors.amberTint,
             borderRadius: AppRadius.brLg,
             border: Border.all(
-              color: AppColors.warning.withValues(alpha: 0.35),
+              color: AppColors.amber.withValues(alpha: 0.35),
             ),
           ),
           child: Row(

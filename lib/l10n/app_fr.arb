@@ -403,7 +403,7 @@
   "settingsDangerSection": "Compte",
 
   "settingsSecurity": "Sécurité",
-  "settingsSecuritySubtitle": "Mot de passe, double authentification, sessions",
+  "settingsSecuritySubtitle": "Comptes liés, double authentification, sessions",
   "settingsBlocked": "Comptes bloqués",
   "settingsBlockedSubtitle": "Personnes que vous avez bloquées",
   "settingsSubscription": "Abonnement",

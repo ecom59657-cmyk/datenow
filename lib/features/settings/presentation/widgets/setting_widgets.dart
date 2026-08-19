@@ -80,25 +80,22 @@ class SettingTile extends StatelessWidget {
     final color = danger ? AppColors.error : AppColors.textPrimary;
     return ListTile(
       onTap: onTap,
+      // Tint chip with a bordeaux glyph, like every other icon chip in the
+      // app. On paper the old recipe — white fill, hairline border, grey
+      // glyph — rendered as an empty box: the chip was white on white and
+      // the icon nearly vanished.
       leading: Container(
         width: 36,
         height: 36,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: danger
-              ? AppColors.error.withValues(alpha: 0.12)
-              : AppColors.surfaceElevated,
+          color: danger ? AppColors.errorTint : AppColors.tint,
           borderRadius: AppRadius.brSm,
-          border: Border.all(
-            color: danger
-                ? AppColors.error.withValues(alpha: 0.3)
-                : AppColors.hairlineSoft,
-          ),
         ),
         child: Icon(
           icon,
           size: 18,
-          color: danger ? AppColors.error : AppColors.textSecondary,
+          color: danger ? AppColors.error : AppColors.bordeaux,
         ),
       ),
       title: Text(
@@ -111,9 +108,7 @@ class SettingTile extends StatelessWidget {
               padding: const EdgeInsets.only(top: 2),
               child: Text(
                 subtitle!,
-                style: AppTypography.caption.copyWith(
-                  color: AppColors.textTertiary,
-                ),
+                style: AppTypography.caption,
               ),
             ),
       trailing: trailing ??
