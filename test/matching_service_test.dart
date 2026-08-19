@@ -96,6 +96,56 @@ void main() {
     });
   });
 
+  group('MatchingService intention gate', () {
+    UserProfile withIntentions(String id, Gender g, Set<Intention> i) =>
+        _profile(
+          id: id,
+          gender: g,
+          seekingGenders: {g == Gender.male ? Gender.female : Gender.male},
+          intentions: i,
+        );
+
+    test('exclusively serious never meets exclusively casual', () {
+      final a = withIntentions('a', Gender.male, {Intention.serious});
+      final b = withIntentions('b', Gender.female, {Intention.casual});
+      expect(service.calculateCompatibility(a, b, distanceKm: 5), isNull);
+      // Symmetric: the gate must not depend on argument order.
+      expect(service.calculateCompatibility(b, a, distanceKm: 5), isNull);
+    });
+
+    test('an overlap anywhere keeps the pair eligible', () {
+      final a = withIntentions(
+        'a',
+        Gender.male,
+        {Intention.serious, Intention.feeling},
+      );
+      final b = withIntentions(
+        'b',
+        Gender.female,
+        {Intention.casual, Intention.feeling},
+      );
+      expect(service.calculateCompatibility(a, b, distanceKm: 5), isNotNull);
+    });
+
+    test('an undeclared side is never blocked', () {
+      final a = withIntentions('a', Gender.male, {Intention.serious});
+      final b = withIntentions('b', Gender.female, const {});
+      expect(service.calculateCompatibility(a, b, distanceKm: 5), isNotNull);
+    });
+
+    test('only the serious/casual pair clashes, not talk or feeling', () {
+      final a = withIntentions('a', Gender.male, {Intention.serious});
+      for (final other in [Intention.talk, Intention.feeling]) {
+        final b = withIntentions('b', Gender.female, {other});
+        expect(
+          service.calculateCompatibility(a, b, distanceKm: 5),
+          isNotNull,
+          reason: 'serious vs ${other.name} must stay possible',
+        );
+      }
+    });
+  });
+
   group('MatchingService scoring', () {
     test('two near-identical profiles score very high', () {
       final shared = {Gender.female};
@@ -122,7 +172,10 @@ void main() {
         gender: Gender.male,
         seekingGenders: {Gender.female},
         interests: {Interest.music, Interest.travel, Interest.foodie},
-        intentions: {Intention.serious},
+        // Overlapping intentions: this case is about the soft weighting,
+        // not the clash gate — `{serious}` vs `{casual}` is now rejected
+        // outright and is covered on its own below.
+        intentions: {Intention.serious, Intention.feeling},
         availability: Availability.immediate,
       );
       final b = _profile(
@@ -130,12 +183,47 @@ void main() {
         gender: Gender.female,
         seekingGenders: {Gender.male},
         interests: {Interest.fitness, Interest.dance, Interest.music},
-        intentions: {Intention.casual},
+        intentions: {Intention.casual, Intention.feeling},
         availability: Availability.sometime,
       );
       final score = service.calculateCompatibility(a, b, distanceKm: 30);
       expect(score, isNotNull);
-      expect(score!.percentage, inInclusiveRange(30, 79));
+      expect(score!.percentage, inInclusiveRange(20, 74));
+      expect(score.band, isNot(MatchBand.veryHigh));
+    });
+
+    test('the axes still sum to 100 — no weight lost with orientation', () {
+      // Maximal on every axis: identical intentions and interests, both
+      // immediate, distance 0, and ages sitting exactly at the centre of
+      // the 22-36 window (29) — `_ageFit` rewards the centre, so any other
+      // age costs a point or two and would hide a weight that went
+      // missing. If the remaining weights no longer total 100, this drifts
+      // off the ceiling.
+      final a = _profile(
+        id: 'a',
+        age: 29,
+        gender: Gender.male,
+        seekingGenders: {Gender.female},
+        interests: {Interest.music, Interest.travel},
+        intentions: {Intention.serious},
+        availability: Availability.immediate,
+      );
+      final b = _profile(
+        id: 'b',
+        age: 29,
+        gender: Gender.female,
+        seekingGenders: {Gender.male},
+        interests: {Interest.music, Interest.travel},
+        intentions: {Intention.serious},
+        availability: Availability.immediate,
+      );
+      final score = service.calculateCompatibility(a, b, distanceKm: 0);
+      expect(score, isNotNull);
+      expect(score!.percentage, 100);
+      // The orientation key is gone for good — a stale reader summing the
+      // breakdown must not find it.
+      expect(score.breakdown.containsKey('orientation'), isFalse);
+      expect(score.breakdown.keys, hasLength(5));
     });
 
     test('percentage is clamped to 0..100 and breakdown sums to it', () {

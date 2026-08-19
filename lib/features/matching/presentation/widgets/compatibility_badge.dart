@@ -8,6 +8,17 @@ import '../../domain/match_score.dart';
 
 /// Pill-shaped compatibility indicator. Shown in matching + post-call.
 /// Photo intentionally not displayed alongside this widget.
+///
+/// It shows the *band*, not the number. Twenty of the hundred points still
+/// rest on a distance we cannot measure — there is no geo backend yet, so
+/// the value comes from a random draw. "87 %" reads as a measurement; it
+/// isn't one, and the first user who compares two cards would catch it.
+/// A band is a claim the data can actually support.
+/// Flip to `true` once `profiles.location` is populated and the distance
+/// axis is real (UX plan, points 3b/3c). Until then the exact figure is
+/// not ours to display.
+const bool kShowExactCompatibility = false;
+
 class CompatibilityBadge extends StatelessWidget {
   const CompatibilityBadge({
     super.key,
@@ -31,7 +42,10 @@ class CompatibilityBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final color = _color;
-    final value = l10n.compatibilityValue(score.percentage);
+    final band = score.band.label(l10n);
+    final value = kShowExactCompatibility
+        ? l10n.compatibilityValue(score.percentage)
+        : band;
 
     // FittedBox + scaleDown lets the badge keep its intrinsic shape on wide
     // layouts but shrink gracefully on narrow ones (small iPhones, dense
@@ -54,7 +68,7 @@ class CompatibilityBadge extends StatelessWidget {
             Icon(Icons.bolt_rounded, color: color, size: compact ? 14 : 16),
             const SizedBox(width: 6),
             Text(
-              compact ? value : '$value · ${score.band.label(l10n)}',
+              compact || !kShowExactCompatibility ? value : '$value · $band',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               softWrap: false,

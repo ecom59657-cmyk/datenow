@@ -28,7 +28,12 @@ class WeeklySuggestionsService {
   static const _log = AppLogger('WeeklySuggest');
 
   /// Minimum compatibility score required for a candidate to be proposed.
-  static const int minCompatibility = 75;
+  /// Was 75 when every score carried the orientation axis's free 15
+  /// points. Dropping to 60 keeps the selectivity exactly where it was
+  /// rather than tightening it by stealth — 75 on an inflated score is 60
+  /// on a deflated one. Watch the `belowFloor=` log at real volume before
+  /// moving it again.
+  static const int minCompatibility = 60;
 
   /// Maximum number of suggestions kept for the week.
   static const int weeklySlots = 3;

@@ -6,6 +6,8 @@ import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/utils/profile_format.dart';
 import '../../../../l10n/app_localizations.dart';
+import '../../../matching/domain/match_score.dart';
+import '../../../matching/presentation/widgets/compatibility_badge.dart';
 import '../../../../shared/widgets/glass_card.dart';
 import '../../../profile/presentation/edit/providers/profile_photos_provider.dart';
 import '../../../profile_setup/domain/user_profile.dart';
@@ -89,7 +91,7 @@ class MatchCard extends ConsumerWidget {
                   softWrap: true,
                 ),
                 const SizedBox(height: 6),
-                _CompatibilityPill(percentage: match.compatibilityScore),
+                _CompatibilityPill(score: match.compatibilityScore),
               ],
             ),
           ),
@@ -209,10 +211,12 @@ String _firstInitial(String? firstName) {
 // already render "X % compatible" / "X% compatible").
 // ---------------------------------------------------------------------------
 
+/// Same rule as [CompatibilityBadge]: the band, not the number, for as
+/// long as a fifth of the score rests on a distance we cannot measure.
 class _CompatibilityPill extends StatelessWidget {
-  const _CompatibilityPill({required this.percentage});
+  const _CompatibilityPill({required this.score});
 
-  final int percentage;
+  final int score;
 
   @override
   Widget build(BuildContext context) {
@@ -237,7 +241,9 @@ class _CompatibilityPill extends StatelessWidget {
           ),
           const SizedBox(width: 5),
           Text(
-            l10n.compatibilityValue(percentage),
+            kShowExactCompatibility
+                ? l10n.compatibilityValue(score)
+                : MatchScore.bandFor(score).label(l10n),
             style: AppTypography.caption.copyWith(
               color: AppColors.bordeaux,
               fontWeight: FontWeight.w700,

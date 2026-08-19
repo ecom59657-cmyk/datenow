@@ -30,10 +30,20 @@ class MatchScore {
   /// "what made you compatible". Keys are intentionally stable strings.
   final Map<String, int> breakdown;
 
-  MatchBand get band {
-    if (percentage >= 90) return MatchBand.veryHigh;
-    if (percentage >= 70) return MatchBand.high;
-    if (percentage >= 50) return MatchBand.medium;
+  /// Thresholds were 90 / 70 / 50 when the orientation axis handed every
+  /// completed profile a free 15 points. Removing it deflates every score
+  /// by exactly that much, so the thresholds move with it — otherwise
+  /// "Très grande compatibilité" would become practically unreachable and
+  /// the bands would quietly all shift down one notch.
+  MatchBand get band => bandFor(percentage);
+
+  /// Same banding for callers that only carry the stored integer (a match
+  /// row, a suggestion row) and have no breakdown to build a [MatchScore]
+  /// from.
+  static MatchBand bandFor(int percentage) {
+    if (percentage >= 75) return MatchBand.veryHigh;
+    if (percentage >= 55) return MatchBand.high;
+    if (percentage >= 35) return MatchBand.medium;
     return MatchBand.low;
   }
 
