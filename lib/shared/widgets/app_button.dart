@@ -36,11 +36,21 @@ class AppButton extends StatelessWidget {
 
   bool get _enabled => onPressed != null && !isLoading;
 
+  /// A button carrying an icon and no label — the dismiss control on the
+  /// Discover card is the only one so far.
+  bool get _iconOnly => icon != null && label.trim().isEmpty;
+
   // Horizontal-only padding. Vertical centering is handled by the inner
   // Container's `alignment: center`, so adding vertical padding here only
   // ate into the content area and clipped the text on some devices.
-  EdgeInsets get _padding => const EdgeInsets.symmetric(
-        horizontal: AppSpacing.lg,
+  //
+  // An icon-only button does not reserve the breathing room a label needs:
+  // 24 pt a side inside the 52 pt square the Discover card gives it left
+  // 2 pt for an 18 pt glyph, and the RenderFlex overflowed by 24 px on
+  // every build. The label padding is what makes a pill read as a pill;
+  // with no label there is nothing to keep clear of.
+  EdgeInsets get _padding => EdgeInsets.symmetric(
+        horizontal: _iconOnly ? AppSpacing.sm : AppSpacing.lg,
       );
 
   // Comfortable tap targets that always fit the 16 pt button text plus its
@@ -267,10 +277,12 @@ class _ButtonContent extends StatelessWidget {
               valueColor: AlwaysStoppedAnimation(color),
             ),
           ),
-          const SizedBox(width: 8),
+          // The gap separates the glyph from the label. With no label it is
+          // 8 pt of nothing, pushing the glyph off the button's centre.
+          if (label.isNotEmpty) const SizedBox(width: 8),
         ] else if (icon != null) ...[
           Icon(icon, size: 18, color: color),
-          const SizedBox(width: 8),
+          if (label.isNotEmpty) const SizedBox(width: 8),
         ],
         // Flexible + ellipsis prevents long translations from clipping or
         // overflowing horizontally. Explicit text `height` keeps the
