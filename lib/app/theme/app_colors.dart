@@ -16,21 +16,26 @@ class AppColors {
   // Foundations
   // ---------------------------------------------------------------------
 
-  /// App background — warm off-white, never pure #FFF.
-  static const Color ivory = Color(0xFFFBF8F4);
+  /// App background — warm beige, never pure #FFF.
+  ///
+  /// Was #FBF8F4: off-white on paper, indistinguishable from white on a
+  /// phone at any brightness — 4/7/11 units from #FFF. The whole neutral
+  /// ladder below moved down with it, gap for gap, so cards still lift off
+  /// the ground by the same amount and sand fills still read as fills.
+  static const Color ivory = Color(0xFFF7F1E7);
 
   /// Cards and raised surfaces. Reads as elevated *because* it is whiter
   /// than [ivory] — that contrast replaces the old shadows.
   static const Color paper = Color(0xFFFFFFFF);
 
   /// Secondary blocks (muted rows, inactive chips, secondary buttons).
-  static const Color sand = Color(0xFFF2EBE1);
+  static const Color sand = Color(0xFFEEE4D4);
 
   /// Borders of active/selected sand surfaces.
-  static const Color sandDeep = Color(0xFFE7DCCE);
+  static const Color sandDeep = Color(0xFFE3D5C1);
 
   /// Hairlines and separators — the primary way surfaces are divided.
-  static const Color line = Color(0xFFE8DFD5);
+  static const Color line = Color(0xFFE4D8C8);
   static const Color lineSoft = Color(0xFFF0E9E0);
 
   // ---------------------------------------------------------------------
@@ -51,8 +56,12 @@ class AppColors {
   static const Color tint = Color(0xFFF5E8EA);
 
   /// Warm accent — prompt labels, editorial marks.
-  static const Color clay = Color(0xFF96604D);
-  static const Color clayTint = Color(0xFFF4E9E2);
+  /// Darkened from #96604D with the ground. It carries the prompt
+  /// overline at 10 px uppercase, which needs 4.5:1 — it was already short
+  /// of that on sand (4.35:1) before the ground moved, and would have gone
+  /// to 4.09:1. Now 4.78:1.
+  static const Color clay = Color(0xFF8A5643);
+  static const Color clayTint = Color(0xFFF0E2D5);
 
   /// The ONLY gradient in the app: bordeaux → bordeauxDeep, single 155°
   /// angle. Multicolour gradients are what made the old look generic.
