@@ -41,6 +41,30 @@ class _PromptSlotEditorState extends State<PromptSlotEditor> {
   late final TextEditingController _ctrl =
       TextEditingController(text: widget.answer?.answer ?? '');
 
+  /// The question being answered, held HERE and not derived from
+  /// [widget.answer].
+  ///
+  /// The parent only stores answers that have text — an empty one is not an
+  /// answer. So between picking a question and typing the first character
+  /// there is a state the parent cannot represent, and deriving the field's
+  /// visibility from the parent made that state invisible: you could choose
+  /// a question and then nothing happened, because the text field was
+  /// waiting for text that could never be entered.
+  late PromptQuestion? _question = widget.answer?.question;
+
+  @override
+  void didUpdateWidget(PromptSlotEditor old) {
+    super.didUpdateWidget(old);
+    // Follow the parent when it genuinely changes the slot (a save, a
+    // reload), but never let a null answer wipe a question the user just
+    // picked and has not typed into yet.
+    final incoming = widget.answer?.question;
+    if (incoming != null && incoming != _question) {
+      _question = incoming;
+      _ctrl.text = widget.answer?.answer ?? '';
+    }
+  }
+
   @override
   void dispose() {
     _ctrl.dispose();
@@ -87,20 +111,20 @@ class _PromptSlotEditorState extends State<PromptSlotEditor> {
     if (picked == null || !mounted) return;
     // Swapping the question keeps what was typed: the answer usually still
     // fits, and making someone retype it is the fastest way to lose them.
+    setState(() => _question = picked);
     widget.onChanged(picked, _ctrl.text);
-    setState(() {});
   }
 
   void _clear() {
     _ctrl.clear();
+    setState(() => _question = null);
     widget.onChanged(null, '');
-    setState(() {});
   }
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final question = widget.answer?.question;
+    final question = _question;
 
     return AppCard(
       padding: const EdgeInsets.all(AppSpacing.md),
