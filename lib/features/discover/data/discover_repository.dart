@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 
@@ -432,61 +433,311 @@ class _SupabaseMutualMatchesSource {
 }
 
 // ---------------------------------------------------------------------------
-// Supabase — stub kept honest with [UnimplementedError]
+// Supabase — weekly suggestions persisted in `public.weekly_suggestions`
 // ---------------------------------------------------------------------------
 
+/// Suggestions that survive a restart.
+///
+/// Until now the weekly batch lived in a `Map` in [MockDiscoverRepository]:
+/// killing the app regenerated three brand-new people, and the "never
+/// re-propose someone" rule only held for the lifetime of the process.
+/// Rows now go to `public.weekly_suggestions`, whose RLS policy
+/// (`suggestions_all_owner`) scopes every read and write to the owner.
+///
+/// Matches are NOT written here. `public.matches` is only ever created by
+/// the `create_match_if_mutual` SECURITY DEFINER RPC — a deliberate
+/// hardening (cf. `RevealRepository.createMatch`) that stops a tampered
+/// client from forging a match without both peers having voted. This class
+/// reads matches through [_SupabaseMutualMatchesSource], exactly as the
+/// provider already did, and [recordMutualMatch] stays a no-op.
 class SupabaseDiscoverRepository implements DiscoverRepository {
-  SupabaseDiscoverRepository(this._client);
+  SupabaseDiscoverRepository({
+    required sb.SupabaseClient client,
+    required WeeklySuggestionsService service,
+    required ProfileRepository profiles,
+    required MockCandidateFactory factory,
+  })  : _client = client,
+        _service = service,
+        _profiles = profiles,
+        _factory = factory,
+        _matches = _SupabaseMutualMatchesSource(
+          client: client,
+          profiles: profiles,
+        );
 
-  // ignore: unused_field
   final sb.SupabaseClient _client;
+  final WeeklySuggestionsService _service;
+  final ProfileRepository _profiles;
+
+  /// Still needed for the distance the scorer weighs. There is no geo
+  /// backend yet, so this is a synthetic value — see [_hydrate] for why it
+  /// is never persisted nor shown.
+  final MockCandidateFactory _factory;
+  final _SupabaseMutualMatchesSource _matches;
+
+  static const _log = AppLogger('SupaDiscover');
+  static const _table = 'weekly_suggestions';
+
+  /// `week_start_date` is a SQL DATE — send it as `YYYY-MM-DD`, never as a
+  /// full ISO timestamp, or the UNIQUE(user, peer, week) constraint stops
+  /// matching rows written by a client in another timezone.
+  @visibleForTesting
+  static String weekKey(DateTime weekStart) => _weekKey(weekStart);
+
+  static String _weekKey(DateTime weekStart) =>
+      weekStart.toUtc().toIso8601String().split('T').first;
+
+  static DateTime _currentWeekStart() =>
+      WeeklySuggestionsService.startOfWeek(DateTime.now().toUtc());
+
+  // -------------------------------------------------------------------
+  // Reads
+  // -------------------------------------------------------------------
 
   @override
   Stream<List<WeeklySuggestion>> watchSuggestions(String userId) {
-    // TODO(datenow): subscribe to a `suggestions` table filtered by
-    // `user_id = current_user() AND week_start_date = startOfWeek()`.
-    throw UnimplementedError('SupabaseDiscoverRepository.watchSuggestions');
+    // Realtime gives us the row set; each emission re-hydrates, because
+    // `weekly_suggestions` stores only the peer's id — the card needs the
+    // whole profile. Cardinality is 3, so the N+1 is irrelevant.
+    return _client
+        .from(_table)
+        .stream(primaryKey: ['id'])
+        .eq('user_id', userId)
+        .asyncMap((rows) => _hydrateAll(rows, userId));
   }
 
-  @override
-  Future<void> ensureWeeklyBatch(UserProfile self) {
-    // TODO(datenow): call a Postgres function `generate_weekly_suggestions`
-    // that runs the reciprocal-compatibility query server-side.
-    throw UnimplementedError('SupabaseDiscoverRepository.ensureWeeklyBatch');
+  Future<List<WeeklySuggestion>> _hydrateAll(
+    List<Map<String, dynamic>> rows,
+    String userId,
+  ) async {
+    final week = _weekKey(_currentWeekStart());
+    final visible = rows.where(
+      (r) => r['status'] != 'dismissed' && r['week_start_date'] == week,
+    );
+    final hydrated = await Future.wait(visible.map(_hydrate));
+    return hydrated.whereType<WeeklySuggestion>().toList(growable: false);
   }
 
-  @override
-  Future<void> dismissSuggestion(String suggestionId) {
-    throw UnimplementedError('SupabaseDiscoverRepository.dismissSuggestion');
-  }
-
-  @override
-  Future<void> markSuggestionCallStarted(String suggestionId) {
-    throw UnimplementedError(
-      'SupabaseDiscoverRepository.markSuggestionCallStarted',
+  Future<WeeklySuggestion?> _hydrate(Map<String, dynamic> row) async {
+    final peerId = row['suggested_user_id'] as String;
+    final peer = await _profiles.getProfile(peerId);
+    if (peer == null) {
+      _log.warn('peer $peerId missing — skipping suggestion ${row['id']}');
+      return null;
+    }
+    return WeeklySuggestion(
+      id: row['id'] as String,
+      userId: row['user_id'] as String,
+      suggestedUserId: peerId,
+      compatibilityScore: (row['compatibility_score'] as num).toInt(),
+      weekStartDate: DateTime.parse(row['week_start_date'] as String).toUtc(),
+      status: _statusFromWire(row['status'] as String?),
+      createdAt: DateTime.parse(row['created_at'] as String).toUtc(),
+      candidate: peer,
+      // The table has no distance column, and the only distance we can
+      // compute today is a random draw. Persisting it would freeze an
+      // invented figure in Postgres; recomputing it per emission would make
+      // the card flicker between numbers. So it stays 0 and the card hides
+      // the line — real distances arrive with the geo work (point 3b/3c).
+      distanceKm: 0,
     );
   }
 
   @override
-  Future<void> markSuggestionMatched(String suggestionId) {
-    throw UnimplementedError(
-      'SupabaseDiscoverRepository.markSuggestionMatched',
-    );
-  }
+  Stream<List<MutualMatch>> watchMatches(String userId) =>
+      _matches.watch(userId);
+
+  // -------------------------------------------------------------------
+  // Weekly batch
+  // -------------------------------------------------------------------
 
   @override
-  Stream<List<MutualMatch>> watchMatches(String userId) {
-    throw UnimplementedError('SupabaseDiscoverRepository.watchMatches');
+  Future<void> ensureWeeklyBatch(UserProfile self) async {
+    final weekStart = _currentWeekStart();
+    final week = _weekKey(weekStart);
+
+    final current = await _client
+        .from(_table)
+        .select('id')
+        .eq('user_id', self.userId)
+        .eq('week_start_date', week)
+        .neq('status', 'dismissed');
+
+    final missing = WeeklySuggestionsService.weeklySlots - current.length;
+    if (missing <= 0) {
+      _log.info('week $week already full (${current.length})');
+      return;
+    }
+
+    final excluded = await _exclusions(self.userId);
+    _log.info('week $week — ${current.length} kept, $missing to fill, '
+        '${excluded.length} peers excluded');
+
+    final pool = <({UserProfile candidate, int distanceKm})>[];
+    try {
+      final reals = await _profiles.fetchPotentialCandidates(
+        selfUserId: self.userId,
+      );
+      for (final c in reals) {
+        pool.add((candidate: c, distanceKm: _factory.distanceFor(self)));
+      }
+    } catch (e, st) {
+      _log.error('candidate fetch failed — no batch this round', e, st);
+      return;
+    }
+
+    if (pool.isEmpty) {
+      // Deliberately NOT falling back to the synthetic factory: a persisted
+      // suggestion pointing at a profile id that does not exist in
+      // `profiles` would violate the FK and, worse, put a fabricated person
+      // in the database.
+      _log.info('no real candidate available — nothing written');
+      return;
+    }
+
+    final ranked = _service.selectFor(
+      self: self,
+      pool: pool,
+      excludedUserIds: excluded,
+    );
+    if (ranked.isEmpty) {
+      _log.info('pool exhausted by exclusions — nothing written');
+      return;
+    }
+
+    final rows = ranked
+        .take(missing)
+        .map((r) => {
+              'user_id': self.userId,
+              'suggested_user_id': r.candidate.userId,
+              'compatibility_score': r.score.percentage,
+              'week_start_date': week,
+              'status': 'pending',
+            })
+        .toList(growable: false);
+
+    try {
+      // onConflict on the table's own UNIQUE: two devices generating the
+      // batch at the same moment converge instead of raising.
+      await _client.from(_table).upsert(
+            rows,
+            onConflict: 'user_id,suggested_user_id,week_start_date',
+          );
+      _log.info('wrote ${rows.length} suggestion(s) for week $week');
+    } catch (e, st) {
+      _log.error('upsert failed for week $week', e, st);
+    }
   }
 
+  /// Everyone who must never be proposed: already suggested in any week,
+  /// already matched, blocked either way, and already dated.
+  Future<Set<String>> _exclusions(String selfUserId) async {
+    final excluded = <String>{selfUserId};
+
+    Future<void> collect(String label, Future<void> Function() f) async {
+      try {
+        await f();
+      } catch (e, st) {
+        // Best effort: a failing exclusion source must not stop the batch,
+        // but it MUST be visible — silently dropping one is how a peer gets
+        // re-proposed after being blocked.
+        _log.error('exclusion source "$label" failed', e, st);
+      }
+    }
+
+    await collect('suggestions', () async {
+      final rows = await _client
+          .from(_table)
+          .select('suggested_user_id')
+          .eq('user_id', selfUserId);
+      excluded.addAll(rows.map((r) => r['suggested_user_id'] as String));
+    });
+
+    await collect('matches', () async {
+      final rows = await _client
+          .from('matches')
+          .select('user_a_id, user_b_id')
+          .or('user_a_id.eq.$selfUserId,user_b_id.eq.$selfUserId');
+      for (final r in rows) {
+        excluded.add(r['user_a_id'] as String);
+        excluded.add(r['user_b_id'] as String);
+      }
+    });
+
+    await collect('blocked', () async {
+      final rows = await _client
+          .from('blocked_users')
+          .select('blocked_user_id')
+          .eq('user_id', selfUserId);
+      excluded.addAll(rows.map((r) => r['blocked_user_id'] as String));
+    });
+
+    await collect('calls', () async {
+      excluded.addAll(await _fetchCalledPeerIds(_client, selfUserId));
+    });
+
+    return excluded;
+  }
+
+  // -------------------------------------------------------------------
+  // Mutations
+  // -------------------------------------------------------------------
+
+  @override
+  Future<void> dismissSuggestion(String suggestionId) =>
+      _setStatus(suggestionId, SuggestionStatus.dismissed);
+
+  @override
+  Future<void> markSuggestionCallStarted(String suggestionId) =>
+      _setStatus(suggestionId, SuggestionStatus.callStarted);
+
+  @override
+  Future<void> markSuggestionMatched(String suggestionId) =>
+      _setStatus(suggestionId, SuggestionStatus.matched);
+
+  Future<void> _setStatus(String id, SuggestionStatus status) async {
+    try {
+      await _client
+          .from(_table)
+          .update({'status': _statusToWire(status)}).eq('id', id);
+      _log.info('suggestion $id → ${status.name}');
+    } catch (e, st) {
+      _log.error('status update failed for $id', e, st);
+    }
+  }
+
+  /// The permanent match row is written server-side by
+  /// `create_match_if_mutual` (cf. `RevealRepository.createMatch`), which
+  /// re-checks that BOTH peers voted. Writing it from here would hand that
+  /// power back to the client.
   @override
   Future<void> recordMutualMatch({
     required UserProfile self,
     required UserProfile candidate,
     required MatchScore score,
-  }) {
-    throw UnimplementedError('SupabaseDiscoverRepository.recordMutualMatch');
+  }) async {
+    _log.info('recordMutualMatch — no-op, the RPC owns `matches`');
   }
+
+  @visibleForTesting
+  static SuggestionStatus statusFromWire(String? wire) => _statusFromWire(wire);
+
+  @visibleForTesting
+  static String statusToWire(SuggestionStatus s) => _statusToWire(s);
+
+  /// SQL `call_started` ↔ Dart `callStarted`; every other value matches
+  /// `.name` verbatim.
+  static SuggestionStatus _statusFromWire(String? wire) => switch (wire) {
+        'call_started' => SuggestionStatus.callStarted,
+        'dismissed' => SuggestionStatus.dismissed,
+        'matched' => SuggestionStatus.matched,
+        _ => SuggestionStatus.pending,
+      };
+
+  static String _statusToWire(SuggestionStatus s) => switch (s) {
+        SuggestionStatus.callStarted => 'call_started',
+        _ => s.name,
+      };
 }
 
 // ---------------------------------------------------------------------------
@@ -497,25 +748,19 @@ final discoverRepositoryProvider = Provider<DiscoverRepository>((ref) {
   final service = ref.watch(weeklySuggestionsServiceProvider);
   final supabaseUp = ref.watch(supabaseAvailableProvider);
   if (!supabaseUp) {
+    // Demo / offline mode: everything stays in RAM, including the
+    // synthetic candidate factory. Also the path the tests exercise.
     return MockDiscoverRepository(service);
   }
-  // Supabase is configured:
-  //   • candidate pool = real Supabase profiles,
-  //   • "Confirmed matches" = the `matches` table directly, so phone B
-  //     sees the row phone A's reveal repo upserted (and vice versa).
-  // Weekly-suggestion cards stay in RAM for now — out of scope.
-  final profiles = ref.watch(profileRepositoryProvider);
-  final client = ref.watch(supabaseClientProvider);
-  final supaMatches = _SupabaseMutualMatchesSource(
-    client: client,
-    profiles: profiles,
-  );
-  return MockDiscoverRepository(
-    service,
-    candidateSource: (self) =>
-        profiles.fetchPotentialCandidates(selfUserId: self.userId),
-    mutualMatchesSource: supaMatches.watch,
-    calledPeerIds: (selfUserId) => _fetchCalledPeerIds(client, selfUserId),
+  // Supabase is configured: suggestions are persisted in
+  // `weekly_suggestions` and matches are read from `matches`. The weekly
+  // batch used to live in a Map that reset on every app restart, which
+  // re-proposed people the user had already seen.
+  return SupabaseDiscoverRepository(
+    client: ref.watch(supabaseClientProvider),
+    service: service,
+    profiles: ref.watch(profileRepositoryProvider),
+    factory: MockCandidateFactory(),
   );
 });
 

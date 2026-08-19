@@ -57,13 +57,18 @@ class SuggestionCard extends StatelessWidget {
                       ),
                       style: AppTypography.h3,
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '${suggestion.distanceKm} km',
-                      style: AppTypography.body.copyWith(
-                        color: AppColors.textSecondary,
+                    // No geo backend yet: a persisted suggestion carries no
+                    // distance, and 0 is "unknown", not "next door". Show
+                    // the line only when there is a real figure to show.
+                    if (suggestion.distanceKm > 0) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        '${suggestion.distanceKm} km',
+                        style: AppTypography.body.copyWith(
+                          color: AppColors.textSecondary,
+                        ),
                       ),
-                    ),
+                    ],
                     const SizedBox(height: AppSpacing.sm),
                     CompatibilityBadge(score: score, compact: true),
                   ],
