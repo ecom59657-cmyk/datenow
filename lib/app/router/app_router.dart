@@ -20,6 +20,7 @@ import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
 import '../../features/discover/presentation/discover_screen.dart';
+import '../../features/profile/presentation/edit/edit_prompts_screen.dart';
 import '../../features/messaging/presentation/providers/messaging_providers.dart';
 import '../../features/matching/presentation/providers/active_match_provider.dart';
 import '../../features/home/presentation/home_screen.dart';
@@ -209,6 +210,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: AppRoute.editPhotos.path,
         name: AppRoute.editPhotos.name,
         builder: (_, _) => const EditPhotosScreen(),
+      ),
+      GoRoute(
+        path: AppRoute.editPrompts.path,
+        name: AppRoute.editPrompts.name,
+        builder: (_, _) => const EditPromptsScreen(),
       ),
       GoRoute(
         path: AppRoute.settings.path,

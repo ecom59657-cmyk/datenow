@@ -129,6 +129,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
             onTap: () => context.pushNamed(AppRoute.editProfile.name),
           ),
           _SectionTile(
+            icon: Icons.format_quote_rounded,
+            label: l10n.profilePromptsTitle,
+            subtitle: l10n.profilePromptsSubtitle,
+            onTap: () => context.pushNamed(AppRoute.editPrompts.name),
+          ),
+          _SectionTile(
             icon: Icons.tune_rounded,
             label: l10n.profilePreferences,
             subtitle: l10n.profilePreferencesSubtitle,

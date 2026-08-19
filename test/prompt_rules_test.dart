@@ -82,4 +82,48 @@ void main() {
       expect(blank.isFilled, isFalse);
     });
   });
+
+  reachabilityTests();
+}
+
+// ---------------------------------------------------------------------------
+// Reachability — the gap that made the feature untestable
+// ---------------------------------------------------------------------------
+//
+// Prompts are deliberately absent from UserProfile.isComplete (adding them
+// would push every existing account back through the wizard), so the signup
+// wizard is NOT a door for anyone who already has an account. Without an
+// editor the answers were write-once-at-signup and invisible to everybody
+// else. These assert the door exists and is wired.
+
+void reachabilityTests() {
+  group('prompts are reachable after signup', () {
+    test('the profile screen links to the editor', () {
+      final src = File('lib/features/profile/presentation/profile_screen.dart')
+          .readAsStringSync();
+      expect(src, contains('AppRoute.editPrompts.name'));
+    });
+
+    test('the route is registered', () {
+      final routes = File('lib/app/router/app_routes.dart').readAsStringSync();
+      expect(routes, contains("editPrompts('/profile/prompts')"));
+      final router = File('lib/app/router/app_router.dart').readAsStringSync();
+      expect(router, contains('EditPromptsScreen()'));
+    });
+
+    test('the wizard and the editor share one slot widget', () {
+      // Two copies would drift on the character limit or the
+      // one-question-once rule, and only one of them would be tested.
+      for (final path in [
+        'lib/features/profile_setup/presentation/steps/prompts_step.dart',
+        'lib/features/profile/presentation/edit/edit_prompts_screen.dart',
+      ]) {
+        expect(
+          File(path).readAsStringSync(),
+          contains('PromptSlotEditor'),
+          reason: '$path should reuse the shared editor',
+        );
+      }
+    });
+  });
 }

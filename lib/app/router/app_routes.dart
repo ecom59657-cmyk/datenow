@@ -15,6 +15,7 @@ enum AppRoute {
   editProfile('/profile/edit'),
   editPreferences('/profile/preferences'),
   editPhotos('/profile/photos'),
+  editPrompts('/profile/prompts'),
   settings('/settings'),
   settingsNotifications('/settings/notifications'),
   settingsPrivacy('/settings/privacy'),
