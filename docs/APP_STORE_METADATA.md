@@ -86,3 +86,50 @@ Le texte ne suffit pas : les captures et l'App Preview pèsent plus lourd que
 lui dans un 4.3(b). Voir le storyboard en §5 du dossier d'appel, et
 `REDESIGN_TWO_PHONE_CHECK.md` pour le fait que trois de ces captures ne
 peuvent être prises que pendant le test à deux téléphones.
+
+---
+
+## 6. Nouveautés de cette version — 4 000 caractères
+
+Champ « Nouveautés » d'App Store Connect, pour le build **0.2.0 (74)**.
+
+Le parti pris : **ne parler que du design**. Les autres changements de cette
+version — les réponses à des questions sur le profil, la porte des intentions,
+les informations facultatives à l'inscription — touchent au fonctionnement du
+produit et méritent d'être annoncés ailleurs, pas dans le même souffle. Un
+champ de nouveautés qui énumère tout ne se lit pas.
+
+**Retenu (français, 284 caractères) :**
+
+```
+Nouveau design.
+
+DateNow passe à l'ivoire et au bordeaux, avec une typographie éditoriale :
+moins un écran d'application, plus une page imprimée.
+
+Plus lisible aussi : un fond chaud à la place du blanc, des textes qui ne
+débordent plus, et un écran d'ouverture qui annonce la couleur.
+```
+
+**Version anglaise, si la fiche a une locale `en` (238 caractères) :**
+
+```
+A new look.
+
+DateNow moves to ivory and bordeaux, with editorial type: less an app
+screen, more a printed page.
+
+Easier to read, too: a warm ground instead of white, text that no longer
+overflows, and an opening screen that sets the tone.
+```
+
+Le Voile n'est pas mentionné : la formulation d'abord retenue affirmait
+quelque chose de faux sur son fonctionnement, et une note de version qui
+décrit mal le seul vrai différenciateur de l'app dessert le dossier 4.3(b)
+plutôt qu'elle ne le sert. À reprendre quand la description exacte sera
+arrêtée.
+
+Deux autres choses volontairement absentes. **Aucune mention de correctif de bug** :
+le champ est lu par des gens qui hésitent à mettre à jour, pas par des
+testeurs. Et **aucune promesse de nouveauté fonctionnelle**, puisque le
+reviewer d'un dossier 4.3(b) compare ce champ à ce qu'il voit à l'écran.
