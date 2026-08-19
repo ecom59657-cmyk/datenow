@@ -1,6 +1,6 @@
 # Dossier d'appel — App Store Guideline 4.3(b) « Design Spam »
 
-**App :** DateNow (`0.1.0+70`) — dating app live-matching
+**App :** DateNow (`0.2.0+71`) — dating app live-matching
 **Date :** 9 juin 2026 — *références code revérifiées le 19 août 2026 sur `feat/redesign-voile`*
 **Objet :** réponse argumentée au rejet 4.3(b) + plan de mise en conformité métadonnées/marketing
 **Concurrents de référence cités par Apple (catégorie saturée) :** Tinder, Bumble, Hinge, Fruitz, Happn
@@ -261,4 +261,4 @@ Le Voile — `lib/shared/widgets/veil.dart` — est le composant qui matérialis
 
 ---
 
-*Toutes les références code de ce dossier ont été revérifiées le 19 août 2026 sur la branche `feat/redesign-voile` au build `0.1.0+70`. Elles ont dérivé depuis la rédaction initiale (build 52) : la refonte a déplacé du code de présentation, sans jamais toucher aux six mécaniques ci-dessus. À revérifier avant tout envoi si d'autres commits s'intercalent.*
+*Toutes les références code de ce dossier ont été revérifiées le 19 août 2026 sur la branche `feat/redesign-voile` au build `0.2.0+71`. Elles ont dérivé depuis la rédaction initiale (build 52) : la refonte a déplacé du code de présentation, sans jamais toucher aux six mécaniques ci-dessus. À revérifier avant tout envoi si d'autres commits s'intercalent.*
