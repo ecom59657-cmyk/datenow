@@ -89,6 +89,37 @@ class ProfileSetupController extends StateNotifier<ProfileDraft> {
   void setAvailability(Availability a) =>
       state = state.copyWith(availability: a);
 
+  // Background. Every one of these can take an answer back: tapping the
+  // chip that is already selected clears it, so someone who answered by
+  // accident is not stuck with it until the edit screen.
+  void toggleOrigin(Origin o) {
+    final next = {...state.origins};
+    next.contains(o) ? next.remove(o) : next.add(o);
+    state = state.copyWith(origins: next);
+  }
+
+  void setReligion(Religion? r) =>
+      state = state.copyWith(religion: state.religion == r ? null : r);
+
+  void setDrinking(Drinking? d) =>
+      state = state.copyWith(drinking: state.drinking == d ? null : d);
+
+  void setSmoking(Smoking? sm) =>
+      state = state.copyWith(smoking: state.smoking == sm ? null : sm);
+
+  void setEducation(EducationLevel? e) =>
+      state = state.copyWith(education: state.education == e ? null : e);
+
+  /// Wipes the whole step in one gesture — the counterpart of "answer only
+  /// what you feel like sharing".
+  void clearBackground() => state = state.copyWith(
+        origins: const <Origin>{},
+        religion: null,
+        drinking: null,
+        smoking: null,
+        education: null,
+      );
+
   void setPhotoBytes(Uint8List? bytes) =>
       state = state.copyWith(photoBytes: bytes);
 
@@ -165,6 +196,11 @@ class ProfileSetupController extends StateNotifier<ProfileDraft> {
       availability: state.availability,
       prompts: state.filledPrompts,
       photoUrls: photoUrls,
+      origins: state.origins,
+      religion: state.religion,
+      drinking: state.drinking,
+      smoking: state.smoking,
+      education: state.education,
     );
 
     try {
@@ -206,6 +242,11 @@ class ProfileDraft {
     this.availability,
     this.prompts = const <PromptAnswer>[],
     this.photoBytes,
+    this.origins = const <Origin>{},
+    this.religion,
+    this.drinking,
+    this.smoking,
+    this.education,
   });
 
   factory ProfileDraft.initial({
@@ -234,6 +275,14 @@ class ProfileDraft {
   final Availability? availability;
   final List<PromptAnswer> prompts;
   final Uint8List? photoBytes;
+
+  /// Optional background. Nothing here gates a step: the wizard must be
+  /// completable without answering any of it.
+  final Set<Origin> origins;
+  final Religion? religion;
+  final Drinking? drinking;
+  final Smoking? smoking;
+  final EducationLevel? education;
 
   int? get age =>
       birthDate == null ? null : ageFromBirthDate(birthDate!);
@@ -277,6 +326,14 @@ class ProfileDraft {
     Availability? availability,
     List<PromptAnswer>? prompts,
     Object? photoBytes = _unset,
+    Set<Origin>? origins,
+    // The sentinel, not a plain nullable: `religion: null` has to mean
+    // "clear it". Tapping the selected chip again is how a single-select
+    // answer is taken back, and `??` would silently keep the old value.
+    Object? religion = _unset,
+    Object? drinking = _unset,
+    Object? smoking = _unset,
+    Object? education = _unset,
   }) {
     return ProfileDraft(
       userId: userId,
@@ -295,6 +352,18 @@ class ProfileDraft {
       photoBytes: identical(photoBytes, _unset)
           ? this.photoBytes
           : photoBytes as Uint8List?,
+      origins: origins ?? this.origins,
+      religion: identical(religion, _unset)
+          ? this.religion
+          : religion as Religion?,
+      drinking: identical(drinking, _unset)
+          ? this.drinking
+          : drinking as Drinking?,
+      smoking:
+          identical(smoking, _unset) ? this.smoking : smoking as Smoking?,
+      education: identical(education, _unset)
+          ? this.education
+          : education as EducationLevel?,
     );
   }
 

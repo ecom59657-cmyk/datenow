@@ -14,6 +14,7 @@ import '../../../shared/widgets/app_button.dart';
 import '../../../shared/widgets/app_scaffold.dart';
 import '../../onboarding/presentation/providers/onboarding_provider.dart';
 import 'providers/profile_setup_controller.dart';
+import 'steps/background_step.dart';
 import 'steps/finalize_step.dart';
 import 'steps/identity_step.dart';
 import '../domain/prompt_moderation.dart';
@@ -36,8 +37,25 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
   final _pageController = PageController();
   int _index = 0;
   bool _submitting = false;
-  // Five since prompts joined: identity, seeking, vibe, prompts, finalize.
-  static const _stepCount = 5;
+
+  /// The wizard in order. Named rather than numbered because the mapping
+  /// used to be positional — `0 => isStep1Valid … 3 => isStep5Valid,
+  /// 4 => isStep4Valid` — with the prompts moderation gate keyed on the
+  /// literal `_index == 3`. Inserting a step meant renumbering three
+  /// separate places by hand, and getting it wrong showed up as a wizard
+  /// that silently validates the wrong answers.
+  static const _steps = <_Step>[
+    _Step.identity,
+    _Step.background,
+    _Step.seeking,
+    _Step.vibe,
+    _Step.prompts,
+    _Step.finalize,
+  ];
+
+  static int get _stepCount => _steps.length;
+
+  _Step get _current => _steps[_index];
 
   @override
   void dispose() {
@@ -45,13 +63,15 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
     super.dispose();
   }
 
-  bool _validForStep(int i, ProfileDraft d) => switch (i) {
-        0 => d.isStep1Valid,
-        1 => d.isStep2Valid,
-        2 => d.isStep3Valid,
-        3 => d.isStep5Valid,
-        4 => d.isStep4Valid,
-        _ => false,
+  bool _validForStep(int i, ProfileDraft d) => switch (_steps[i]) {
+        _Step.identity => d.isStep1Valid,
+        // Every field on this step is optional, so it is never a blocker.
+        // Someone sharing none of it loses a tap, not a signup.
+        _Step.background => true,
+        _Step.seeking => d.isStep2Valid,
+        _Step.vibe => d.isStep3Valid,
+        _Step.prompts => d.isStep5Valid,
+        _Step.finalize => d.isStep4Valid,
       };
 
   bool get _isLast => _index == _stepCount - 1;
@@ -62,7 +82,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
     // whole signup over one answer would be worse — so a refused answer
     // would otherwise vanish in silence and the user would finish signup
     // without the sentences they just wrote.
-    if (_index == 3) {
+    if (_current == _Step.prompts) {
       final draft = ref.read(profileSetupControllerProvider);
       for (final answer in draft.filledPrompts) {
         final reason = PromptModeration.check(answer.answer);
@@ -194,8 +214,11 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
               controller: _pageController,
               physics: const NeverScrollableScrollPhysics(),
               onPageChanged: (i) => setState(() => _index = i),
+              // Same order as `_steps`, and the two are pinned together by
+              // profile_setup_steps_test.dart.
               children: const [
                 IdentityStep(),
+                BackgroundStep(),
                 SeekingStep(),
                 VibeStep(),
                 PromptsStep(),
@@ -260,3 +283,7 @@ class _StepProgress extends StatelessWidget {
     );
   }
 }
+
+/// The wizard's steps, in order. Private: nothing outside this screen has
+/// any business knowing how signup is paginated.
+enum _Step { identity, background, seeking, vibe, prompts, finalize }

@@ -33,6 +33,7 @@ import 'features/discover/domain/weekly_suggestion.dart';
 import 'features/discover/presentation/widgets/match_card.dart';
 import 'features/discover/presentation/widgets/suggestion_card.dart';
 import 'features/call/presentation/widgets/prompt_lifeline.dart';
+import 'features/profile_setup/presentation/steps/background_step.dart';
 import 'features/profile_setup/domain/enums.dart' as domain;
 import 'features/profile_setup/domain/interest.dart';
 import 'features/profile_setup/domain/prompt.dart';
@@ -158,7 +159,7 @@ class _PreviewScreenState extends State<_PreviewScreen> {
   /// that only ever shows its first screenful is a preview of one third of
   /// the work. Five seconds a stop is long enough to catch any position
   /// with a single `screenshot` call.
-  static const _stops = <double>[0, 620, 1240, 1860, 2480];
+  static const _stops = <double>[0, 700, 1400, 2100, 2800, 3500, 4200];
 
   @override
   void initState() {
@@ -217,6 +218,16 @@ class _PreviewScreenState extends State<_PreviewScreen> {
           controller: _controller,
           padding: const EdgeInsets.all(AppSpacing.lg),
           children: [
+            const _Section(
+              title: 'À l’inscription',
+              note: 'La nouvelle étape facultative. Rien ici ne bloque le '
+                  'bouton Continuer, et ne pas répondre n’enregistre rien.',
+            ),
+            // The step is a ListView; a tall box lets it lay out fully
+            // instead of fighting the page it sits in.
+            const SizedBox(height: 1880, child: BackgroundStep()),
+            const SizedBox(height: AppSpacing.xl),
+
             const _Section(
               title: 'Avant l’appel',
               note: 'Onglet Découvrir. La photo est sous le voile, une seule '

@@ -60,11 +60,19 @@ class _Chip extends StatelessWidget {
         borderRadius: AppRadius.brPill,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
-          constraints: const BoxConstraints(minHeight: 48),
-          alignment: Alignment.center,
+          // No `alignment`, and no `minHeight` to go with it. A Container
+          // given an alignment expands to fill whatever bounded constraints
+          // it receives — inside a Wrap that is the full row, so every chip
+          // was its own full-width line. Seven orientations read as seven
+          // rows; the twelve origins on the background step would have read
+          // as twelve.
+          //
+          // 13.5 pt is not arbitrary: bodyStrong is 15 px at height 1.4, so
+          // a 21 pt line box plus 2 x 13.5 lands exactly on the 48 pt
+          // minimum tap target this widget was already aiming for.
           padding: const EdgeInsets.symmetric(
             horizontal: AppSpacing.md,
-            vertical: 12,
+            vertical: 13.5,
           ),
           decoration: BoxDecoration(
             color: selected ? AppColors.bordeaux : AppColors.paper,

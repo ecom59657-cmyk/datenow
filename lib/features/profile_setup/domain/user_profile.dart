@@ -32,6 +32,16 @@ class UserProfile with _$UserProfile {
     Availability? availability,
     @Default(<String>[]) List<String> photoUrls,
     @Default(<PromptAnswer>[]) List<PromptAnswer> prompts,
+
+    // Optional background, collected at signup and removable at any time.
+    // Absent means absent: nothing is stored for someone who skipped, which
+    // is what article 9 of the GDPR requires of origins and religion and
+    // what Apple's "Sensitive Info" label assumes.
+    @Default(<Origin>{}) Set<Origin> origins,
+    Religion? religion,
+    Drinking? drinking,
+    Smoking? smoking,
+    EducationLevel? education,
   }) = _UserProfile;
 
   /// Hard ceiling on the number of photos a profile can hold. Mirrors the

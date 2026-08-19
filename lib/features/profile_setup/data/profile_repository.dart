@@ -285,7 +285,28 @@ class SupabaseProfileRepository implements ProfileRepository {
       _log.warn('user_prompts unavailable for $userId: $e');
     }
 
-    return _mapToProfile(userId, profileRow, prefsRow, photoRows, promptRows);
+    // Same best-effort contract as the prompts above: a project that has not
+    // applied 20260819200000_user_background.sql yet must still sign in, and
+    // "no answers" is the normal state for this table anyway.
+    Map<String, dynamic>? backgroundRow;
+    try {
+      backgroundRow = await _client
+          .from('user_background')
+          .select()
+          .eq('user_id', userId)
+          .maybeSingle();
+    } catch (e) {
+      _log.warn('user_background unavailable for $userId: $e');
+    }
+
+    return _mapToProfile(
+      userId,
+      profileRow,
+      prefsRow,
+      photoRows,
+      promptRows,
+      backgroundRow,
+    );
   }
 
   @override
@@ -400,6 +421,28 @@ class SupabaseProfileRepository implements ProfileRepository {
       // A prompts failure must not lose the rest of the profile the user
       // just filled in — the answers are re-writable, a lost signup is not.
       _log.error('saveProfile: user_prompts write failed', e, st);
+    }
+
+    // 4. Background. Written even when every field is empty: the row is how
+    //    "I answered, and my answer is none of these" is distinguished from
+    //    "I never reached the step", and clearing an answer has to erase the
+    //    stored value rather than leave the previous one behind. Nulls are
+    //    sent explicitly for the same reason — an `if (x != null)` map would
+    //    make removal impossible.
+    try {
+      await _client.from('user_background').upsert({
+        'user_id': profile.userId,
+        'origins': profile.origins.map((e) => e.name).toList(growable: false),
+        'religion': profile.religion?.name,
+        'drinking': profile.drinking?.name,
+        'smoking': profile.smoking?.name,
+        'education': profile.education?.name,
+      });
+    } catch (e, st) {
+      // Same contract as the prompts above, and it matters more here: these
+      // are optional attributes, and losing a whole signup over one of them
+      // would be absurd.
+      _log.error('saveProfile: user_background write failed', e, st);
     }
 
     _log.info('saveProfile DB writes done for ${profile.userId}');
@@ -578,8 +621,9 @@ class SupabaseProfileRepository implements ProfileRepository {
     Map<String, dynamic> profileRow,
     Map<String, dynamic>? prefsRow,
     List<dynamic> photoRows,
-    List<dynamic> promptRows,
-  ) {
+    List<dynamic> promptRows, [
+    Map<String, dynamic>? backgroundRow,
+  ]) {
     final birthDateRaw = profileRow['birth_date'] as String?;
     final birthDate =
         birthDateRaw == null ? null : DateTime.tryParse(birthDateRaw);
@@ -608,6 +652,14 @@ class SupabaseProfileRepository implements ProfileRepository {
           .toSet();
     }
 
+    Set<Origin> readOrigins(List<dynamic>? raw) {
+      if (raw == null) return const <Origin>{};
+      return raw
+          .map((e) => _enumFromName(Origin.values, e as String?))
+          .whereType<Origin>()
+          .toSet();
+    }
+
     final photoUrls = photoRows
         .map((row) => (row as Map<String, dynamic>)['storage_path'] as String)
         .toList(growable: false);
@@ -633,6 +685,23 @@ class SupabaseProfileRepository implements ProfileRepository {
       ),
       photoUrls: photoUrls,
       prompts: _mapPrompts(promptRows),
+      origins: readOrigins(backgroundRow?['origins'] as List?),
+      religion: _enumFromName(
+        Religion.values,
+        backgroundRow?['religion'] as String?,
+      ),
+      drinking: _enumFromName(
+        Drinking.values,
+        backgroundRow?['drinking'] as String?,
+      ),
+      smoking: _enumFromName(
+        Smoking.values,
+        backgroundRow?['smoking'] as String?,
+      ),
+      education: _enumFromName(
+        EducationLevel.values,
+        backgroundRow?['education'] as String?,
+      ),
     );
   }
 
