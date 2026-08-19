@@ -222,6 +222,24 @@ Garder « Lifestyle » ou « Social Networking » selon le positionnement, mais 
 
 ---
 
+## 7.5 — Contenu généré par l'utilisateur (Guideline 1.2)
+
+Les **prompts** — réponses courtes à une banque fermée de 16 questions — sont le premier contenu écrit par les utilisateurs dans l'app. Ça déclenche la Guideline 1.2, qui demande quatre choses à toute app à UGC. Les quatre sont en place :
+
+| Exigence 1.2 | Où |
+|---|---|
+| Filtrer le contenu répréhensible | trigger `enforce_prompt_moderation` sur `user_prompts` (`20260819190000_prompt_moderation.sql`) |
+| Signaler | `report_sheet.dart` + table `reports`, accessible depuis le post-appel et la conversation |
+| Bloquer | RPC `block_user`, entrée dédiée dans le menu de conversation, case cochée par défaut dans la feuille de signalement |
+| Contact éditeur publié | `getdatenow.app` + fiche App Store |
+
+Deux choix à connaître si le point est soulevé :
+
+1. **Le filtre est côté serveur, pas côté app.** Une règle qui ne vit que dans le client n'est pas une règle : un client trafiqué passe à côté. Le trigger refuse l'écriture, quel que soit l'appelant. L'app duplique seulement la partie structurelle (formes de coordonnées) pour prévenir l'utilisateur pendant qu'il écrit.
+2. **Les coordonnées sont filtrées au même titre que les insultes.** C'est le vecteur d'arnaque de toutes les apps de rencontre — faire sortir la cible de la plateforme, là où il n'y a plus ni signalement ni blocage. C'est aussi la seule catégorie détectable par la forme plutôt que par le sens, donc de façon fiable.
+
+La banque de questions étant fermée, la surface de texte libre se limite à trois réponses de 140 caractères par profil — une charge de modération volontairement bornée dès la conception.
+
 ## 7.6 — La refonte visuelle (branche `feat/redesign-voile`)
 
 Depuis le rejet, toute la direction artistique a changé : le fond quasi-noir et le dégradé rose→violet — soit exactement la palette de la catégorie — sont remplacés par un thème clair ivoire et bordeaux, une typographie serif éditoriale (Newsreader), des cartes papier séparées par des filets, et un seul écran resté sombre : l'appel vidéo.

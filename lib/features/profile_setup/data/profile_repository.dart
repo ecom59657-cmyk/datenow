@@ -10,10 +10,21 @@ import '../domain/enums.dart';
 import '../domain/interest.dart';
 import '../domain/prompt.dart';
 import '../domain/prompt_answer.dart';
+import '../domain/prompt_moderation.dart';
 import '../domain/user_profile.dart';
 
 /// Abstract profile store. Concrete impls plug in Supabase or an in-memory
 /// mock — the rest of the app only ever depends on this surface.
+/// Thrown when the moderation filter refuses a prompt answer.
+class PromptRejectedException implements Exception {
+  const PromptRejectedException(this.reason);
+
+  final PromptRejection reason;
+
+  @override
+  String toString() => 'PromptRejectedException(${reason.name})';
+}
+
 abstract class ProfileRepository {
   /// Continuously emits the latest [UserProfile] for [userId] (or `null` if
   /// none exists yet). Used by the router redirect.
@@ -27,6 +38,20 @@ abstract class ProfileRepository {
   /// by the `user_prompts_select_not_blocked` policy: any signed-in user
   /// except where a block exists either way.
   Future<List<PromptAnswer>> fetchPrompts(String userId);
+
+  /// Replaces the prompt answers of [userId].
+  ///
+  /// Separate from [saveProfile] because this one must be able to FAIL
+  /// loudly: the moderation trigger refuses text, and the editor has to say
+  /// why. saveProfile swallows a prompts error on purpose — losing the rest
+  /// of a signup over an answer would be worse — which is exactly the
+  /// behaviour the editor cannot have.
+  ///
+  /// Throws [PromptRejectedException] when the server refuses the content.
+  Future<void> savePrompts({
+    required String userId,
+    required List<PromptAnswer> prompts,
+  });
 
   /// Persists the profile. Implementations should emit the new value on the
   /// matching `watchProfile` stream so reactive consumers refresh.
@@ -103,6 +128,22 @@ class MockProfileRepository implements ProfileRepository {
   @override
   Future<List<PromptAnswer>> fetchPrompts(String userId) async =>
       _byUser[userId]?.filledPrompts ?? const <PromptAnswer>[];
+
+  @override
+  Future<void> savePrompts({
+    required String userId,
+    required List<PromptAnswer> prompts,
+  }) async {
+    // Demo mode mirrors the trigger so the refusal can be exercised
+    // without a database.
+    for (final p in prompts) {
+      final reason = PromptModeration.check(p.answer);
+      if (reason != null) throw PromptRejectedException(reason);
+    }
+    final current = _byUser[userId];
+    if (current == null) return;
+    _byUser[userId] = current.copyWith(prompts: prompts);
+  }
 
   @override
   Future<void> saveProfile(UserProfile profile) async {
@@ -262,6 +303,36 @@ class SupabaseProfileRepository implements ProfileRepository {
       _log.warn('fetchPrompts failed for $userId: $e');
       return const <PromptAnswer>[];
     }
+  }
+
+  @override
+  Future<void> savePrompts({
+    required String userId,
+    required List<PromptAnswer> prompts,
+  }) async {
+    try {
+      await _client.from('user_prompts').delete().eq('user_id', userId);
+      if (prompts.isNotEmpty) {
+        await _client.from('user_prompts').insert([
+          for (var i = 0; i < prompts.length; i++)
+            {
+              'user_id': userId,
+              'question': prompts[i].question.name,
+              'answer': prompts[i].answer.trim(),
+              'position': i,
+            },
+        ]);
+      }
+    } catch (e, st) {
+      final rejection = PromptModeration.fromServerError(e);
+      if (rejection != null) {
+        _log.info('prompts refused by moderation: ${rejection.name}');
+        throw PromptRejectedException(rejection);
+      }
+      _log.error('savePrompts failed for $userId', e, st);
+      rethrow;
+    }
+    await _refresh(userId);
   }
 
   // ---------------------------------------------------------------------

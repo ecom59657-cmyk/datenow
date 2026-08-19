@@ -12,6 +12,7 @@ import '../../../../shared/widgets/app_error_state.dart';
 import '../../../../shared/widgets/app_scaffold.dart';
 import '../../../profile_setup/data/profile_repository.dart';
 import '../../../profile_setup/domain/prompt.dart';
+import '../../../profile_setup/domain/prompt_moderation.dart';
 import '../../../profile_setup/domain/prompt_answer.dart';
 import '../../../profile_setup/presentation/providers/profile_provider.dart';
 import '../../../profile_setup/presentation/widgets/prompt_slot_editor.dart';
@@ -87,15 +88,32 @@ class _EditPromptsScreenState extends ConsumerState<EditPromptsScreen> {
   Future<void> _save() async {
     final profile = ref.read(currentProfileProvider).asData?.value;
     if (profile == null || _draft == null) return;
+
+    // Caught here first so the refusal arrives without a round trip and
+    // without the answer ever leaving the phone. The trigger stays the
+    // authority — this is only the fast, structural half.
+    for (final answer in _draft!) {
+      final local = PromptModeration.check(answer.answer);
+      if (local != null) {
+        context.showSnack(_rejectionMessage(local));
+        return;
+      }
+    }
+
     setState(() => _saving = true);
     try {
-      await ref
-          .read(profileRepositoryProvider)
-          .saveProfile(profile.copyWith(prompts: _draft!));
+      await ref.read(profileRepositoryProvider).savePrompts(
+            userId: profile.userId,
+            prompts: _draft!,
+          );
       if (!mounted) return;
       setState(() => _initial = [..._draft!]);
       if (!mounted) return;
       context.showSnack(AppLocalizations.of(context).savedSnack);
+    } on PromptRejectedException catch (e) {
+      _log.info('prompts refused: ${e.reason.name}');
+      if (!mounted) return;
+      context.showSnack(_rejectionMessage(e.reason));
     } catch (e, st) {
       _log.error('saving prompts failed', e, st);
       if (!mounted) return;
@@ -103,6 +121,14 @@ class _EditPromptsScreenState extends ConsumerState<EditPromptsScreen> {
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  String _rejectionMessage(PromptRejection reason) {
+    final l10n = AppLocalizations.of(context);
+    return switch (reason) {
+      PromptRejection.contact => l10n.promptRejectedContact,
+      PromptRejection.term => l10n.promptRejectedTerm,
+    };
   }
 
   @override
