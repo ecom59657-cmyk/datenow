@@ -68,6 +68,15 @@ abstract class MessagingRepository {
     required String conversationId,
     required String userId,
   });
+
+  /// Undoes the match with [peerId]: removes the pair and the conversation
+  /// for BOTH sides, and marks the suggestion that produced them dismissed.
+  ///
+  /// Distinct from blocking. Blocking says "this person must not reach me
+  /// again"; unmatching says "this did not work out". Until this existed,
+  /// ending a match meant escalating to a block — or soft-deleting your own
+  /// copy of the thread while the match quietly stayed alive.
+  Future<void> unmatch({required String peerId});
 }
 
 // ---------------------------------------------------------------------------
@@ -271,6 +280,24 @@ class MockMessagingRepository implements MessagingRepository {
     mine[conversationId] = DateTime.now();
     _emitInbox(userId);
   }
+
+  @override
+  Future<void> unmatch({required String peerId}) async {
+    _log.info('unmatch peer=$peerId');
+    // Demo mode: drop every conversation involving the peer, on both
+    // sides, so the inbox reflects the same outcome as the RPC.
+    final gone = _conversations.values
+        .where((c) => c.userAId == peerId || c.userBId == peerId)
+        .map((c) => c.id)
+        .toSet();
+    for (final id in gone) {
+      _conversations.remove(id);
+      _messages.remove(id);
+    }
+    for (final userId in _inboxStreams.keys.toList()) {
+      _emitInbox(userId);
+    }
+  }
 }
 
 extension on Iterable<Conversation> {
@@ -455,6 +482,15 @@ class SupabaseMessagingRepository implements MessagingRepository {
       },
       onConflict: 'conversation_id,user_id',
     );
+  }
+
+  @override
+  Future<void> unmatch({required String peerId}) async {
+    _log.info('unmatch peer=$peerId');
+    // SECURITY DEFINER RPC: it derives the canonical pair from auth.uid()
+    // so the caller cannot name a pair it is not part of. Idempotent, so a
+    // retry after a dropped connection is harmless.
+    await _client.rpc<dynamic>('unmatch', params: {'p_peer_id': peerId});
   }
 
   @override

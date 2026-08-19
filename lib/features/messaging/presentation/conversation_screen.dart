@@ -10,6 +10,8 @@ import '../../../core/notifications/app_badge.dart';
 import '../../../core/notifications/push_notifications_service.dart';
 import '../../../core/utils/extensions.dart';
 import '../../../core/utils/logger.dart';
+import '../../safety/data/report_repository.dart';
+import '../../settings/presentation/widgets/destructive_dialog.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../shared/widgets/app_scaffold.dart';
 import '../../../shared/widgets/loading_indicator.dart';
@@ -37,6 +39,7 @@ class ConversationScreen extends ConsumerStatefulWidget {
 }
 
 class _ConversationScreenState extends ConsumerState<ConversationScreen> {
+  static const _log = AppLogger('Conversation');
   final _scrollController = ScrollController();
   bool _readMarked = false;
 
@@ -68,6 +71,59 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
   /// Both dialogs must be accepted before the hide-row is upserted.
   /// Each step has an explicit Annuler that aborts without touching
   /// the backend.
+  /// Blocking is the hard gesture: the peer can no longer reach or see the
+  /// user. Reachable on its own, not only buried inside the report sheet —
+  /// wanting someone gone is not the same as wanting to accuse them.
+  Future<void> _confirmBlock(String peerId) async {
+    final l10n = AppLocalizations.of(context);
+    final confirmed = await showDestructiveConfirm(
+      context: context,
+      title: l10n.blockConfirmTitle,
+      body: l10n.blockConfirmBody,
+      confirmLabel: l10n.blockConfirmAction,
+    );
+    if (!confirmed || !mounted) return;
+    try {
+      await ref
+          .read(reportRepositoryProvider)
+          .blockUser(reportedUserId: peerId);
+    } catch (e, st) {
+      _log.error('blockUser failed', e, st);
+      if (!mounted) return;
+      context.showSnack(AppLocalizations.of(context).unmatchFailedSnack);
+      return;
+    }
+    if (!mounted) return;
+    context.showSnack(AppLocalizations.of(context).blockedSnack);
+    context.goNamed(AppRoute.messages.name);
+  }
+
+  /// The softer exit: the pair is undone for both sides, nobody is blocked
+  /// and nobody is told. Previously the only way out of a match was to
+  /// block the person, or to soft-delete your own copy of the thread while
+  /// the match itself stayed alive.
+  Future<void> _confirmUnmatch(String peerId) async {
+    final l10n = AppLocalizations.of(context);
+    final confirmed = await showDestructiveConfirm(
+      context: context,
+      title: l10n.unmatchConfirmTitle,
+      body: l10n.unmatchConfirmBody,
+      confirmLabel: l10n.unmatchConfirmAction,
+    );
+    if (!confirmed || !mounted) return;
+    try {
+      await ref.read(messagingRepositoryProvider).unmatch(peerId: peerId);
+    } catch (e, st) {
+      _log.error('unmatch failed', e, st);
+      if (!mounted) return;
+      context.showSnack(AppLocalizations.of(context).unmatchFailedSnack);
+      return;
+    }
+    if (!mounted) return;
+    context.showSnack(AppLocalizations.of(context).unmatchedSnack);
+    context.goNamed(AppRoute.messages.name);
+  }
+
   Future<void> _confirmDeleteConversation({required bool isFr}) async {
     final user = ref.read(currentUserProvider);
     if (user == null) return;
@@ -236,6 +292,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final messagesAsync =
         ref.watch(conversationMessagesProvider(widget.conversationId));
     final inboxAsync = ref.watch(inboxProvider);
@@ -284,6 +341,10 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
                     reportedUserId: peerId,
                     reportedDisplayName: conversation?.peerFirstName,
                   );
+                } else if (value == 'block') {
+                  _confirmBlock(peerId);
+                } else if (value == 'unmatch') {
+                  _confirmUnmatch(peerId);
                 } else if (value == 'delete') {
                   _confirmDeleteConversation(isFr: isFr);
                 }
@@ -296,6 +357,26 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
                       const Icon(Icons.flag_outlined, size: 18),
                       const SizedBox(width: AppSpacing.sm),
                       Text(isFr ? 'Signaler' : 'Report'),
+                    ],
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'block',
+                  child: Row(
+                    children: [
+                      const Icon(Icons.block_rounded, size: 18),
+                      const SizedBox(width: AppSpacing.sm),
+                      Text(l10n.conversationActionBlock),
+                    ],
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'unmatch',
+                  child: Row(
+                    children: [
+                      const Icon(Icons.heart_broken_outlined, size: 18),
+                      const SizedBox(width: AppSpacing.sm),
+                      Text(l10n.conversationActionUnmatch),
                     ],
                   ),
                 ),

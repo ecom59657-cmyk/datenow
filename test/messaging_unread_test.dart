@@ -262,4 +262,65 @@ void main() {
       );
     });
   });
+
+  unmatchTests();
+}
+
+// ---------------------------------------------------------------------------
+// unmatch — the softer exit added by UX plan point 8
+// ---------------------------------------------------------------------------
+//
+// Ending a match used to mean escalating to a block, or soft-deleting your
+// own copy of the thread while the match itself quietly stayed alive. These
+// exercise the mock, which mirrors what the SECURITY DEFINER RPC does
+// server-side: the pair and the thread go for BOTH sides.
+
+void unmatchTests() {
+  group('MockMessagingRepository.unmatch', () {
+    test('removes the conversation from both inboxes, not just the caller\'s',
+        () async {
+      final repo = MockMessagingRepository();
+      final conv = await repo.ensureConversation(
+        currentUserId: 'A',
+        peer: _peer(),
+      );
+      await repo.sendMessage(
+        conversationId: conv.id,
+        senderId: 'A',
+        body: 'hello',
+      );
+
+      await repo.unmatch(peerId: 'peer-B');
+
+      expect(await repo.watchInbox('A').first, isEmpty);
+      expect(await repo.watchInbox('peer-B').first, isEmpty);
+    });
+
+    test('is idempotent — a retry after a dropped connection is harmless',
+        () async {
+      final repo = MockMessagingRepository();
+      await repo.ensureConversation(currentUserId: 'A', peer: _peer());
+      await repo.unmatch(peerId: 'peer-B');
+      await repo.unmatch(peerId: 'peer-B');
+      expect(await repo.watchInbox('A').first, isEmpty);
+    });
+
+    test('leaves conversations with other people alone', () async {
+      final repo = MockMessagingRepository();
+      await repo.ensureConversation(currentUserId: 'A', peer: _peer());
+      await repo.ensureConversation(
+        currentUserId: 'A',
+        peer: _peer(userId: 'peer-C', firstName: 'Other'),
+      );
+
+      await repo.unmatch(peerId: 'peer-B');
+
+      final inbox = await repo.watchInbox('A').first;
+      expect(inbox, hasLength(1));
+      expect(
+        inbox.single.userAId == 'peer-C' || inbox.single.userBId == 'peer-C',
+        isTrue,
+      );
+    });
+  });
 }
