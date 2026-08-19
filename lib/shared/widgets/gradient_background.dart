@@ -29,7 +29,7 @@ class GradientBackground extends StatelessWidget {
             top: -180,
             left: -120,
             child: _GlowOrb(
-              color: AppColors.brandPink.withValues(alpha: 0.35 * i),
+              color: AppColors.bordeaux.withValues(alpha: 0.35 * i),
               size: 380,
             ),
           ),
@@ -38,7 +38,7 @@ class GradientBackground extends StatelessWidget {
             bottom: -200,
             right: -140,
             child: _GlowOrb(
-              color: AppColors.brandViolet.withValues(alpha: 0.30 * i),
+              color: AppColors.bordeauxLight.withValues(alpha: 0.30 * i),
               size: 420,
             ),
           ),

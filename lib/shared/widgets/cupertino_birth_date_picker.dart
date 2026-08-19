@@ -230,7 +230,7 @@ class _BirthDatePickerSheetState extends State<_BirthDatePickerSheet> {
                     child: Text(
                       l10n.commonDone,
                       style: AppTypography.bodyStrong
-                          .copyWith(color: AppColors.brandPink),
+                          .copyWith(color: AppColors.bordeaux),
                     ),
                   ),
                 ],

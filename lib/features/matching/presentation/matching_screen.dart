@@ -875,10 +875,10 @@ class _RippleAvatar extends StatelessWidget {
             height: 112,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              gradient: AppColors.brandGradient,
+              gradient: AppColors.signatureGradient,
               boxShadow: [
                 BoxShadow(
-                  color: AppColors.brandPink.withValues(alpha: 0.5),
+                  color: AppColors.bordeaux.withValues(alpha: 0.5),
                   blurRadius: 40,
                   spreadRadius: 6,
                 ),
@@ -905,7 +905,7 @@ class _Ripple extends StatelessWidget {
       height: 120,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        border: Border.all(color: AppColors.brandPink, width: 1.5),
+        border: Border.all(color: AppColors.bordeaux, width: 1.5),
       ),
     )
         .animate(onPlay: (c) => c.repeat())

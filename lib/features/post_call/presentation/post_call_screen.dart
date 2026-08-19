@@ -790,7 +790,7 @@ class _RevealingView extends StatelessWidget {
             width: 36,
             child: CircularProgressIndicator(
               strokeWidth: 2.4,
-              valueColor: AlwaysStoppedAnimation(AppColors.brandPink),
+              valueColor: AlwaysStoppedAnimation(AppColors.bordeaux),
             ),
           ),
           const SizedBox(height: AppSpacing.lg),
@@ -913,11 +913,11 @@ class _CountdownCircle extends StatelessWidget {
       alignment: Alignment.center,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: AppColors.brandPink.withValues(alpha: 0.1),
-        border: Border.all(color: AppColors.brandPink, width: 2),
+        color: AppColors.bordeaux.withValues(alpha: 0.1),
+        border: Border.all(color: AppColors.bordeaux, width: 2),
         boxShadow: [
           BoxShadow(
-            color: AppColors.brandPink.withValues(alpha: 0.45),
+            color: AppColors.bordeaux.withValues(alpha: 0.45),
             blurRadius: 22,
             spreadRadius: 1,
           ),
@@ -943,7 +943,7 @@ class _CountdownCircle extends StatelessWidget {
           Text(
             'sec',
             style: AppTypography.caption.copyWith(
-              color: AppColors.brandPink,
+              color: AppColors.bordeaux,
               fontWeight: FontWeight.w700,
               letterSpacing: 1,
             ),
@@ -986,7 +986,7 @@ class _RevealPhotoCard extends StatelessWidget {
                     height: 28,
                     child: CircularProgressIndicator(
                       strokeWidth: 2.5,
-                      valueColor: AlwaysStoppedAnimation(AppColors.brandPink),
+                      valueColor: AlwaysStoppedAnimation(AppColors.bordeaux),
                     ),
                   ),
                 ),
@@ -1013,18 +1013,18 @@ class _RevealPhotoCard extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(28),
         border: Border.all(
-          color: AppColors.brandPink.withValues(alpha: 0.6),
+          color: AppColors.bordeaux.withValues(alpha: 0.6),
           width: 2,
         ),
         boxShadow: [
           BoxShadow(
-            color: AppColors.brandPink.withValues(alpha: 0.4),
+            color: AppColors.bordeaux.withValues(alpha: 0.4),
             blurRadius: 44,
             spreadRadius: 2,
             offset: const Offset(0, 10),
           ),
           BoxShadow(
-            color: AppColors.brandViolet.withValues(alpha: 0.28),
+            color: AppColors.bordeauxLight.withValues(alpha: 0.28),
             blurRadius: 60,
             spreadRadius: 6,
           ),
@@ -1066,7 +1066,7 @@ class _PhotoFallback extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [AppColors.brandViolet, AppColors.brandPink],
+          colors: [AppColors.bordeauxLight, AppColors.bordeaux],
         ),
       ),
       child: Center(
@@ -1078,7 +1078,7 @@ class _PhotoFallback extends StatelessWidget {
             fontWeight: FontWeight.w800,
             shadows: [
               Shadow(
-                color: AppColors.brandPink.withValues(alpha: 0.6),
+                color: AppColors.bordeaux.withValues(alpha: 0.6),
                 blurRadius: 28,
               ),
             ],
@@ -1227,15 +1227,15 @@ class _CountdownBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
       decoration: BoxDecoration(
-        color: AppColors.brandPink.withValues(alpha: 0.12),
+        color: AppColors.bordeaux.withValues(alpha: 0.12),
         borderRadius: AppRadius.brPill,
-        border: Border.all(color: AppColors.brandPink.withValues(alpha: 0.5)),
+        border: Border.all(color: AppColors.bordeaux.withValues(alpha: 0.5)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           const Icon(Icons.timer_outlined,
-              size: 16, color: AppColors.brandPink),
+              size: 16, color: AppColors.bordeaux),
           const SizedBox(width: 6),
           AnimatedSwitcher(
             duration: const Duration(milliseconds: 250),
@@ -1284,7 +1284,7 @@ class _PhotoLoadingSkeleton extends StatelessWidget {
             height: 28,
             child: CircularProgressIndicator(
               strokeWidth: 2.5,
-              valueColor: AlwaysStoppedAnimation(AppColors.brandPink),
+              valueColor: AlwaysStoppedAnimation(AppColors.bordeaux),
             ),
           ),
         );
@@ -1319,7 +1319,7 @@ class _WaitingView extends StatelessWidget {
               width: 36,
               child: CircularProgressIndicator(
                 strokeWidth: 2.4,
-                valueColor: AlwaysStoppedAnimation(AppColors.brandPink),
+                valueColor: AlwaysStoppedAnimation(AppColors.bordeaux),
               ),
             ),
             const SizedBox(height: AppSpacing.lg),
@@ -1405,7 +1405,7 @@ class _ResolvedView extends StatelessWidget {
           Icon(
             matched ? Icons.favorite_rounded : Icons.waving_hand_rounded,
             size: 80,
-            color: matched ? AppColors.brandPink : AppColors.textSecondary,
+            color: matched ? AppColors.bordeaux : AppColors.textSecondary,
           ).animate().scale(
                 duration: 500.ms,
                 curve: Curves.easeOutBack,
@@ -1501,10 +1501,10 @@ class _MatchAvatar extends StatelessWidget {
       height: _size,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        gradient: AppColors.brandGradient,
+        gradient: AppColors.signatureGradient,
         boxShadow: [
           BoxShadow(
-            color: AppColors.brandPink.withValues(alpha: 0.42),
+            color: AppColors.bordeaux.withValues(alpha: 0.42),
             blurRadius: 40,
             spreadRadius: 4,
             offset: const Offset(0, 14),
@@ -1568,7 +1568,7 @@ class _PassedView extends StatelessWidget {
         const Icon(
           Icons.bolt_rounded,
           size: 72,
-          color: AppColors.brandPink,
+          color: AppColors.bordeaux,
         ).animate().scale(
               duration: 500.ms,
               curve: Curves.easeOutBack,
@@ -1684,7 +1684,7 @@ class _PhotoReveal extends StatelessWidget {
             borderRadius: BorderRadius.circular(28),
             boxShadow: [
               BoxShadow(
-                color: AppColors.brandPink.withValues(alpha: 0.32),
+                color: AppColors.bordeaux.withValues(alpha: 0.32),
                 blurRadius: 36,
                 spreadRadius: 2,
                 offset: const Offset(0, 12),

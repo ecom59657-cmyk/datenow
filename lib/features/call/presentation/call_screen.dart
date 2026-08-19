@@ -633,7 +633,7 @@ class _Header extends StatelessWidget {
             height: 6,
             decoration: const BoxDecoration(
               shape: BoxShape.circle,
-              color: AppColors.brandPink,
+              color: AppColors.bordeaux,
             ),
           ),
           const SizedBox(width: 6),
@@ -774,12 +774,12 @@ class _CircleButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final disabled = onTap == null;
     final bg = accent
-        ? AppColors.brandPink
+        ? AppColors.bordeaux
         : active
-            ? AppColors.brandPink.withValues(alpha: 0.85)
+            ? AppColors.bordeaux.withValues(alpha: 0.85)
             : Colors.black.withValues(alpha: 0.55);
     final border = accent
-        ? AppColors.brandPink
+        ? AppColors.bordeaux
         : Colors.white.withValues(alpha: active ? 0.0 : 0.2);
     final iconColor =
         disabled ? Colors.white.withValues(alpha: 0.45) : Colors.white;
@@ -804,7 +804,7 @@ class _CircleButton extends StatelessWidget {
               boxShadow: accent
                   ? [
                       BoxShadow(
-                        color: AppColors.brandPink.withValues(alpha: 0.45),
+                        color: AppColors.bordeaux.withValues(alpha: 0.45),
                         blurRadius: 16,
                         spreadRadius: 1,
                         offset: const Offset(0, 4),
@@ -838,7 +838,7 @@ class _LoadingHint extends StatelessWidget {
           width: 28,
           child: CircularProgressIndicator(
             strokeWidth: 2.5,
-            valueColor: AlwaysStoppedAnimation(AppColors.brandPink),
+            valueColor: AlwaysStoppedAnimation(AppColors.bordeaux),
           ),
         ),
         const SizedBox(height: AppSpacing.md),
@@ -929,7 +929,7 @@ class _ConnectingView extends StatelessWidget {
               child: CircularProgressIndicator(
                 strokeWidth: 2.4,
                 valueColor: AlwaysStoppedAnimation(
-                  joining ? AppColors.online : AppColors.brandPink,
+                  joining ? AppColors.online : AppColors.bordeaux,
                 ),
               ),
             ),
@@ -961,10 +961,10 @@ class _PulseHeart extends StatelessWidget {
       height: 108,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        gradient: AppColors.brandGradient,
+        gradient: AppColors.signatureGradient,
         boxShadow: [
           BoxShadow(
-            color: AppColors.brandPink.withValues(alpha: active ? 0.6 : 0.4),
+            color: AppColors.bordeaux.withValues(alpha: active ? 0.6 : 0.4),
             blurRadius: active ? 48 : 32,
             spreadRadius: active ? 8 : 4,
           ),

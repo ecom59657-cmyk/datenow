@@ -170,7 +170,7 @@ class _EditPreferencesScreenState
                       min: 18,
                       max: 80,
                       divisions: 62,
-                      activeColor: AppColors.brandPink,
+                      activeColor: AppColors.bordeaux,
                       inactiveColor: AppColors.hairline,
                       onChanged: (v) => setState(() {
                         _ageMin = v.start.round();
@@ -188,7 +188,7 @@ class _EditPreferencesScreenState
                       min: 5,
                       max: 200,
                       divisions: 39,
-                      activeColor: AppColors.brandPink,
+                      activeColor: AppColors.bordeaux,
                       inactiveColor: AppColors.hairline,
                       onChanged: (v) =>
                           setState(() => _maxDistance = v.round()),

@@ -1045,17 +1045,17 @@ class _BlurCaption extends StatelessWidget {
           vertical: 8,
         ),
         decoration: BoxDecoration(
-          color: AppColors.brandPink.withValues(alpha: 0.16),
+          color: AppColors.bordeaux.withValues(alpha: 0.16),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: AppColors.brandPink.withValues(alpha: 0.4),
+            color: AppColors.bordeaux.withValues(alpha: 0.4),
           ),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             const Icon(Icons.blur_on_rounded,
-                color: AppColors.brandPink, size: 16),
+                color: AppColors.bordeaux, size: 16),
             const SizedBox(width: 6),
             Text(
               'Caméra floutée jusqu\'à la fin du date',
@@ -1117,7 +1117,7 @@ class _LoadingPanel extends StatelessWidget {
             width: 32,
             child: CircularProgressIndicator(
               strokeWidth: 2.5,
-              valueColor: AlwaysStoppedAnimation(AppColors.brandPink),
+              valueColor: AlwaysStoppedAnimation(AppColors.bordeaux),
             ),
           ),
           const SizedBox(height: AppSpacing.md),
@@ -1204,7 +1204,7 @@ class _ErrorPanel extends StatelessWidget {
               child: Text(
                 'Ouvrir les réglages',
                 style: AppTypography.body.copyWith(
-                  color: AppColors.brandPink,
+                  color: AppColors.bordeaux,
                   fontWeight: FontWeight.w700,
                 ),
               ),

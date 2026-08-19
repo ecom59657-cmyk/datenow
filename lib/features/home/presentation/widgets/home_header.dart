@@ -81,7 +81,7 @@ class _AvatarBadge extends ConsumerWidget {
             height: size,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              gradient: AppColors.brandGradient,
+              gradient: AppColors.signatureGradient,
               border: Border.all(color: AppColors.hairline, width: 2),
             ),
             child: const Center(

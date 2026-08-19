@@ -243,7 +243,7 @@ class _EmptyCard extends StatelessWidget {
               color: AppColors.violetSoft,
               borderRadius: AppRadius.brSm,
             ),
-            child: Icon(icon, color: AppColors.brandViolet),
+            child: Icon(icon, color: AppColors.bordeauxLight),
           ),
           const SizedBox(height: AppSpacing.md),
           if (title != null) ...[
@@ -291,10 +291,10 @@ class _PushPermissionSheet extends StatelessWidget {
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                gradient: AppColors.brandGradient,
+                gradient: AppColors.signatureGradient,
                 boxShadow: [
                   BoxShadow(
-                    color: AppColors.brandPink.withValues(alpha: 0.4),
+                    color: AppColors.bordeaux.withValues(alpha: 0.4),
                     blurRadius: 24,
                     spreadRadius: 2,
                   ),

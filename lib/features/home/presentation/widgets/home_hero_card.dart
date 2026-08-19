@@ -36,13 +36,13 @@ class HomeHeroCard extends StatelessWidget {
         // subtler violet ambient, instead of one hard drop.
         boxShadow: [
           BoxShadow(
-            color: AppColors.brandPink.withValues(alpha: 0.26),
+            color: AppColors.bordeaux.withValues(alpha: 0.26),
             blurRadius: 60,
             spreadRadius: -6,
             offset: const Offset(0, 26),
           ),
           BoxShadow(
-            color: AppColors.brandViolet.withValues(alpha: 0.13),
+            color: AppColors.bordeauxLight.withValues(alpha: 0.13),
             blurRadius: 44,
             spreadRadius: -10,
             offset: const Offset(0, 10),
@@ -281,12 +281,12 @@ class _CameraOrb extends StatelessWidget {
         // Diffuse pink × violet halo for depth.
         boxShadow: [
           BoxShadow(
-            color: AppColors.brandPink.withValues(alpha: 0.42),
+            color: AppColors.bordeaux.withValues(alpha: 0.42),
             blurRadius: 38,
             spreadRadius: 2,
           ),
           BoxShadow(
-            color: AppColors.brandViolet.withValues(alpha: 0.30),
+            color: AppColors.bordeauxLight.withValues(alpha: 0.30),
             blurRadius: 56,
             spreadRadius: 8,
           ),
@@ -295,7 +295,7 @@ class _CameraOrb extends StatelessWidget {
       child: const _VideoHeartIcon(
         cameraSize: 46,
         cameraColor: Colors.white,
-        heartColor: AppColors.brandPink,
+        heartColor: AppColors.bordeaux,
       ),
     )
         .animate(onPlay: (c) => c.repeat(reverse: true))
@@ -323,9 +323,9 @@ class _CenterGlow extends StatelessWidget {
           shape: BoxShape.circle,
           gradient: RadialGradient(
             colors: [
-              AppColors.brandPink.withValues(alpha: 0.16),
-              AppColors.brandPink.withValues(alpha: 0.04),
-              AppColors.brandPink.withValues(alpha: 0),
+              AppColors.bordeaux.withValues(alpha: 0.16),
+              AppColors.bordeaux.withValues(alpha: 0.04),
+              AppColors.bordeaux.withValues(alpha: 0),
             ],
             stops: const [0.0, 0.5, 1.0],
           ),
@@ -399,9 +399,9 @@ class _PresenceOrb extends StatelessWidget {
   final int seed;
 
   static const _gradients = <List<Color>>[
-    [AppColors.brandPink, AppColors.brandViolet],
-    [AppColors.brandViolet, AppColors.brandBlue],
-    [AppColors.brandBlue, AppColors.brandPink],
+    [AppColors.bordeaux, AppColors.bordeauxLight],
+    [AppColors.bordeauxLight, AppColors.clay],
+    [AppColors.clay, AppColors.bordeaux],
   ];
 
   @override
@@ -490,7 +490,7 @@ class _StartDateButton extends StatelessWidget {
                   textAlign: TextAlign.center,
                   overflow: TextOverflow.ellipsis,
                   style: AppTypography.button.copyWith(
-                    color: AppColors.brandPink,
+                    color: AppColors.bordeaux,
                     fontWeight: FontWeight.w700,
                     fontSize: 17,
                     letterSpacing: 0.2,
@@ -517,8 +517,8 @@ class _StartDateButton extends StatelessWidget {
 class _VideoHeartIcon extends StatelessWidget {
   const _VideoHeartIcon({
     this.cameraSize = 30,
-    this.cameraColor = AppColors.brandPink,
-    this.heartColor = AppColors.brandViolet,
+    this.cameraColor = AppColors.bordeaux,
+    this.heartColor = AppColors.bordeauxLight,
   });
 
   /// Camera glyph size. The heart badge scales with it.

@@ -184,7 +184,7 @@ class PhotoPickerCard extends StatelessWidget {
             color: AppColors.surface,
             borderRadius: AppRadius.brLg,
             border: Border.all(
-              color: has ? AppColors.brandPink : AppColors.hairline,
+              color: has ? AppColors.bordeaux : AppColors.hairline,
               width: has ? 1.5 : 1,
             ),
           ),

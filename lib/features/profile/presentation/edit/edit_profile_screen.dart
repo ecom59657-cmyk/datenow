@@ -208,7 +208,7 @@ class _BirthDateLockedCard extends StatelessWidget {
             ),
             child: const Icon(
               Icons.cake_outlined,
-              color: AppColors.brandPink,
+              color: AppColors.bordeaux,
               size: 18,
             ),
           ),

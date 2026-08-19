@@ -230,7 +230,7 @@ class _LinkedAccountTile extends StatelessWidget {
       trailing: linked
           ? const Icon(
               Icons.check_circle_rounded,
-              color: AppColors.brandPink,
+              color: AppColors.bordeaux,
             )
           : (onTap == null
               ? null

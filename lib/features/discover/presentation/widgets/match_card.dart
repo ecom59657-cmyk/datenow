@@ -128,10 +128,10 @@ class _MatchAvatar extends ConsumerWidget {
       // inner ClipOval carves out a pixel of padding for the ring effect.
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        gradient: AppColors.brandGradient,
+        gradient: AppColors.signatureGradient,
         boxShadow: [
           BoxShadow(
-            color: AppColors.brandPink.withValues(alpha: 0.22),
+            color: AppColors.bordeaux.withValues(alpha: 0.22),
             blurRadius: 14,
             spreadRadius: 0,
             offset: const Offset(0, 6),
@@ -190,7 +190,7 @@ class _InitialFill extends StatelessWidget {
   Widget build(BuildContext context) {
     final letter = _initial ?? _firstInitial(firstName);
     return DecoratedBox(
-      decoration: const BoxDecoration(gradient: AppColors.brandGradient),
+      decoration: const BoxDecoration(gradient: AppColors.signatureGradient),
       child: Center(
         child: Text(
           letter,
@@ -228,15 +228,15 @@ class _CompatibilityPill extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: AppColors.brandPink.withValues(alpha: 0.10),
+        color: AppColors.bordeaux.withValues(alpha: 0.10),
         borderRadius: AppRadius.brPill,
         border: Border.all(
-          color: AppColors.brandPink.withValues(alpha: 0.28),
+          color: AppColors.bordeaux.withValues(alpha: 0.28),
           width: 0.6,
         ),
         boxShadow: [
           BoxShadow(
-            color: AppColors.brandPink.withValues(alpha: 0.16),
+            color: AppColors.bordeaux.withValues(alpha: 0.16),
             blurRadius: 12,
             spreadRadius: 0,
             offset: const Offset(0, 4),
@@ -248,14 +248,14 @@ class _CompatibilityPill extends StatelessWidget {
         children: [
           const Icon(
             Icons.bolt_rounded,
-            color: AppColors.brandPink,
+            color: AppColors.bordeaux,
             size: 13,
           ),
           const SizedBox(width: 5),
           Text(
             l10n.compatibilityValue(percentage),
             style: AppTypography.caption.copyWith(
-              color: AppColors.brandPink,
+              color: AppColors.bordeaux,
               fontWeight: FontWeight.w700,
               letterSpacing: 0.2,
               fontSize: 12,
@@ -292,8 +292,8 @@ class _MessageButton extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         customBorder: const CircleBorder(),
-        splashColor: AppColors.brandPink.withValues(alpha: 0.18),
-        highlightColor: AppColors.brandPink.withValues(alpha: 0.08),
+        splashColor: AppColors.bordeaux.withValues(alpha: 0.18),
+        highlightColor: AppColors.bordeaux.withValues(alpha: 0.08),
         child: Container(
           width: _size,
           height: _size,
@@ -301,12 +301,12 @@ class _MessageButton extends StatelessWidget {
             shape: BoxShape.circle,
             color: AppColors.glass,
             border: Border.all(
-              color: AppColors.brandPink.withValues(alpha: 0.34),
+              color: AppColors.bordeaux.withValues(alpha: 0.34),
               width: 1,
             ),
             boxShadow: [
               BoxShadow(
-                color: AppColors.brandPink.withValues(alpha: 0.18),
+                color: AppColors.bordeaux.withValues(alpha: 0.18),
                 blurRadius: 10,
                 spreadRadius: 0,
                 offset: const Offset(0, 4),
@@ -315,7 +315,7 @@ class _MessageButton extends StatelessWidget {
           ),
           child: const Icon(
             Icons.chat_bubble_rounded,
-            color: AppColors.brandPink,
+            color: AppColors.bordeaux,
             size: 18,
           ),
         ),

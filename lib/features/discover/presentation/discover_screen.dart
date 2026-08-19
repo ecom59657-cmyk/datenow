@@ -183,7 +183,7 @@ class _RemainingSuggestions extends StatelessWidget {
     return Row(
       children: [
         const Icon(Icons.auto_awesome_rounded,
-            size: 15, color: AppColors.brandPink),
+            size: 15, color: AppColors.bordeaux),
         const SizedBox(width: 6),
         Text(
           label,
@@ -210,7 +210,7 @@ class _AllConsumedCard extends StatelessWidget {
       child: Column(
         children: [
           const Icon(Icons.celebration_rounded,
-              size: 44, color: AppColors.brandPink),
+              size: 44, color: AppColors.bordeaux),
           const SizedBox(height: AppSpacing.md),
           Text(
             'Tu as déjà rencontré tes $total '
@@ -301,7 +301,7 @@ class _EmptyCard extends StatelessWidget {
       child: Row(
         children: [
           const Icon(Icons.auto_awesome_rounded,
-              color: AppColors.brandViolet, size: 20),
+              color: AppColors.bordeauxLight, size: 20),
           const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Text(
@@ -347,15 +347,15 @@ class _DiscoverDebugBanner extends StatelessWidget {
             height: 32,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: AppColors.brandViolet.withValues(alpha: 0.18),
+              color: AppColors.bordeauxLight.withValues(alpha: 0.18),
               border: Border.all(
-                color: AppColors.brandViolet.withValues(alpha: 0.4),
+                color: AppColors.bordeauxLight.withValues(alpha: 0.4),
               ),
             ),
             alignment: Alignment.center,
             child: const Icon(
               Icons.bug_report_outlined,
-              color: AppColors.brandViolet,
+              color: AppColors.bordeauxLight,
               size: 16,
             ),
           ),
@@ -375,7 +375,7 @@ class _DiscoverDebugBanner extends StatelessWidget {
                 Text(
                   'Tap → Debug Matching',
                   style: AppTypography.caption.copyWith(
-                    color: AppColors.brandViolet,
+                    color: AppColors.bordeauxLight,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -385,7 +385,7 @@ class _DiscoverDebugBanner extends StatelessWidget {
           IconButton(
             icon: const Icon(
               Icons.chevron_right_rounded,
-              color: AppColors.brandViolet,
+              color: AppColors.bordeauxLight,
             ),
             onPressed: () =>
                 context.pushNamed(AppRoute.debugMatching.name),

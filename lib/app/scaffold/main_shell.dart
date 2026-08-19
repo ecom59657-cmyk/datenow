@@ -55,7 +55,7 @@ class MainShell extends ConsumerWidget {
       _NavItem(
         label: l10n.navDiscover,
         icon: Icons.favorite_rounded,
-        tint: AppColors.brandPink,
+        tint: AppColors.bordeaux,
       ),
       // Messages — reached only after a confirmed mutual match, so we
       // place it right next to Discover (the pre-match surface).
@@ -205,11 +205,11 @@ class _NavButton extends StatelessWidget {
             alignment: Alignment.center,
             decoration: selected
                 ? BoxDecoration(
-                    gradient: AppColors.brandGradient,
+                    gradient: AppColors.signatureGradient,
                     borderRadius: BorderRadius.circular(22),
                     boxShadow: [
                       BoxShadow(
-                        color: AppColors.brandPink.withValues(alpha: 0.45),
+                        color: AppColors.bordeaux.withValues(alpha: 0.45),
                         blurRadius: 18,
                         spreadRadius: 1,
                         offset: const Offset(0, 6),
@@ -279,7 +279,7 @@ class _IconWithBadge extends StatelessWidget {
               padding:
                   const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
               decoration: BoxDecoration(
-                color: AppColors.brandPink,
+                color: AppColors.bordeaux,
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(color: AppColors.surface, width: 1.5),
               ),

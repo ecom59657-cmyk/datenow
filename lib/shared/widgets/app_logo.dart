@@ -38,7 +38,7 @@ class AppLogo extends StatelessWidget {
                 baseline: TextBaseline.alphabetic,
                 child: ShaderMask(
                   shaderCallback: (rect) =>
-                      AppColors.brandGradient.createShader(rect),
+                      AppColors.signatureGradient.createShader(rect),
                   child: Text(
                     'Now',
                     style: AppTypography.display.copyWith(
@@ -74,7 +74,7 @@ class _LogoMark extends StatelessWidget {
         borderRadius: radius,
         boxShadow: [
           BoxShadow(
-            color: AppColors.brandPink.withValues(alpha: 0.3),
+            color: AppColors.bordeaux.withValues(alpha: 0.3),
             blurRadius: 16,
             offset: const Offset(0, 6),
           ),

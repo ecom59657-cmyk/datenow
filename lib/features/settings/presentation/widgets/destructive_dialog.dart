@@ -44,7 +44,7 @@ Future<bool> showDestructiveConfirm({
             child: Text(
               confirmLabel,
               style: AppTypography.button.copyWith(
-                color: isDangerous ? AppColors.error : AppColors.brandPink,
+                color: isDangerous ? AppColors.error : AppColors.bordeaux,
                 fontWeight: FontWeight.w700,
               ),
             ),

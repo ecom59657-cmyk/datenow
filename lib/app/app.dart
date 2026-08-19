@@ -26,9 +26,12 @@ class DateNowApp extends ConsumerWidget {
         // Global messenger key so NotificationService can surface an
         // in-app snackbar from anywhere without a route's BuildContext.
         scaffoldMessengerKey: rootScaffoldMessengerKey,
+        // Light is the canonical look now (ivory & bordeaux). Both slots
+        // point at the same theme and the mode is pinned, so a device in
+        // dark mode can't half-apply Material defaults over the palette.
         theme: AppTheme.light,
-        darkTheme: AppTheme.dark,
-        themeMode: ThemeMode.dark,
+        darkTheme: AppTheme.light,
+        themeMode: ThemeMode.light,
         routerConfig: router,
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,

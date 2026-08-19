@@ -103,12 +103,12 @@ class _PrimaryButton extends StatelessWidget {
       opacity: enabled ? 1 : 0.5,
       child: DecoratedBox(
         decoration: BoxDecoration(
-          gradient: AppColors.brandGradient,
+          gradient: AppColors.signatureGradient,
           borderRadius: AppRadius.brXl,
           boxShadow: enabled
               ? [
                   BoxShadow(
-                    color: AppColors.brandPink.withValues(alpha: 0.35),
+                    color: AppColors.bordeaux.withValues(alpha: 0.35),
                     blurRadius: 24,
                     offset: const Offset(0, 8),
                   ),

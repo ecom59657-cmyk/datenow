@@ -63,7 +63,7 @@ class BlockedAccountsScreen extends ConsumerWidget {
                     children: [
                       const Icon(
                         Icons.verified_outlined,
-                        color: AppColors.brandViolet,
+                        color: AppColors.bordeauxLight,
                         size: 20,
                       ),
                       const SizedBox(width: AppSpacing.sm),

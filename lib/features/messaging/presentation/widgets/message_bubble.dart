@@ -32,7 +32,7 @@ class MessageBubble extends StatelessWidget {
         vertical: AppSpacing.sm + 2,
       ),
       decoration: BoxDecoration(
-        gradient: fromMe ? AppColors.brandGradient : null,
+        gradient: fromMe ? AppColors.signatureGradient : null,
         color: fromMe ? null : AppColors.surfaceElevated,
         border: fromMe ? null : Border.all(color: AppColors.hairline),
         borderRadius: BorderRadius.only(
@@ -44,7 +44,7 @@ class MessageBubble extends StatelessWidget {
         boxShadow: fromMe
             ? [
                 BoxShadow(
-                  color: AppColors.brandPink.withValues(alpha: 0.18),
+                  color: AppColors.bordeaux.withValues(alpha: 0.18),
                   blurRadius: 14,
                   offset: const Offset(0, 4),
                 ),

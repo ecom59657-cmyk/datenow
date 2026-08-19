@@ -431,19 +431,19 @@ class _PrivacyBanner extends StatelessWidget {
         color: AppColors.violetSoft,
         borderRadius: AppRadius.brSm,
         border: Border.all(
-          color: AppColors.brandViolet.withValues(alpha: 0.4),
+          color: AppColors.bordeauxLight.withValues(alpha: 0.4),
         ),
       ),
       child: Row(
         children: [
           const Icon(Icons.shield_outlined,
-              size: 18, color: AppColors.brandViolet),
+              size: 18, color: AppColors.bordeauxLight),
           const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Text(
               l10n.photosPrivacyHeader,
               style: AppTypography.caption.copyWith(
-                color: AppColors.brandViolet,
+                color: AppColors.bordeauxLight,
                 fontWeight: FontWeight.w600,
               ),
             ),

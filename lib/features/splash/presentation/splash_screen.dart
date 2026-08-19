@@ -58,7 +58,7 @@ class SplashScreen extends StatelessWidget {
               width: 26,
               child: CircularProgressIndicator(
                 strokeWidth: 2.2,
-                valueColor: AlwaysStoppedAnimation(AppColors.brandPink),
+                valueColor: AlwaysStoppedAnimation(AppColors.bordeaux),
               ),
             ).animate().fadeIn(delay: 800.ms, duration: 500.ms),
           ],
@@ -85,9 +85,9 @@ class _LogoHalo extends StatelessWidget {
           shape: BoxShape.circle,
           gradient: RadialGradient(
             colors: [
-              AppColors.brandPink.withValues(alpha: 0.22),
-              AppColors.brandViolet.withValues(alpha: 0.10),
-              AppColors.brandViolet.withValues(alpha: 0),
+              AppColors.bordeaux.withValues(alpha: 0.22),
+              AppColors.bordeauxLight.withValues(alpha: 0.10),
+              AppColors.bordeauxLight.withValues(alpha: 0),
             ],
             stops: const [0.0, 0.55, 1.0],
           ),

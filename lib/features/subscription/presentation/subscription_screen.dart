@@ -63,10 +63,10 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  gradient: AppColors.brandGradient,
+                  gradient: AppColors.signatureGradient,
                   boxShadow: [
                     BoxShadow(
-                      color: AppColors.brandPink.withValues(alpha: 0.4),
+                      color: AppColors.bordeaux.withValues(alpha: 0.4),
                       blurRadius: 24,
                       spreadRadius: 2,
                     ),
@@ -158,11 +158,11 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
                 vertical: 7,
               ),
               decoration: BoxDecoration(
-                gradient: AppColors.brandGradient,
+                gradient: AppColors.signatureGradient,
                 borderRadius: AppRadius.brPill,
                 boxShadow: [
                   BoxShadow(
-                    color: AppColors.brandPink.withValues(alpha: 0.35),
+                    color: AppColors.bordeaux.withValues(alpha: 0.35),
                     blurRadius: 24,
                     spreadRadius: 1,
                     offset: const Offset(0, 8),
@@ -266,7 +266,7 @@ class _PriceHero extends StatelessWidget {
           if (isPremium) ...[
             const Icon(
               Icons.workspace_premium_rounded,
-              color: AppColors.brandPink,
+              color: AppColors.bordeaux,
               size: 44,
             ),
             const SizedBox(height: AppSpacing.md),
@@ -284,7 +284,7 @@ class _PriceHero extends StatelessWidget {
               children: [
                 ShaderMask(
                   shaderCallback: (rect) =>
-                      AppColors.brandGradient.createShader(rect),
+                      AppColors.signatureGradient.createShader(rect),
                   child: Text(
                     amount,
                     style: AppTypography.display.copyWith(
@@ -346,11 +346,11 @@ class _BenefitTile extends StatelessWidget {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              gradient: AppColors.brandGradient,
+              gradient: AppColors.signatureGradient,
               borderRadius: AppRadius.brSm,
               boxShadow: [
                 BoxShadow(
-                  color: AppColors.brandPink.withValues(alpha: 0.28),
+                  color: AppColors.bordeaux.withValues(alpha: 0.28),
                   blurRadius: 16,
                   spreadRadius: 0,
                   offset: const Offset(0, 6),
@@ -408,7 +408,7 @@ class _PremiumComingSoonCta extends StatelessWidget {
         borderRadius: AppRadius.brSm,
         boxShadow: [
           BoxShadow(
-            color: AppColors.brandPink.withValues(alpha: 0.45),
+            color: AppColors.bordeaux.withValues(alpha: 0.45),
             blurRadius: 30,
             spreadRadius: 1,
             offset: const Offset(0, 12),

@@ -253,9 +253,9 @@ class _PermRow extends StatelessWidget {
             height: 38,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: AppColors.brandPink.withValues(alpha: 0.16),
+              color: AppColors.bordeaux.withValues(alpha: 0.16),
             ),
-            child: Icon(icon, color: AppColors.brandPink, size: 20),
+            child: Icon(icon, color: AppColors.bordeaux, size: 20),
           ),
           const SizedBox(width: AppSpacing.md),
           Expanded(
@@ -295,11 +295,11 @@ class _GlowingDuo extends StatelessWidget {
         children: [
           Positioned(
             left: 30,
-            child: _glow(AppColors.brandPink, Icons.videocam_rounded),
+            child: _glow(AppColors.bordeaux, Icons.videocam_rounded),
           ),
           Positioned(
             right: 30,
-            child: _glow(AppColors.brandViolet, Icons.mic_rounded),
+            child: _glow(AppColors.bordeauxLight, Icons.mic_rounded),
           ),
         ],
       ),

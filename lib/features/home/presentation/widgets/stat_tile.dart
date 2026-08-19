@@ -26,7 +26,7 @@ class StatTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = accent ?? AppColors.brandPink;
+    final color = accent ?? AppColors.bordeaux;
     return GlassCard(
       padding: const EdgeInsets.all(AppSpacing.md),
       onTap: onTap,

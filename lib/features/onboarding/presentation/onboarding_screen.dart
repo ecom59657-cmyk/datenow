@@ -142,7 +142,7 @@ class _PageIndicators extends StatelessWidget {
           height: 6,
           width: active ? 28 : 6,
           decoration: BoxDecoration(
-            color: active ? AppColors.brandPink : AppColors.hairline,
+            color: active ? AppColors.bordeaux : AppColors.hairline,
             borderRadius: BorderRadius.circular(99),
           ),
         );

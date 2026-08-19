@@ -217,7 +217,7 @@ class _StepProgress extends StatelessWidget {
               height: 4,
               width: active ? 28 : 14,
               decoration: BoxDecoration(
-                color: active ? AppColors.brandPink : AppColors.hairline,
+                color: active ? AppColors.bordeaux : AppColors.hairline,
                 borderRadius: BorderRadius.circular(99),
               ),
             );

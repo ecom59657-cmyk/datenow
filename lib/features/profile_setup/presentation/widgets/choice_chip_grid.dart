@@ -65,7 +65,7 @@ class _Chip extends StatelessWidget {
             color: selected ? AppColors.pinkSoft : AppColors.surface,
             borderRadius: AppRadius.brPill,
             border: Border.all(
-              color: selected ? AppColors.brandPink : AppColors.hairline,
+              color: selected ? AppColors.bordeaux : AppColors.hairline,
               width: selected ? 1.5 : 1,
             ),
           ),

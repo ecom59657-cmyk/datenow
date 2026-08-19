@@ -74,7 +74,7 @@ class _AppTextFieldState extends State<AppTextField> {
           onFieldSubmitted: widget.onSubmitted,
           enabled: widget.enabled,
           style: AppTypography.bodyLarge,
-          cursorColor: AppColors.brandPink,
+          cursorColor: AppColors.bordeaux,
           decoration: InputDecoration(
             hintText: widget.hint,
             prefixIcon: widget.prefixIcon != null

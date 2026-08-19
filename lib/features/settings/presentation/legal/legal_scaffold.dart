@@ -124,12 +124,12 @@ class _BackdropGlow extends StatelessWidget {
           Positioned(
             top: -140,
             left: -80,
-            child: _glow(AppColors.brandPink.withValues(alpha: 0.18), 320),
+            child: _glow(AppColors.bordeaux.withValues(alpha: 0.18), 320),
           ),
           Positioned(
             top: -100,
             right: -90,
-            child: _glow(AppColors.brandViolet.withValues(alpha: 0.14), 280),
+            child: _glow(AppColors.bordeauxLight.withValues(alpha: 0.14), 280),
           ),
         ],
       ),
@@ -192,15 +192,15 @@ class _LastUpdatedPill extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
       decoration: BoxDecoration(
-        color: AppColors.brandPink.withValues(alpha: 0.10),
+        color: AppColors.bordeaux.withValues(alpha: 0.10),
         borderRadius: AppRadius.brPill,
         border: Border.all(
-          color: AppColors.brandPink.withValues(alpha: 0.28),
+          color: AppColors.bordeaux.withValues(alpha: 0.28),
           width: 0.6,
         ),
         boxShadow: [
           BoxShadow(
-            color: AppColors.brandPink.withValues(alpha: 0.14),
+            color: AppColors.bordeaux.withValues(alpha: 0.14),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -209,7 +209,7 @@ class _LastUpdatedPill extends StatelessWidget {
       child: Text(
         label,
         style: AppTypography.caption.copyWith(
-          color: AppColors.brandPink,
+          color: AppColors.bordeaux,
           fontWeight: FontWeight.w700,
           letterSpacing: 0.3,
           fontSize: 11,
@@ -239,7 +239,7 @@ class _SectionHeading extends StatelessWidget {
         Text(
           index.toString().padLeft(2, '0'),
           style: AppTypography.caption.copyWith(
-            color: AppColors.brandPink,
+            color: AppColors.bordeaux,
             fontWeight: FontWeight.w800,
             letterSpacing: 1.4,
             fontSize: 11,
@@ -270,8 +270,8 @@ class _HairlineRule extends StatelessWidget {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            AppColors.brandPink.withValues(alpha: 0.7),
-            AppColors.brandPink.withValues(alpha: 0),
+            AppColors.bordeaux.withValues(alpha: 0.7),
+            AppColors.bordeaux.withValues(alpha: 0),
           ],
         ),
       ),
@@ -306,8 +306,8 @@ class _DateNowFooter extends StatelessWidget {
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: [
-                    AppColors.brandPink.withValues(alpha: 0.5),
-                    AppColors.brandViolet.withValues(alpha: 0.35),
+                    AppColors.bordeaux.withValues(alpha: 0.5),
+                    AppColors.bordeauxLight.withValues(alpha: 0.35),
                   ],
                 ),
               ),

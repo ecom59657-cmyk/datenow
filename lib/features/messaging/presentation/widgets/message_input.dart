@@ -95,7 +95,7 @@ class _MessageInputState extends State<MessageInput> {
                   minLines: 1,
                   textInputAction: TextInputAction.send,
                   onSubmitted: (_) => _send(),
-                  cursorColor: AppColors.brandPink,
+                  cursorColor: AppColors.bordeaux,
                   style: AppTypography.bodyLarge,
                   decoration: InputDecoration(
                     border: InputBorder.none,
@@ -142,7 +142,7 @@ class _SendButton extends StatelessWidget {
             height: 44,
             decoration: const BoxDecoration(
               shape: BoxShape.circle,
-              gradient: AppColors.brandGradient,
+              gradient: AppColors.signatureGradient,
             ),
             child: sending
                 ? const Padding(

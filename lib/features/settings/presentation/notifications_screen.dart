@@ -140,7 +140,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
                     : isAuthorized
                         ? const Icon(
                             Icons.check_circle_rounded,
-                            color: AppColors.brandPink,
+                            color: AppColors.bordeaux,
                           )
                         : null,
               ),

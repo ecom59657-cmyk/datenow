@@ -28,7 +28,7 @@ class BlurredAvatar extends StatelessWidget {
         border: Border.all(color: AppColors.hairline, width: 1.5),
         boxShadow: [
           BoxShadow(
-            color: AppColors.brandPink.withValues(alpha: 0.15),
+            color: AppColors.bordeaux.withValues(alpha: 0.15),
             blurRadius: 28,
             spreadRadius: 2,
           ),

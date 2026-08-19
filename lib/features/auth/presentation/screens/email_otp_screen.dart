@@ -270,7 +270,7 @@ class _OtpCodeField extends StatelessWidget {
         focusedBorder: OutlineInputBorder(
           borderRadius: AppRadius.brMd,
           borderSide: BorderSide(
-            color: AppColors.brandPink,
+            color: AppColors.bordeaux,
             width: 1.5,
           ),
         ),

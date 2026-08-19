@@ -157,7 +157,7 @@ class SettingSwitchTile extends StatelessWidget {
       onTap: () => onChanged(!value),
       trailing: Switch.adaptive(
         value: value,
-        activeTrackColor: AppColors.brandPink,
+        activeTrackColor: AppColors.bordeaux,
         onChanged: onChanged,
       ),
     );

@@ -21,8 +21,8 @@ class CompatibilityBadge extends StatelessWidget {
   final bool compact;
 
   Color get _color => switch (score.band) {
-        MatchBand.veryHigh => AppColors.brandPink,
-        MatchBand.high => AppColors.brandViolet,
+        MatchBand.veryHigh => AppColors.bordeaux,
+        MatchBand.high => AppColors.bordeauxLight,
         MatchBand.medium => AppColors.warning,
         MatchBand.low => AppColors.textTertiary,
       };

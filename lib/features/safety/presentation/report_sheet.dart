@@ -245,12 +245,12 @@ class _ReasonTile extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 6),
       child: Material(
         color: selected
-            ? AppColors.brandPink.withValues(alpha: 0.12)
+            ? AppColors.bordeaux.withValues(alpha: 0.12)
             : AppColors.surface,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(14),
           side: BorderSide(
-            color: selected ? AppColors.brandPink : AppColors.hairline,
+            color: selected ? AppColors.bordeaux : AppColors.hairline,
           ),
         ),
         child: InkWell(
@@ -269,7 +269,7 @@ class _ReasonTile extends StatelessWidget {
                       : Icons.radio_button_unchecked,
                   size: 18,
                   color:
-                      selected ? AppColors.brandPink : AppColors.textTertiary,
+                      selected ? AppColors.bordeaux : AppColors.textTertiary,
                 ),
                 const SizedBox(width: AppSpacing.sm),
                 Expanded(child: Text(label, style: AppTypography.body)),

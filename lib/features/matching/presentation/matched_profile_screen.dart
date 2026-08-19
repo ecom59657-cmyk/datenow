@@ -132,7 +132,7 @@ class _PhotoFallback extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const DecoratedBox(
-      decoration: BoxDecoration(gradient: AppColors.brandGradient),
+      decoration: BoxDecoration(gradient: AppColors.signatureGradient),
       child: Center(
         child: Icon(Icons.person_rounded, color: Colors.white, size: 72),
       ),
@@ -163,7 +163,7 @@ class _InterestChips extends StatelessWidget {
             decoration: BoxDecoration(
               color: AppColors.pinkSoft,
               borderRadius: AppRadius.brPill,
-              border: Border.all(color: AppColors.brandPink, width: 1),
+              border: Border.all(color: AppColors.bordeaux, width: 1),
             ),
             child: Text(
               interest.label(l10n),

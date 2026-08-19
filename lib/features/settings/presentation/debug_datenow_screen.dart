@@ -642,7 +642,7 @@ class _ActionChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: AppColors.brandViolet.withValues(alpha: 0.16),
+      color: AppColors.bordeauxLight.withValues(alpha: 0.16),
       borderRadius: BorderRadius.circular(10),
       child: InkWell(
         onTap: onTap,
@@ -655,7 +655,7 @@ class _ActionChip extends StatelessWidget {
           child: Text(
             label,
             style: AppTypography.caption.copyWith(
-              color: AppColors.brandViolet,
+              color: AppColors.bordeauxLight,
               fontWeight: FontWeight.w700,
             ),
           ),

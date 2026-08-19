@@ -37,7 +37,7 @@ class ChoiceCard extends StatelessWidget {
             color: selected ? AppColors.pinkSoft : AppColors.surface,
             borderRadius: AppRadius.brLg,
             border: Border.all(
-              color: selected ? AppColors.brandPink : AppColors.hairline,
+              color: selected ? AppColors.bordeaux : AppColors.hairline,
               width: selected ? 1.5 : 1,
             ),
           ),
@@ -51,14 +51,14 @@ class ChoiceCard extends StatelessWidget {
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
                     color: selected
-                        ? AppColors.brandPink.withValues(alpha: 0.18)
+                        ? AppColors.bordeaux.withValues(alpha: 0.18)
                         : AppColors.hairlineSoft,
                     borderRadius: AppRadius.brSm,
                   ),
                   child: Icon(icon,
                       size: 18,
                       color: selected
-                          ? AppColors.brandPink
+                          ? AppColors.bordeaux
                           : AppColors.textSecondary),
                 ),
                 const SizedBox(width: AppSpacing.sm),
@@ -86,7 +86,7 @@ class ChoiceCard extends StatelessWidget {
                 opacity: selected ? 1 : 0,
                 child: const Icon(
                   Icons.check_circle_rounded,
-                  color: AppColors.brandPink,
+                  color: AppColors.bordeaux,
                   size: 22,
                 ),
               ),

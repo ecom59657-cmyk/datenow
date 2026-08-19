@@ -23,7 +23,6 @@ import '../../../shared/widgets/app_scaffold.dart';
 import '../../../shared/widgets/glass_card.dart';
 import '../../auth/presentation/providers/auth_provider.dart';
 import '../../presence/data/presence_repository.dart';
-import '../../profile_setup/data/profile_repository.dart';
 import '../../profile_setup/presentation/providers/profile_provider.dart';
 import '../../quota/data/quota_repository.dart';
 import '../../quota/presentation/widgets/quota_limit_sheet.dart';
@@ -135,7 +134,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                     AppConfig.maxCallDuration.inMinutes,
                   ),
                   label: l10n.dateDurationLabel,
-                  accent: AppColors.brandViolet,
+                  accent: AppColors.bordeauxLight,
                 ),
               ),
             ],
@@ -512,10 +511,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  gradient: AppColors.brandGradient,
+                  gradient: AppColors.signatureGradient,
                   boxShadow: [
                     BoxShadow(
-                      color: AppColors.brandPink.withValues(alpha: 0.4),
+                      color: AppColors.bordeaux.withValues(alpha: 0.4),
                       blurRadius: 24,
                       spreadRadius: 2,
                     ),
@@ -601,10 +600,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  gradient: AppColors.brandGradient,
+                  gradient: AppColors.signatureGradient,
                   boxShadow: [
                     BoxShadow(
-                      color: AppColors.brandPink.withValues(alpha: 0.4),
+                      color: AppColors.bordeaux.withValues(alpha: 0.4),
                       blurRadius: 24,
                       spreadRadius: 2,
                     ),
@@ -678,7 +677,7 @@ class _HowItWorksCard extends StatelessWidget {
                   width: 28,
                   height: 28,
                   decoration: const BoxDecoration(
-                    gradient: AppColors.brandGradient,
+                    gradient: AppColors.signatureGradient,
                     borderRadius: AppRadius.brSm,
                   ),
                   alignment: Alignment.center,
@@ -751,7 +750,7 @@ class _PremiumTeaserCard extends ConsumerWidget {
         borderRadius: AppRadius.brLg,
         boxShadow: [
           BoxShadow(
-            color: AppColors.brandPink.withValues(alpha: 0.18),
+            color: AppColors.bordeaux.withValues(alpha: 0.18),
             blurRadius: 28,
             spreadRadius: 0,
             offset: const Offset(0, 10),
@@ -783,7 +782,7 @@ class _PremiumTeaserCard extends ConsumerWidget {
               width: 46,
               height: 46,
               decoration: BoxDecoration(
-                gradient: AppColors.brandGradient,
+                gradient: AppColors.signatureGradient,
                 borderRadius: AppRadius.brSm,
                 border: Border.all(
                   color: _gold.withValues(alpha: 0.55),
@@ -791,7 +790,7 @@ class _PremiumTeaserCard extends ConsumerWidget {
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: AppColors.brandPink.withValues(alpha: 0.34),
+                    color: AppColors.bordeaux.withValues(alpha: 0.34),
                     blurRadius: 18,
                     spreadRadius: 0,
                     offset: const Offset(0, 6),
@@ -847,10 +846,10 @@ class _PremiumTeaserCard extends ConsumerWidget {
             Container(
               decoration: BoxDecoration(
                 borderRadius: AppRadius.brPill,
-                gradient: AppColors.brandGradient,
+                gradient: AppColors.signatureGradient,
                 boxShadow: [
                   BoxShadow(
-                    color: AppColors.brandPink.withValues(alpha: 0.42),
+                    color: AppColors.bordeaux.withValues(alpha: 0.42),
                     blurRadius: 16,
                     spreadRadius: 0,
                     offset: const Offset(0, 6),
@@ -938,10 +937,10 @@ class _HomeIdentityNudge extends ConsumerWidget {
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  gradient: AppColors.brandGradient,
+                  gradient: AppColors.signatureGradient,
                   boxShadow: [
                     BoxShadow(
-                      color: AppColors.brandPink.withValues(alpha: 0.30),
+                      color: AppColors.bordeaux.withValues(alpha: 0.30),
                       blurRadius: 16,
                       spreadRadius: 1,
                     ),
@@ -975,7 +974,7 @@ class _HomeIdentityNudge extends ConsumerWidget {
                     Text(
                       'Vérifier mon identité  →',
                       style: AppTypography.caption.copyWith(
-                        color: AppColors.brandPink,
+                        color: AppColors.bordeaux,
                         fontWeight: FontWeight.w600,
                       ),
                     ),

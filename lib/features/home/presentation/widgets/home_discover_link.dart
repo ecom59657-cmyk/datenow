@@ -75,19 +75,19 @@ class _HomeDiscoverLinkState extends State<HomeDiscoverLink> {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            Color(0x6BFF3D7F), // brandPink α≈42 %
-            Color(0x5CB936FF), // brandViolet α≈36 %
+            Color(0x6BFF3D7F), // bordeaux α≈42 %
+            Color(0x5CB936FF), // bordeauxLight α≈36 %
           ],
         ),
         boxShadow: [
           // Two stacked glows — pink dominant near, violet softer further.
           BoxShadow(
-            color: AppColors.brandPink.withValues(alpha: 0.18),
+            color: AppColors.bordeaux.withValues(alpha: 0.18),
             blurRadius: 22,
             offset: const Offset(0, 8),
           ),
           BoxShadow(
-            color: AppColors.brandViolet.withValues(alpha: 0.12),
+            color: AppColors.bordeauxLight.withValues(alpha: 0.12),
             blurRadius: 28,
             offset: const Offset(0, 14),
           ),
@@ -106,8 +106,8 @@ class _HomeDiscoverLinkState extends State<HomeDiscoverLink> {
             if (!mounted || highlighted == _pressed) return;
             setState(() => _pressed = highlighted);
           },
-          splashColor: AppColors.brandPink.withValues(alpha: 0.12),
-          highlightColor: AppColors.brandViolet.withValues(alpha: 0.06),
+          splashColor: AppColors.bordeaux.withValues(alpha: 0.12),
+          highlightColor: AppColors.bordeauxLight.withValues(alpha: 0.06),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(
               AppSpacing.lg,
@@ -157,17 +157,17 @@ class _Badge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
       decoration: BoxDecoration(
-        color: AppColors.brandPink.withValues(alpha: 0.10),
+        color: AppColors.bordeaux.withValues(alpha: 0.10),
         borderRadius: AppRadius.brPill,
         border: Border.all(
-          color: AppColors.brandPink.withValues(alpha: 0.30),
+          color: AppColors.bordeaux.withValues(alpha: 0.30),
           width: 0.6,
         ),
       ),
       child: Text(
         label.toUpperCase(),
         style: AppTypography.caption.copyWith(
-          color: AppColors.brandPink,
+          color: AppColors.bordeaux,
           fontWeight: FontWeight.w700,
           letterSpacing: 1.0,
           fontSize: 10.5,
@@ -196,7 +196,7 @@ class _TitleRow extends StatelessWidget {
         const Icon(
           Icons.auto_awesome_rounded,
           size: 18,
-          color: AppColors.brandViolet,
+          color: AppColors.bordeauxLight,
         ),
         const SizedBox(width: 8),
         Flexible(
@@ -228,7 +228,7 @@ class _BottomCta extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ShaderMask(
-      shaderCallback: (rect) => AppColors.brandGradient.createShader(rect),
+      shaderCallback: (rect) => AppColors.signatureGradient.createShader(rect),
       blendMode: BlendMode.srcIn,
       child: Row(
         mainAxisSize: MainAxisSize.min,
