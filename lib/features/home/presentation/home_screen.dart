@@ -52,6 +52,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   /// the provider can settle again before the route is on screen.
   bool _pitching = false;
 
+  /// The completed-date count as Home first read it this session.
+  ///
+  /// The pitch belongs to the moment the third date lands, not to the
+  /// history someone already carries when they sign in. Without this,
+  /// every returning user with three dates behind them opened the app
+  /// straight onto the subscription page — the count is historical, so it
+  /// was already over the threshold on the very first frame of Home.
+  int? _countAtEntry;
+
   /// Opens the Premium page once, after the third completed date.
   ///
   /// Placed on Home rather than at the end of the call: the moment a date
@@ -78,11 +87,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   @override
   Widget build(BuildContext context) {
     // Fires when the counter and the subscription state have both settled.
-    ref.listen(shouldPitchPremiumProvider, (_, next) {
-      if (next.asData?.value == true) {
-        WidgetsBinding.instance
-            .addPostFrameCallback((_) => _maybePitchPremium());
+    ref.listen(completedDatesProvider, (_, next) {
+      final count = next.asData?.value;
+      if (count == null) return;
+      // First reading of the session: remember it and pitch nothing. This
+      // is the frame right after sign-in, and a paywall there is what the
+      // whole milestone was meant to avoid.
+      if (_countAtEntry == null) {
+        _countAtEntry = count;
+        return;
       }
+      // Only a date completed while the app was open opens the pitch.
+      if (count <= _countAtEntry!) return;
+      WidgetsBinding.instance
+          .addPostFrameCallback((_) => _maybePitchPremium());
     });
     final l10n = AppLocalizations.of(context);
     final user = ref.watch(currentUserProvider);
@@ -440,7 +458,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     if (!context.mounted) return;
     _log.info('Matching started → navigating to /matching');
     try {
-      context.pushNamed(AppRoute.matching.name);
+      await context.pushNamed(AppRoute.matching.name);
+      // Back on Home: the date that just happened has to be counted, or the
+      // Premium pitch can never fire at the moment it was written for.
+      // Nothing else in the app invalidates this counter.
+      if (mounted) ref.invalidate(completedDatesProvider);
     } catch (e, st) {
       _log.error('Navigation to /matching failed: $e', e, st);
       if (!context.mounted) return;
