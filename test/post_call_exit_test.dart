@@ -68,4 +68,66 @@ void main() {
       expect(src, contains('static const _maxRearms'));
     });
   });
+
+  callBlurTests();
+}
+
+// ---------------------------------------------------------------------------
+// The call blur must survive everything added to that screen
+// ---------------------------------------------------------------------------
+//
+// Pillar 3 of docs/APPLE_4_3B_APPEAL.md tells Apple, with line references,
+// that the camera stays blurred for the whole date. The blur is a
+// BackdropFilter painted OVER an iOS PlatformView: it only works because it
+// sits directly above the video in AgoraCallView's stack, and anything
+// inserted between them switches it off silently. Two live phones are the
+// only way to see that, so this asserts the structure instead.
+
+void callBlurTests() {
+  late String agora;
+  late String screen;
+
+  setUpAll(() {
+    agora = File('lib/features/call/presentation/agora_call_view.dart')
+        .readAsStringSync();
+    screen =
+        File('lib/features/call/presentation/call_screen.dart').readAsStringSync();
+  });
+
+  group('call blur', () {
+    test('both surfaces are still blurred', () {
+      expect(
+        RegExp(r'ImageFilter\.blur\(').allMatches(agora).length,
+        greaterThanOrEqualTo(2),
+        reason: 'fullscreen remote feed AND the local PIP',
+      );
+    });
+
+    test('the blur still sits directly above the fullscreen video', () {
+      final video = agora.indexOf('_buildFullscreenVideo(c, remoteUid)');
+      final blur = agora.indexOf('BackdropFilter', video);
+      expect(video, greaterThan(-1));
+      expect(blur, greaterThan(video));
+      // Nothing may be painted between the video and the blur that covers
+      // it — that is the whole mechanism.
+      final between = agora.substring(video, blur);
+      expect(
+        between.contains('Positioned.fill(child:') &&
+            !between.contains('ClipRect'),
+        isFalse,
+        reason: 'a layer inserted here would leave the feed sharp',
+      );
+    });
+
+    test('the lifeline is a sibling of the call view, not inside it', () {
+      // Added to CallScreen's own stack. If it ever moved into
+      // AgoraCallView it could land between the video and its blur.
+      expect(screen, contains('PromptLifeline(peerUserId:'));
+      expect(
+        agora.contains('PromptLifeline'),
+        isFalse,
+        reason: 'nothing from the prompts feature belongs in the video stack',
+      );
+    });
+  });
 }

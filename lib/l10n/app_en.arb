@@ -420,6 +420,8 @@
   "editPromptsUnsaved": "Unsaved changes",
   "editPromptsSaved": "Up to date",
   "profilePromptsPeerTitle": "Their answers",
+  "callLifelineOpen": "Need something to ask?",
+  "callLifelineTitle": "What they wrote",
   "postCallTitle": "Your date is over 🎉",
   "postCallSubtitle": "Now you've had a real conversation, here's their photo.",
   "postCallReveal": "Reveal photo",

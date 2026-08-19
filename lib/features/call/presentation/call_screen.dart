@@ -24,6 +24,7 @@ import '../../presence/presentation/presence_controller.dart';
 import '../data/call_session_repository.dart';
 import '../domain/call_end_reason.dart';
 import 'agora_call_view.dart';
+import 'widgets/prompt_lifeline.dart';
 
 /// 5-minute live call screen — Jitsi-only.
 ///
@@ -492,6 +493,21 @@ class _CallScreenState extends ConsumerState<CallScreen>
                 ),
               ),
             ),
+
+            // The peer's written answers, collapsed, above the controls.
+            // A sibling of AgoraCallView — never inside it: the blur is a
+            // BackdropFilter over a PlatformView and reordering that stack
+            // is what would switch it off. Renders nothing when the peer
+            // has no answers, which is every account today.
+            if (candidate != null)
+              Align(
+                alignment: Alignment.bottomCenter,
+                child: SafeArea(
+                  top: false,
+                  minimum: const EdgeInsets.only(bottom: 96),
+                  child: PromptLifeline(peerUserId: candidate.userId),
+                ),
+              ),
 
             // Bottom HUD — a single row of 4 compact circular controls
             // (mic / cam / switch / end). No big translucent panel; the
