@@ -368,19 +368,18 @@ class _PromptSlotEditorState extends State<PromptSlotEditor> {
                 onTap: _clear,
               ),
               const Spacer(),
-              // The count only shows once it starts to matter — a live
-              // 0/140 on an empty field reads as pressure.
-              if (length > PromptRules.maxAnswerLength - 40) ...[
-                Text(
-                  '$length/${PromptRules.maxAnswerLength}',
-                  style: AppTypography.caption.copyWith(
-                    color: length >= PromptRules.maxAnswerLength
-                        ? AppColors.amber
-                        : AppColors.ink3,
-                  ),
+              // Shown for the whole time the field is open: a bounded field
+              // with no visible bound reads as broken, and people stop
+              // typing to check. It only turns amber at the ceiling.
+              Text(
+                '$length/${PromptRules.maxAnswerLength}',
+                style: AppTypography.caption.copyWith(
+                  color: length >= PromptRules.maxAnswerLength
+                      ? AppColors.amber
+                      : AppColors.ink3,
                 ),
-                const SizedBox(width: AppSpacing.sm),
-              ],
+              ),
+              const SizedBox(width: AppSpacing.sm),
               if (text.isNotEmpty)
                 _SlotAction(
                   icon: Icons.check_rounded,

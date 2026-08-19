@@ -95,4 +95,67 @@ void main() {
 
     expect(find.byType(TextField), findsOneWidget);
   });
+
+  typingTests();
+}
+
+// ---------------------------------------------------------------------------
+// Typing more than one character
+// ---------------------------------------------------------------------------
+//
+// The editor keyed each slot on the chosen question. The instant the first
+// character made an answer exist, the key changed, Flutter discarded the
+// State mid-word and rebuilt an empty controller — so exactly one letter
+// could be typed. Reproduced here at the level where it happened: a parent
+// that re-renders the slot on every keystroke, as the real screen does.
+
+void typingTests() {
+  testWidgets('a whole sentence can be typed, not just the first letter',
+      (tester) async {
+    await tester.pumpWidget(_StatefulHost());
+
+    await tester.tap(find.byType(InkWell).first);
+    await tester.pumpAndSettle();
+    final l10n = await AppLocalizations.delegate.load(const Locale('fr'));
+    await tester.tap(find.text(PromptQuestion.values.first.label(l10n)).last);
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField), 'Un marché');
+    await tester.pump();
+    await tester.enterText(find.byType(TextField), 'Un marché le matin.');
+    await tester.pump();
+
+    expect(find.byType(TextField), findsOneWidget);
+    expect(
+      tester.widget<TextField>(find.byType(TextField)).controller?.text,
+      'Un marché le matin.',
+    );
+  });
+}
+
+/// Mirrors the real screen: it rebuilds the slot on every change and only
+/// stores answers that carry text.
+class _StatefulHost extends StatefulWidget {
+  @override
+  State<_StatefulHost> createState() => _StatefulHostState();
+}
+
+class _StatefulHostState extends State<_StatefulHost> {
+  PromptAnswer? _answer;
+
+  @override
+  Widget build(BuildContext context) {
+    return _host(
+      PromptSlotEditor(
+        key: const ValueKey('slot-0'),
+        answer: _answer,
+        taken: const {},
+        onChanged: (question, value) => setState(() {
+          _answer = question == null || value.trim().isEmpty
+              ? null
+              : PromptAnswer(question: question, answer: value);
+        }),
+      ),
+    );
+  }
 }

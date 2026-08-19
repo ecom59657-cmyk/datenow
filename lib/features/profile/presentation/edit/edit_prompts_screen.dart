@@ -144,10 +144,14 @@ class _EditPromptsScreenState extends ConsumerState<EditPromptsScreen> {
                           slot < PromptRules.maxAnswered;
                           slot++) ...[
                         PromptSlotEditor(
-                          key: ValueKey(
-                            'edit-prompt-$slot-'
-                            '${slot < draft.length ? draft[slot].question.name : "empty"}',
-                          ),
+                          // Keyed on the slot ONLY. Including the question
+                          // meant the key changed the instant the first
+                          // character made an answer exist, so Flutter
+                          // threw the State away mid-word: the controller
+                          // was rebuilt empty and the field closed after
+                          // one letter. Syncing with the parent is
+                          // didUpdateWidget's job, not the key's.
+                          key: ValueKey('edit-prompt-$slot'),
                           answer: slot < draft.length ? draft[slot] : null,
                           taken: draft.map((a) => a.question).toSet(),
                           onChanged: (question, answer) =>
