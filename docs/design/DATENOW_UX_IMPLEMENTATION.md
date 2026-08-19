@@ -880,6 +880,29 @@ Paramètres retenus, adaptés à DateNow :
 décider — ils sont **affichés pendant l'appel**, en bas d'écran, repliés. C'est le filet
 de sécurité des cinq minutes. Aucune app à photos ne peut faire ça.
 
+> **✅ Vérifié (19/08)** — l'état actuel est exact : `UserProfile` a bien 13 champs et
+> aucun texte libre hors `firstName`, l'enum `Interest`
+> (`profile_setup/domain/interest.dart:5`) a bien les 16 valeurs listées, le wizard a bien
+> `_stepCount = 4`, et `public.set_updated_at()` existe déjà
+> (`20260513120000_initial_schema.sql:231`), donc le trigger proposé s'appuie sur du réel.
+>
+> **⚠️ Deux points à trancher avant d'écrire le code :**
+>
+> **1. La politique RLS `USING (true)` mérite discussion.** Elle rend les prompts de tout
+> le monde lisibles par n'importe quel compte authentifié — **y compris par quelqu'un que
+> l'utilisateur a bloqué**. C'est cohérent avec le précédent du repo
+> (`profiles_select_for_discovery` est déjà `auth.uid() IS NOT NULL AND id <> auth.uid()`,
+> donc tout aussi large), mais la nature du contenu change le risque : jusqu'ici tout
+> était des enums, là c'est **du texte écrit par les utilisateurs**. Une table de texte
+> libre lisible par tous est une surface d'aspiration et de capture d'écran. Au minimum,
+> exclure les blocages ; idéalement, calquer sur `profiles_select_via_suggestion`.
+>
+> **2. Les prompts sont le premier contenu généré par l'utilisateur de l'app.** Ça
+> déclenche la Guideline 1.2 d'Apple (UGC) : filtrage du contenu répréhensible,
+> signalement, blocage, et action sous 24 h. Signalement et blocage existent déjà ; **le
+> filtrage du texte, non**. À prévoir dans le même lot, sous peine d'ajouter un motif de
+> rejet à une app déjà en appel.
+
 ### Code
 
 ```dart
@@ -1106,7 +1129,14 @@ juste après. Régénère freezed et l10n.
 
 ### État actuel
 
-`suggestion_card.dart` : deux boutons, ✕ et ♥ « Proposer un appel ». Binaire, sans contexte.
+`suggestion_card.dart` : deux boutons, ✕ et le CTA d'appel. Binaire, sans contexte.
+
+> **✅ Vérifié (19/08)** — exact sur le fond. Deux précisions de forme : le libellé réel
+> est `suggestionStartDate` (« Lancer un date »), pas « Proposer un appel » — c'est le
+> texte de la maquette, pas celui du code. Et la carte a été refaite depuis
+> (commit `34b197e`) : le ✕ est passé en icône compacte à côté du CTA. La structure
+> attendue par ce point est donc déjà en place, il ne reste qu'à faire porter le CTA sur
+> une réponse précise.
 
 ### Décision
 
@@ -1158,6 +1188,37 @@ AppButton(label: l10n.discoverProposeCall, onPressed: () => onProposeCall());
 
 `post_call_screen.dart` : `_Stage.decide` → révéler → match/pass. **Aucune question sur
 l'appel.** Le système ne sait pas si les cinq minutes se sont bien passées.
+
+> **⚠️ Correction (19/08)** — l'absence de question est exacte, mais **l'endroit où ce
+> point veut l'insérer n'existe plus comme moment utilisateur**.
+>
+> `_Stage.decide` n'est pas un écran de décision : c'est un `_RevealingView()`, un
+> spinner transitoire pendant que l'écriture `revealed = true` part
+> (`post_call_screen.dart:749`). La révélation est **automatique** depuis un commit
+> antérieur — le code le dit : « Reveal is automatic now — this is a brief transition
+> […] No button ». Poser une question à cet endroit, c'est réintroduire une porte que le
+> produit a délibérément retirée, et rallonger de plusieurs secondes le seul moment que
+> la chorégraphie du Voile cherche à rendre continu.
+>
+> **Trois placements possibles, à trancher avant d'écrire :**
+>
+> 1. **Pendant l'attente du pair** (`_Stage.waiting`). Gratuit en temps perçu : on occupe
+>    une attente qui existe déjà, et on est bien avant la photo. Défaut : si les deux
+>    révèlent en même temps, l'étape est trop courte et la question ne s'affiche jamais —
+>    donc pas de donnée pour les appels qui se passent le mieux.
+> 2. **Juste après le raccrochage, avant le post-call.** Toujours posée, toujours avant la
+>    photo, et c'est le moment où le souvenir est le plus frais. Défaut : une étape de
+>    plus entre l'appel et la révélation.
+> 3. **Après la décision match/pass.** Ne coûte rien au parcours, mais la photo a déjà
+>    été vue — ce que ce point cherche précisément à éviter.
+>
+> L'option 2 est la seule qui tienne la promesse « avant que la photo n'influence la
+> réponse » **pour tous les appels**. C'est aussi la plus intrusive. À décider en
+> connaissance de cause, pas en implémentant le texte tel quel.
+>
+> Le reste du point est bon, et le raccourci « Mal à l'aise → on saute la révélation »
+> est juste : personne ne devrait avoir à regarder la photo de quelqu'un qui l'a mis mal
+> à l'aise pour pouvoir partir.
 
 ### Décision
 
@@ -1296,8 +1357,23 @@ l'aise » doit ouvrir le report sheet et sauter la révélation. Textes dans les
 `messages` n'a que `body TEXT`. La conversation s'ouvre sur un champ vide alors que les
 deux personnes viennent de se parler cinq minutes en visio.
 
-`MatchScore.breakdown` contient déjà les intérêts communs calculés par
-`_weightedJaccard` — ils ne sont **jamais affichés nulle part**.
+`MatchScore.breakdown` contient un **score** par axe, jamais la liste des intérêts
+communs — et il n'est effectivement affiché nulle part.
+
+> **⚠️ Correction (19/08)** — la prémisse est fausse sur un point qui change le travail.
+> `breakdown` est un `Map<String, int>` : il contient `{'interests': 18}`, un nombre.
+> `_weightedJaccard` (`matching_service.dart:153`) calcule `a.intersection(b)` en interne
+> puis **jette l'intersection** pour ne renvoyer qu'un entier. **Les intérêts communs ne
+> sont donc calculés nulle part de façon récupérable.**
+>
+> Conséquence : les trois amorces ne peuvent pas « venir du breakdown ». Il faut
+> recalculer `self.interests ∩ peer.interests` au moment d'ouvrir la conversation — les
+> deux profils sont disponibles à cet instant, donc c'est faisable, mais c'est du code à
+> écrire et non un branchement.
+>
+> Vérifié aussi : `messages` n'a bien que `id, conversation_id, sender_id, body,
+> created_at, read_at` — aucune colonne de type. Le message système exige donc bien la
+> migration annoncée au tableau de bord.
 
 ### Décision
 
