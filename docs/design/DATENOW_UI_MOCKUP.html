@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<script type="application/json" id="cowork-artifact-meta">
+{
+  "name": "Datenow Ecrans App",
+  "schemaVersion": 1,
+  "description": "DateNow — les 18 écrans de l'app (entrée, profil, cœur produit, après-appel, conversation, compte) maquettés dans la palette bordeaux #6E2438 / ivoire #FBF8F4.",
+  "mcpTools": [],
+  "mcpServerNames": []
+}
+</script>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DateNow — L'app en bordeaux &amp; ivoire</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,300;6..72,400;6..72,500&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ivory:#FBF8F4; --paper:#FFFFFF; --sand:#F2EBE1; --sand-deep:#E7DCCE;
+  --line:#E8DFD5; --line-soft:#F0E9E0;
+  --ink:#1C1719; --ink-2:#6E6360; --ink-3:#7A6F6B;
+  --bordeaux:#6E2438; --bordeaux-deep:#451523; --bordeaux-light:#96455A; --tint:#F5E8EA;
+  --clay:#96604D; --clay-tint:#F4E9E2; --sage:#4F6853; --sage-tint:#E7EEE8;
+  --amber:#8F6220; --amber-tint:#F6EDDF; --error:#A93A3A;
+  --shadow:0 2px 6px rgba(28,23,25,.05), 0 18px 44px rgba(69,21,35,.09);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ivory);color:var(--ink);font-family:'Plus Jakarta Sans',system-ui,sans-serif;font-size:15px;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1280px;margin:0 auto;padding:0 32px}
+.serif{font-family:'Newsreader',Georgia,serif;font-weight:300;letter-spacing:-.01em}
+
+header.hero{padding:80px 0 48px}
+.eyebrow{font-size:11px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:var(--bordeaux)}
+h1{font-family:'Newsreader',serif;font-weight:300;font-size:clamp(38px,5.5vw,60px);line-height:1.06;margin:16px 0 18px;letter-spacing:-.015em}
+.lede{font-size:17px;color:var(--ink-2);max-width:64ch;line-height:1.6}
+
+.flow{padding:42px 0 10px;border-top:1px solid var(--line)}
+.flow-head{display:flex;align-items:baseline;gap:14px;margin-bottom:6px}
+.flow-num{font-size:11px;font-weight:700;letter-spacing:.16em;color:var(--ink-3)}
+h2{font-family:'Newsreader',serif;font-weight:300;font-size:32px;margin:0;letter-spacing:-.015em}
+.flow-sub{color:var(--ink-2);max-width:66ch;margin:8px 0 28px;font-size:14.5px;line-height:1.6}
+
+.gal{display:flex;gap:24px;overflow-x:auto;padding:4px 0 30px}
+.pw{flex:0 0 auto;width:282px}
+.cap{margin-top:11px;font-size:12px;color:var(--ink-3);line-height:1.45}
+.cap b{color:var(--ink);font-weight:600;display:block;font-size:12.5px}
+
+.ph{width:282px;height:600px;border-radius:38px;border:1px solid var(--line);background:var(--ivory);box-shadow:var(--shadow);overflow:hidden;display:flex;flex-direction:column;position:relative}
+.sb{height:26px;flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;padding:0 20px;font-size:9.5px;font-weight:700;color:var(--ink-3);letter-spacing:.03em}
+.sb.on-dark{color:rgba(255,255,255,.6)}
+.bd{flex:1;padding:4px 18px 0;overflow:hidden;display:flex;flex-direction:column}
+.bd.mid{justify-content:center;align-items:center;text-align:center}
+.nav{flex:0 0 auto;height:60px;background:rgba(251,248,244,.95);border-top:1px solid var(--line);display:flex;align-items:center;justify-content:space-around;padding-bottom:5px}
+.tb{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:9px;font-weight:600;color:var(--ink-3)}
+.tb i{font-style:normal;font-size:15px}
+.tb.on{color:var(--bordeaux)}
+.appbar{flex:0 0 auto;display:flex;align-items:center;gap:10px;padding:2px 18px 12px;font-size:14px;font-weight:600}
+.appbar .bk{color:var(--ink-2);font-weight:400;font-size:17px}
+.appbar .sp{margin-left:auto;color:var(--ink-3);font-weight:400}
+
+/* atoms */
+.logo{font-family:'Newsreader',serif;font-weight:400;font-size:34px;letter-spacing:-.02em}
+.logo em{font-style:normal;color:var(--bordeaux)}
+.h1s{font-family:'Newsreader',serif;font-weight:300;font-size:26px;line-height:1.15;letter-spacing:-.01em}
+.h2s{font-family:'Newsreader',serif;font-weight:400;font-size:19px;margin:0}
+.sub{font-size:12.5px;color:var(--ink-2);line-height:1.5}
+.tiny{font-size:10.5px;color:var(--ink-3);line-height:1.4}
+.ov{font-size:9.5px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--bordeaux)}
+.b{display:flex;align-items:center;justify-content:center;gap:7px;font-size:13.5px;font-weight:600;border-radius:999px;padding:13px 18px;border:1px solid transparent}
+.b1{background:var(--bordeaux);color:#fff}
+.b2{background:var(--sand);color:var(--ink);border-color:var(--sand-deep)}
+.b3{background:transparent;color:var(--bordeaux);border-color:var(--line)}
+.card{background:var(--paper);border:1px solid var(--line);border-radius:20px;padding:15px}
+.sandcard{background:var(--sand);border-radius:16px;padding:13px}
+.inp{background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:12px 13px;font-size:13px;color:var(--ink-3);display:flex;align-items:center;gap:9px}
+.inp.f{border-color:var(--bordeaux);box-shadow:0 0 0 3px var(--tint);color:var(--ink)}
+.chips{display:flex;flex-wrap:wrap;gap:7px}
+.c{font-size:12px;font-weight:500;padding:7px 12px;border-radius:999px;background:var(--paper);border:1px solid var(--line);color:var(--ink-2)}
+.c.on{background:var(--bordeaux);border-color:var(--bordeaux);color:#fff}
+.pill{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:700;padding:5px 10px;border-radius:999px}
+.p-on{background:var(--sage-tint);color:var(--sage)}
+.p-vf{background:var(--tint);color:var(--bordeaux)}
+.p-am{background:var(--amber-tint);color:var(--amber)}
+.led{width:5px;height:5px;border-radius:50%;background:currentColor}
+.av{border-radius:50%;background:linear-gradient(150deg,#EFE3D8,#B98B79)}
+.av-b{border-radius:50%;background:linear-gradient(150deg,#E7DCCE,#C3A392);filter:blur(9px)}
+.row{display:flex;align-items:center;gap:11px}
+.mt{margin-top:auto}
+.gap{height:12px}.gap-l{height:20px}.gap-s{height:7px}
+.spacer{flex:1}
+
+.dot3{display:flex;gap:5px;justify-content:center}
+.dot3 span{height:5px;width:5px;border-radius:999px;background:var(--line)}
+.dot3 span.on{width:22px;background:var(--bordeaux)}
+.icocirc{width:60px;height:60px;border-radius:50%;background:var(--tint);display:flex;align-items:center;justify-content:center;font-size:24px;color:var(--bordeaux)}
+.spin{width:24px;height:24px;border-radius:50%;border:2px solid var(--line);border-top-color:var(--bordeaux)}
+
+/* dark screens */
+.dark{background:linear-gradient(170deg,#2A0E17,#451523 55%,#25101A);color:#fff;height:100%;display:flex;flex-direction:column}
+.dark .bd{color:#fff}
+.ripple{width:150px;height:150px;border-radius:50%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);display:flex;align-items:center;justify-content:center;margin:0 auto}
+.ripple .in{width:96px;height:96px;border-radius:50%;background:linear-gradient(150deg,#D9BCAE,#96604D);display:flex;align-items:center;justify-content:center;font-size:30px}
+.cctrl{display:flex;gap:13px;justify-content:center}
+.cc{width:50px;height:50px;border-radius:50%;background:rgba(255,255,255,.11);border:1px solid rgba(255,255,255,.15);display:flex;align-items:center;justify-content:center;font-size:16px}
+.cc.end{background:#B9384A;border-color:#B9384A}
+
+/* light matching */
+.ripple-l{width:150px;height:150px;border-radius:50%;background:var(--tint);display:flex;align-items:center;justify-content:center;margin:0 auto;border:1px solid #EEDCDF}
+.ripple-l .in{width:92px;height:92px;border-radius:50%;background:linear-gradient(150deg,var(--bordeaux),var(--bordeaux-deep));display:flex;align-items:center;justify-content:center;font-size:30px;color:#fff}
+.badge-score{display:inline-flex;align-items:center;gap:6px;background:var(--tint);color:var(--bordeaux);border-radius:999px;padding:7px 14px;font-size:12px;font-weight:700}
+
+/* discover */
+.dph{height:190px;border-radius:20px 20px 0 0;background:linear-gradient(160deg,#EFE3D8,#D9BCAE 55%,#B98B79);position:relative}
+.dph .bg{position:absolute;left:12px;top:12px;background:rgba(251,248,244,.93);color:var(--bordeaux);font-size:9px;font-weight:700;letter-spacing:.06em;padding:5px 9px;border-radius:999px}
+.blurwrap{height:190px;border-radius:20px 20px 0 0;overflow:hidden;position:relative;background:var(--sand)}
+.blurwrap .b1x{position:absolute;inset:-20px;background:linear-gradient(160deg,#EFE3D8,#C9A797 60%,#A87F6E);filter:blur(20px)}
+.blurwrap .lk{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:6px;color:#fff;text-shadow:0 1px 6px rgba(69,21,35,.4);font-size:11px;font-weight:600}
+
+/* chat */
+.bub{max-width:80%;padding:10px 13px;font-size:12.5px;line-height:1.4;margin-bottom:8px;border-radius:17px}
+.bub.t{background:var(--paper);border:1px solid var(--line);border-bottom-left-radius:5px}
+.bub.m{background:var(--bordeaux);color:#fff;margin-left:auto;border-bottom-right-radius:5px}
+.day{text-align:center;font-size:9.5px;color:var(--ink-3);letter-spacing:.1em;text-transform:uppercase;margin:2px 0 11px}
+
+/* lists */
+.list{background:var(--paper);border:1px solid var(--line);border-radius:18px;overflow:hidden}
+.li{display:flex;align-items:center;gap:11px;padding:12px 14px;border-bottom:1px solid var(--line-soft);font-size:12.5px}
+.li:last-child{border:0}
+.li .ic{width:27px;height:27px;border-radius:9px;background:var(--tint);color:var(--bordeaux);display:flex;align-items:center;justify-content:center;font-size:12px;flex:0 0 auto}
+.li .ic.n{background:var(--sand);color:var(--clay)}
+.li .ic.d{background:#F7E7E7;color:var(--error)}
+.li .sm{font-size:10.5px;color:var(--ink-3);margin-top:1px}
+.li .ar{margin-left:auto;color:var(--ink-3)}
+.sect{font-size:9.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);margin:16px 0 8px}
+
+/* conv tile */
+.ct{display:flex;gap:11px;padding:12px 0;border-bottom:1px solid var(--line-soft);align-items:center}
+.ct:last-child{border:0}
+.ct .nm{font-size:13.5px;font-weight:600}
+.ct .pv{font-size:11.5px;color:var(--ink-3);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px}
+.ct .tm{margin-left:auto;font-size:10px;color:var(--ink-3);text-align:right}
+.ct .unread{background:var(--bordeaux);color:#fff;border-radius:999px;font-size:9px;font-weight:700;padding:2px 6px;margin-top:4px;display:inline-block}
+
+/* sheet */
+.sheet-scrim{position:absolute;inset:0;background:rgba(28,23,25,.32)}
+.sheet{position:absolute;left:0;right:0;bottom:0;background:var(--paper);border-radius:26px 26px 0 0;padding:14px 20px 22px;box-shadow:0 -8px 40px rgba(69,21,35,.14)}
+.grab{width:36px;height:4px;border-radius:999px;background:var(--line);margin:0 auto 14px}
+
+/* perks */
+.perk{display:flex;gap:10px;align-items:flex-start;font-size:12.5px;line-height:1.4;margin-bottom:11px}
+.perk .k{width:20px;height:20px;border-radius:7px;background:var(--bordeaux);color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px;flex:0 0 auto;margin-top:1px}
+.hero-b{background:linear-gradient(155deg,var(--bordeaux),var(--bordeaux-deep));border-radius:22px;padding:18px;color:#fff;position:relative;overflow:hidden}
+.hero-b:after{content:"";position:absolute;width:160px;height:160px;border-radius:50%;background:rgba(255,255,255,.06);right:-58px;top:-64px}
+.hero-b .t{font-family:'Newsreader',serif;font-weight:300;font-size:24px;line-height:1.12;margin:8px 0 6px}
+.hero-b .s{font-size:12px;opacity:.78;line-height:1.45;margin-bottom:14px}
+.hero-b .k2{font-size:9.5px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;opacity:.72}
+.hcta{background:var(--ivory);color:var(--bordeaux);font-weight:700;font-size:13px;padding:12px;border-radius:999px;text-align:center}
+.tiles{display:flex;gap:8px}
+.tile{flex:1;background:var(--paper);border:1px solid var(--line);border-radius:15px;padding:11px}
+.tile .v{font-family:'Newsreader',serif;font-size:20px}
+.tile .l{font-size:9.5px;color:var(--ink-3);line-height:1.3;margin-top:1px}
+.tile .i{font-size:11px;color:var(--bordeaux);margin-bottom:4px}
+footer{padding:40px 0 70px;color:var(--ink-3);font-size:13px;border-top:1px solid var(--line);margin-top:20px}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="eyebrow">DateNow · L'application complète</div>
+    <h1>18 écrans, une seule<br>respiration.</h1>
+    <p class="lede">Tous les parcours de l'app dans la palette validée : ivoire <b>#FBF8F4</b>, bordeaux <b>#6E2438</b>, argile <b>#96604D</b>. Le sombre n'apparaît plus que deux fois — la recherche de match et l'appel vidéo — précisément là où l'immersion a du sens.</p>
+  </div>
+</header>
+
+<!-- ============ 1. ENTRÉE ============ -->
+<div class="flow"><div class="wrap">
+  <div class="flow-head"><span class="flow-num">01</span><h2>Entrée dans l'app</h2></div>
+  <p class="flow-sub">Splash, accueil non connecté et onboarding en 3 pages. Le logo passe en serif : c'est lui qui porte l'élégance, plus le dégradé.</p>
+  <div class="gal">
+
+    <!-- SPLASH -->
+    <div class="pw"><div class="ph">
+      <div class="sb"><span>9:41</span><span>▮▮▮</span></div>
+      <div class="bd mid">
+        <div class="logo">Date<em>Now</em></div>
+        <div class="gap"></div>
+        <div class="sub" style="max-width:200px">La voix d'abord, le visage ensuite.</div>
+        <div class="gap-l"></div><div class="gap-l"></div>
+        <div class="spin"></div>
+      </div>
+    </div><div class="cap"><b>Splash</b>Logo serif, tagline, indicateur bordeaux fin.</div></div>
+
+    <!-- AUTH LANDING -->
+    <div class="pw"><div class="ph">
+      <div class="sb"><span>9:41</span><span>▮▮▮</span></div>
+      <div class="bd">
+        <div class="spacer"></div>
+        <div style="text-align:center"><div class="logo">Date<em>Now</em></div></div>
+        <div class="gap-l"></div>
+        <div class="sub" style="text-align:center;font-size:14px;line-height:1.55">Cinq minutes en vidéo.<br>Rien à swiper, personne à impressionner.</div>
+        <div class="spacer"></div>
+        <div class="b b1">Créer un compte</div>
+        <div class="gap-s"></div>
+        <div class="b b2">J'ai déjà un compte</div>
+        <div class="gap"></div>
+        <div class="tiny" style="text-align:center;padding:0 10px">En continuant, vous acceptez nos conditions et notre politique de confidentialité.</div>
+        <div class="gap-s"></div>
+        <div class="tiny" style="text-align:center;color:var(--bordeaux);font-weight:600">Conditions · Confidentialité</div>
+        <div class="gap"></div>
+      </div>
+    </div><div class="cap"><b>Accueil non connecté</b>Un seul bouton plein — la hiérarchie se lit d'un coup.</div></div>
+
+    <!-- ONBOARDING -->
+    <div class="pw"><div class="ph">
+      <div class="sb"><span>9:41</span><span>▮▮▮</span></div>
+      <div class="bd">
+        <div style="text-align:right;font-size:12.5px;color:var(--ink-3);font-weight:600;padding:4px 0">Passer</div>
+        <div class="spacer"></div>
+        <div style="text-align:center">
+          <div class="icocirc" style="margin:0 auto">♥</div>
+          <div class="gap-l"></div>
+          <div class="h1s">Pas de photo,<br>pas de faux-semblants</div>
+          <div class="gap"></div>
+          <div class="sub" style="padding:0 12px">On vous met en relation par la voix. Le visage n'apparaît qu'après l'appel, si vous êtes deux à le vouloir.</div>
+        </div>
+        <div class="spacer"></div>
+        <div class="dot3"><span class="on"></span><span></span><span></span></div>
+        <div class="gap-l"></div>
+        <div class="b b1">Continuer</div>
+        <div class="gap-l"></div>
+      </div>
+    </div><div class="cap"><b>Onboarding 1/3</b>Icône dans une pastille tint, indicateurs bordeaux.</div></div>
+
+    <!-- ONBOARDING 3 -->
+    <div class="pw"><div class="ph">
+      <div class="sb"><span>9:41</span><span>▮▮▮</span></div>
+      <div class="bd">
+        <div style="height:26px"></div>
+        <div class="spacer"></div>
+        <div style="text-align:center">
+          <div class="icocirc" style="margin:0 auto">🔒</div>
+          <div class="gap-l"></div>
+          <div class="h1s">Vous gardez<br>le contrôle</div>
+          <div class="gap"></div>
+          <div class="sub" style="padding:0 12px">Profil vérifié, signalement en un geste, et aucun contact possible sans accord mutuel.</div>
+        </div>
+        <div class="spacer"></div>
+        <div class="dot3"><span></span><span></span><span class="on"></span></div>
+        <div class="gap-l"></div>
+        <div class="b b1">Commencer →</div>
+        <div class="gap-l"></div>
+      </div>
+    </div><div class="cap"><b>Onboarding 3/3</b>Le « Passer » disparaît, le CTA change de libellé.</div></div>
+
+  </div>
+</div></div>
+
+<!-- ============ 2. PROFIL ============ -->
+<div class="flow"><div class="wrap">
+  <div class="flow-head"><span class="flow-num">02</span><h2>Création du profil</h2></div>
+  <p class="flow-sub">Le wizard en 4 étapes. Les champs respirent, la date de naissance verrouillée est traitée comme une information rassurante plutôt qu'une contrainte.</p>
+  <div class="gal">
+
+    <!-- IDENTITY -->
+    <div class="pw"><div class="ph">
+      <div class="sb"><span>9:41</span><span>▮▮▮</span></div>
+      <div class="appbar"><span class="bk">‹</span><span>Étape 1 sur 4</span><span class="sp">25 %</span></div>
+      <div class="bd">
+        <div class="h1s">Faisons connaissance</div>
+        <div class="gap-s"></div>
+        <div class="sub">Ces informations apparaîtront sur votre profil.</div>
+        <div class="gap-l"></div>
+        <div class="inp f"><span>👤</span>Camille</div>
+        <div class="gap"></div>
+        <div class="card row" style="padding:13px 14px">
+          <div style="width:34px;height:34px;border-radius:11px;background:var(--tint);color:var(--bordeaux);display:flex;align-items:center;justify-content:center;font-size:15px">🎂</div>
+          <div style="flex:1">
+            <div class="tiny">Date de naissance</div>
+            <div style="font-size:12.5px;font-weight:600;margin-top:1px">14 mars 1997 · 29 ans</div>
+            <div class="tiny" style="margin-top:1px">Définie à l'inscription</div>
+          </div>
+          <span style="color:var(--ink-3);font-size:13px">🔒</span>
+        </div>
+        <div class="gap-l"></div>
+        <div class="sect" style="margin-top:0">Genre</div>
+        <div class="chips"><span class="c on">Femme</span><span class="c">Homme</span><span class="c">Non-binaire</span></div>
+        <div class="sect">Orientation</div>
+        <div class="chips"><span class="c">Hétéro</span><span class="c on">Bi</span><span class="c">Gay</span><span class="c">Lesbienne</span></div>
+      </div>
+    </div><div class="cap"><b>Profil · Identité</b>Champ focus cerclé de tint, pas de glow.</div></div>
+
+    <!-- VIBE -->
+    <div class="pw"><div class="ph">
+      <div class="sb"><span>9:41</span><span>▮▮▮</span></div>
+      <div class="appbar"><span class="bk">‹</span><span>Étape 3 sur 4</span><span class="sp">75 %</span></div>
+      <div class="bd">
+        <div class="h1s">Vous cherchez quoi ?</div>
+        <div class="gap-s"></div>
+        <div class="sub">Plusieurs réponses possibles.</div>
+        <div class="gap-l"></div>
+        <div class="card row" style="border-color:var(--bordeaux);background:var(--tint);gap:12px;padding:14px">
+          <span style="font-size:17px">♥</span>
+          <div><div style="font-size:13px;font-weight:600">Une relation sérieuse</div><div class="tiny" style="margin-top:2px">Je cherche quelque chose qui dure.</div></div>
+        </div>
+        <div class="gap-s"></div>
+        <div class="card row" style="gap:12px;padding:14px">
+          <span style="font-size:17px">✨</span>
+          <div><div style="font-size:13px;font-weight:600">Voir ce que ça donne</div><div class="tiny" style="margin-top:2px">Sans plan précis, ouvert aux surprises.</div></div>
+        </div>
+        <div class="gap-s"></div>
+        <div class="card row" style="gap:12px;padding:14px">
+          <span style="font-size:17px">💬</span>
+          <div><div style="font-size:13px;font-weight:600">Juste parler</div><div class="tiny" style="margin-top:2px">De bonnes conversations, sans pression.</div></div>
+        </div>
+        <div class="sect">Centres d'intérêt <span style="text-transform:none;letter-spacing:0;font-weight:500">· 3 min.</span></div>
+        <div class="chips"><span class="c on">Cuisine</span><span class="c">Rando</span><span class="c on">Cinéma</span><span class="c">Voyage</span><span class="c on">Lecture</span></div>
+      </div>
+    </div><div class="cap"><b>Profil · Intentions</b>La carte sélectionnée passe en fond tint bordé bordeaux.</div></div>
+
+    <!-- PROFILE -->
+    <div class="pw"><div class="ph">
+      <div class="sb"><span>9:41</span><span>▮▮▮</span></div>
+      <div class="bd">
+        <div class="gap-s"></div>
+        <div class="h1s">Profil</div>
+        <div class="gap"></div>
+        <div class="card row" style="gap:13px">
+          <div class="av" style="width:56px;height:56px;border:2px solid var(--paper);box-shadow:0 2px 10px rgba(69,21,35,.12)"></div>
+          <div><div style="font-size:15px;font-weight:600">Alexandre</div><div class="tiny" style="margin-top:2px">alex@exemple.fr</div>
+          <div style="margin-top:6px"><span class="pill p-vf">✓ Vérifié</span></div></div>
+        </div>
+        <div class="gap"></div>
+        <div class="list">
+          <div class="li"><div class="ic">👤</div><div><div>Informations personnelles</div><div class="sm">Prénom, âge, genre</div></div><span class="ar">›</span></div>
+          <div class="li"><div class="ic">⚙</div><div><div>Préférences</div><div class="sm">Qui vous voulez rencontrer</div></div><span class="ar">›</span></div>
+          <div class="li"><div class="ic">🖼</div><div><div>Photos</div><div class="sm">Visibles après un appel</div></div><span class="ar">›</span></div>
+          <div class="li"><div class="ic">💬</div><div><div>Messages</div><div class="sm">Vos conversations</div></div><span class="ar">›</span></div>
+          <div class="li"><div class="ic n">⚙</div><div><div>Réglages</div><div class="sm">Notifications, sécurité</div></div><span class="ar">›</span></div>
+        </div>
+        <div class="gap-l"></div>
+        <div class="b b2">Se déconnecter</div>
+      </div>
+      <div class="nav"><div class="tb"><i>⌂</i>Accueil</div><div class="tb"><i>◇</i>Découvrir</div><div class="tb"><i>✉</i>Messages</div><div class="tb on"><i>☺</i>Profil</div></div>
+    </div><div class="cap"><b>Profil</b>Listes sur papier blanc, filets fins, pastilles tint.</div></div>
+
+  </div>
+</div></div>
+
+<!-- ============ 3. CŒUR ============ -->
+<div class="flow"><div class="wrap">
+  <div class="flow-head"><span class="flow-num">03</span><h2>Le cœur du produit</h2></div>
+  <p class="flow-sub">Accueil, découverte, recherche de match, appel. C'est ici que se joue le changement de registre : la même mécanique, mais elle ne ressemble plus à une salle de nuit.</p>
+  <div class="gal">
+
+    <!-- HOME -->
+    <div class="pw"><div class="ph">
+      <div class="sb"><span>9:41</span><span>▮▮▮</span></div>
+      <div class="bd">
+        <div class="row" style="padding:6px 0 14px">
+          <div style="flex:1"><div class="tiny">Bonsoir</div><div style="font-family:'Newsreader',serif;font-size:19px">Alexandre</div></div>
+          <div class="av" style="width:36px;height:36px"></div>
+        </div>
+        <div class="hero-b">
+          <div class="k2">Ce soir sur DateNow</div>
+          <div class="t">Une vraie conversation,<br>maintenant.</div>
+          <div class="s">Cinq minutes en vidéo avec quelqu'un qui cherche la même chose que vous.</div>
+          <div class="hcta">Trouver quelqu'un</div>
+        </div>
+        <div class="sect">Ce soir</div>
+        <div class="tiles">
+          <div class="tile"><div class="i">●</div><div class="v">1,2k</div><div class="l">en ligne</div></div>
+          <div class="tile"><div class="i">◆</div><div class="v">38 s</div><div class="l">match moyen</div></div>
+        </div>
+        <div class="gap-s"></div>
+        <div class="card row" style="padding:12px 14px">
+          <div class="li" style="padding:0;border:0"><div class="ic">♥</div></div>
+          <div style="flex:1"><div style="font-size:13px;font-weight:600">4 nouveaux likes</div><div class="tiny">Voir qui vous a remarqué</div></div>
+          <span style="color:var(--ink-3)">›</span>
+        </div>
+        <div class="sect">Comment ça marche</div>
+        <div class="card" style="padding:14px">
+          <div class="row" style="align-items:flex-start;gap:10px;margin-bottom:10px"><div class="li" style="padding:0;border:0"><div class="ic" style="border-radius:8px">1</div></div><div style="font-size:12px;line-height:1.4">On vous présente une personne compatible</div></div>
+          <div class="row" style="align-items:flex-start;gap:10px"><div class="li" style="padding:0;border:0"><div class="ic" style="border-radius:8px">2</div></div><div style="font-size:12px;line-height:1.4">Vous parlez cinq minutes, sans photo</div></div>
+        </div>
+      </div>
+      <div class="nav"><div class="tb on"><i>⌂</i>Accueil</div><div class="tb"><i>◇</i>Découvrir</div><div class="tb"><i>✉</i>Messages</div><div class="tb"><i>☺</i>Profil</div></div>
+    </div><div class="cap"><b>Accueil</b>Un seul bordeaux plein : la carte héros.</div></div>
+
+    <!-- DISCOVER -->
+    <div class="pw"><div class="ph">
+      <div class="sb"><span>9:41</span><span>▮▮▮</span></div>
+      <div class="bd">
+        <div class="gap-s"></div>
+        <div class="h1s">Découvrir</div>
+        <div class="gap-s"></div>
+        <div class="sub">Trois profils choisis pour vous cette semaine.</div>
+        <div class="sect">Suggestions de la semaine</div>
+        <div class="card" style="padding:0;overflow:hidden">
+          <div class="blurwrap"><div class="b1x"></div><div class="lk"><span style="font-size:19px">🔒</span>Photo visible après l'appel</div></div>
+          <div style="padding:14px">
+            <div style="font-family:'Newsreader',serif;font-size:21px">Camille, 29</div>
+            <div class="tiny" style="margin-top:1px">Paris 11e · à 3 km</div>
+            <div style="margin-top:8px"><span class="badge-score">◆ 87 % compatibles</span></div>
+            <div class="sandcard" style="margin-top:11px">
+              <div style="font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--clay)">Un dimanche parfait</div>
+              <div style="font-family:'Newsreader',serif;font-size:14px;line-height:1.4;margin-top:4px">Un marché le matin, un vieux film l'après-midi.</div>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:12px">
+              <div class="b b2" style="flex:0 0 46px;padding:12px 0">✕</div>
+              <div class="b b1" style="flex:1">♥ Proposer un appel</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="nav"><div class="tb"><i>⌂</i>Accueil</div><div class="tb on"><i>◇</i>Découvrir</div><div class="tb"><i>✉</i>Messages</div><div class="tb"><i>☺</i>Profil</div></div>
+    </div><div class="cap"><b>Découvrir</b>Photo floutée assumée comme un parti pris, pas comme un manque.</div></div>
+
+    <!-- MATCHING SEARCHING -->
+    <div class="pw"><div class="ph">
+      <div class="sb"><span>9:41</span><span>▮▮▮</span></div>
+      <div class="appbar"><span class="sp" style="margin:0 0 0 auto;font-size:17px">✕</span></div>
+      <div class="bd mid">
+        <div class="spacer"></div>
+        <div class="ripple-l"><div class="in">♥</div></div>
+        <div class="gap-l"></div>
+        <div class="h1s">On cherche<br>quelqu'un pour vous</div>
+        <div class="gap"></div>
+        <div class="sub">Analyse des profils compatibles…</div>
+        <div class="gap-l"></div>
+        <span class="pill p-on"><i class="led"></i>≈ 340 profils actifs en ce moment</span>
+        <div class="spacer"></div>
+        <div class="b b2" style="width:100%">Annuler</div>
+        <div class="gap-l"></div>
+      </div>
+    </div><div class="cap"><b>Recherche</b>Ondes en tint bordeaux au lieu du halo rose fluo.</div></div>
+
+    <!-- MATCH FOUND -->
+    <div class="pw"><div class="ph">
+      <div class="sb"><span>9:41</span><span>▮▮▮</span></div>
+      <div class="appbar"><span class="sp" style="margin:0 0 0 auto;font-size:17px">✕</span></div>
+      <div class="bd mid">
+        <div class="spacer"></div>
+        <div class="av-b" style="width:140px;height:140px;margin:0 auto"></div>
+        <div class="gap-l"></div>
+        <div class="ov">Quelqu'un vous attend</div>
+        <div class="gap-s"></div>
+        <div class="h1s" style="font-size:30px">Camille</div>
+        <div class="gap-s"></div>
+        <div class="tiny">à 3 km de vous</div>
+        <div class="gap"></div>
+        <span class="badge-score">◆ 87 % compatibles</span>
+        <div class="gap-l"></div>
+        <div class="tiny" style="max-width:210px">L'appel démarre dans un instant. Sa photo restera masquée jusqu'à la fin.</div>
+        <div class="spacer"></div>
+      </div>
+    </div><div class="cap"><b>Match trouvé</b>Avatar flouté, score en badge tint — plus de dégradé.</div></div>
+
+    <!-- CALL -->
+    <div class="pw"><div class="ph"><div class="dark">
+      <div class="sb on-dark"><span>9:41</span><span>▮▮▮</span></div>
+      <div class="bd mid" style="justify-content:center">
+        <div class="ripple"><div class="in">🎙</div></div>
+        <div class="gap-l"></div>
+        <div class="serif" style="font-size:28px">Camille</div>
+        <div class="gap-s"></div>
+        <div style="font-size:12px;opacity:.62">Connexion sécurisée · audio d'abord</div>
+        <div class="gap-l"></div>
+        <div style="font-size:12px;opacity:.48;letter-spacing:.04em">04:12 restantes</div>
+        <div class="gap-l"></div><div class="gap-l"></div>
+        <div class="cctrl"><div class="cc">🎙</div><div class="cc">📷</div><div class="cc end">✕</div></div>
+        <div class="gap-l"></div>
+        <div style="font-size:10px;opacity:.4">Signaler un problème</div>
+      </div>
+    </div></div><div class="cap"><b>Appel vidéo</b>Le seul écran vraiment sombre — bordeaux profond, jamais noir.</div></div>
+
+  </div>
+</div></div>
+
+<!-- ============ 4. APRÈS ============ -->
+<div class="flow"><div class="wrap">
+  <div class="flow-head"><span class="flow-num">04</span><h2>Après l'appel</h2></div>
+  <p class="flow-sub">La révélation de la photo est le moment le plus fort de l'app. Sur fond ivoire, il devient tendre plutôt que voyeur.</p>
+  <div class="gal">
+
+    <!-- REVEAL DECIDE -->
+    <div class="pw"><div class="ph">
+      <div class="sb"><span>9:41</span><span>▮▮▮</span></div>
+      <div class="appbar"><span>Après l'appel</span><span class="sp">⚑</span></div>
+      <div class="bd mid">
+        <div class="sub">Vous avez parlé 5 minutes. Envie d'aller plus loin ?</div>
+        <div class="spacer"></div>
+        <div class="av-b" style="width:160px;height:160px;margin:0 auto"></div>
+        <div class="gap-s"></div>
+        <div class="tiny">Photo masquée</div>
+        <div class="gap-l"></div>
+        <div class="h1s" style="font-size:24px">Camille, 29</div>
+        <div class="gap-s"></div>
+        <div class="tiny">à 3 km</div>
+        <div class="gap"></div>
+        <span class="badge-score">◆ 87 % compatibles</span>
+        <div class="spacer"></div>
+        <div class="b b1" style="width:100%">👁 Révéler la photo</div>
+        <div class="gap-l"></div>
+      </div>
+    </div><div class="cap"><b>Révélation · avant</b>Un seul choix offert : révéler.</div></div>
+
+    <!-- REVEAL AFTER -->
+    <div class="pw"><div class="ph">
+      <div class="sb"><span>9:41</span><span>▮▮▮</span></div>
+      <div class="appbar"><span>Après l'appel</span><span class="sp">⚑</span></div>
+      <div class="bd mid">
+        <div class="sub">Vous avez parlé 5 minutes. Envie d'aller plus loin ?</div>
+        <div class="spacer"></div>
+        <div class="av" style="width:160px;height:160px;margin:0 auto;border:3px solid var(--paper);box-shadow:0 4px 24px rgba(69,21,35,.16)"></div>
+        <div class="gap-l"></div>
+        <div class="h1s" style="font-size:24px">Camille, 29</div>
+        <div class="gap-s"></div>
+        <div class="tiny">à 3 km</div>
+        <div class="gap"></div>
+        <span class="badge-score">◆ 87 % compatibles</span>
+        <div class="spacer"></div>
+        <div class="b b1" style="width:100%">♥ On continue</div>
+        <div class="gap-s"></div>
+        <div class="b b2" style="width:100%">Pas cette fois</div>
+        <div class="gap-l"></div>
+      </div>
+    </div><div class="cap"><b>Révélation · après</b>Le flou se dissipe sur 1,1 s. Deux choix, un seul plein.</div></div>
+
+    <!-- MATCHED -->
+    <div class="pw"><div class="ph">
+      <div class="sb"><span>9:41</span><span>▮▮▮</span></div>
+      <div class="appbar"><span>Après l'appel</span><span class="sp">⚑</span></div>
+      <div class="bd mid">
+        <div class="spacer"></div>
+        <div class="icocirc" style="width:86px;height:86px;font-size:34px;margin:0 auto">♥</div>
+        <div class="gap-l"></div>
+        <div class="ov">C'est réciproque</div>
+        <div class="gap-s"></div>
+        <div class="h1s" style="font-size:28px">Vous vous êtes<br>choisis.</div>
+        <div class="gap"></div>
+        <div class="sub" style="padding:0 14px">Votre conversation est ouverte. À vous de jouer — sans pression.</div>
+        <div class="spacer"></div>
+        <div class="b b1" style="width:100%">Ouvrir la conversation</div>
+        <div class="gap-s"></div>
+        <div class="b b3" style="width:100%">Retour à l'accueil</div>
+        <div class="gap-l"></div>
+      </div>
+    </div><div class="cap"><b>Match réciproque</b>Aucun confetti : la sobriété fait le premium.</div></div>
+
+    <!-- WAITING -->
+    <div class="pw"><div class="ph">
+      <div class="sb"><span>9:41</span><span>▮▮▮</span></div>
+      <div class="appbar"><span>Après l'appel</span><span class="sp">⚑</span></div>
+      <div class="bd mid">
+        <div class="spacer"></div>
+        <div class="spin" style="margin:0 auto"></div>
+        <div class="gap-l"></div>
+        <div class="h2s">Votre date réfléchit…</div>
+        <div class="gap"></div>
+        <div class="tiny" style="max-width:200px">Cette personne n'a pas encore répondu. On vous prévient dès qu'elle le fait.</div>
+        <div class="spacer"></div>
+        <div class="b b2" style="width:100%">⏳ Continuer à attendre</div>
+        <div class="gap-s"></div>
+        <div class="b b3" style="width:100%">Passer</div>
+        <div class="gap-l"></div>
+      </div>
+    </div><div class="cap"><b>Attente</b>Aucun bouton plein : rien d'urgent à décider ici.</div></div>
+
+  </div>
+</div></div>
+
+<!-- ============ 5. RELATION ============ -->
+<div class="flow"><div class="wrap">
+  <div class="flow-head"><span class="flow-num">05</span><h2>La conversation</h2></div>
+  <p class="flow-sub">Boîte de réception et fil de discussion. Les bulles bordeaux sur ivoire restent lisibles sans agresser.</p>
+  <div class="gal">
+
+    <!-- INBOX -->
+    <div class="pw"><div class="ph">
+      <div class="sb"><span>9:41</span><span>▮▮▮</span></div>
+      <div class="appbar"><span class="bk">‹</span><span>Messages</span></div>
+      <div class="bd">
+        <div class="sub">Vos matchs après appel.</div>
+        <div class="gap-l"></div>
+        <div class="card" style="padding:0 15px">
+          <div class="ct"><div class="av" style="width:42px;height:42px;flex:0 0 auto"></div><div><div class="nm">Camille</div><div class="pv">On remet ça vendredi ?</div></div><div class="tm">14:02<div class="unread">2</div></div></div>
+          <div class="ct"><div class="av" style="width:42px;height:42px;flex:0 0 auto;background:linear-gradient(150deg,#E9E0D2,#A98F7A)"></div><div><div class="nm">Léa</div><div class="pv">Merci pour l'appel 🙂</div></div><div class="tm">Hier</div></div>
+          <div class="ct"><div class="av" style="width:42px;height:42px;flex:0 0 auto;background:linear-gradient(150deg,#EFE0DC,#B08B87)"></div><div><div class="nm">Inès</div><div class="pv">Bonne soirée !</div></div><div class="tm">Lun.</div></div>
+        </div>
+      </div>
+      <div class="nav"><div class="tb"><i>⌂</i>Accueil</div><div class="tb"><i>◇</i>Découvrir</div><div class="tb on"><i>✉</i>Messages</div><div class="tb"><i>☺</i>Profil</div></div>
+    </div><div class="cap"><b>Messages</b>Compteur non lu en bordeaux plein, très localisé.</div></div>
+
+    <!-- CONVERSATION -->
+    <div class="pw"><div class="ph">
+      <div class="sb"><span>9:41</span><span>▮▮▮</span></div>
+      <div class="bd">
+        <div class="row" style="padding:2px 0 12px;border-bottom:1px solid var(--line);margin-bottom:12px">
+          <span style="color:var(--ink-2);font-size:17px">‹</span>
+          <div class="av" style="width:32px;height:32px"></div>
+          <div><div style="font-size:13.5px;font-weight:600">Camille</div><div style="font-size:10px;color:var(--sage);font-weight:700">En ligne</div></div>
+          <span style="margin-left:auto;color:var(--ink-3)">⋯</span>
+        </div>
+        <div class="day">Aujourd'hui</div>
+        <div class="bub t">C'était un super appel — merci d'avoir tenu les 5 minutes 🙂</div>
+        <div class="bub m">Franchement c'est passé trop vite</div>
+        <div class="bub t">On remet ça vendredi ? Il y a un ciné en plein air au parc</div>
+        <div class="bub m">Vendu. Je réserve.</div>
+        <div class="bub t">Parfait 😄</div>
+        <div class="mt" style="padding-bottom:12px">
+          <div class="inp" style="border-radius:999px"><span style="flex:1">Écrire un message…</span><span style="width:28px;height:28px;border-radius:50%;background:var(--bordeaux);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px">↑</span></div>
+        </div>
+      </div>
+      <div class="nav"><div class="tb"><i>⌂</i>Accueil</div><div class="tb"><i>◇</i>Découvrir</div><div class="tb on"><i>✉</i>Messages</div><div class="tb"><i>☺</i>Profil</div></div>
+    </div><div class="cap"><b>Conversation</b>Bulles reçues sur papier bordé, envoyées en bordeaux.</div></div>
+
+  </div>
+</div></div>
+
+<!-- ============ 6. COMPTE ============ -->
+<div class="flow"><div class="wrap">
+  <div class="flow-head"><span class="flow-num">06</span><h2>Réglages, abonnement, limites</h2></div>
+  <p class="flow-sub">Les écrans utilitaires. Le rouge n'est plus qu'un signal de danger réel — il ne se confond plus avec la couleur de marque.</p>
+  <div class="gal">
+
+    <!-- SETTINGS -->
+    <div class="pw"><div class="ph">
+      <div class="sb"><span>9:41</span><span>▮▮▮</span></div>
+      <div class="appbar"><span class="bk">‹</span><span>Réglages</span></div>
+      <div class="bd">
+        <div class="sect" style="margin-top:0">Profil</div>
+        <div class="list">
+          <div class="li"><div class="ic">👤</div><div><div>Informations personnelles</div></div><span class="ar">›</span></div>
+          <div class="li"><div class="ic">⚙</div><div><div>Préférences</div></div><span class="ar">›</span></div>
+          <div class="li"><div class="ic">🖼</div><div><div>Photos</div></div><span class="ar">›</span></div>
+        </div>
+        <div class="sect">Compte</div>
+        <div class="list">
+          <div class="li"><div class="ic n">🔔</div><div><div>Notifications</div></div><span class="ar">›</span></div>
+          <div class="li"><div class="ic n">🛡</div><div><div>Confidentialité</div></div><span class="ar">›</span></div>
+          <div class="li"><div class="ic n">🔒</div><div><div>Sécurité</div></div><span class="ar">›</span></div>
+          <div class="li"><div class="ic">✦</div><div><div>Abonnement</div><div class="sm">Premium</div></div><span class="ar">›</span></div>
+        </div>
+        <div class="sect">Zone sensible</div>
+        <div class="list">
+          <div class="li"><div class="ic n">↪</div><div><div>Se déconnecter</div></div><span class="ar">›</span></div>
+          <div class="li"><div class="ic d">🗑</div><div><div style="color:var(--error)">Supprimer mon compte</div></div><span class="ar">›</span></div>
+        </div>
+      </div>
+    </div><div class="cap"><b>Réglages</b>Sections en overline, danger isolé en bas et en rouge.</div></div>
+
+    <!-- SUBSCRIPTION -->
+    <div class="pw"><div class="ph">
+      <div class="sb"><span>9:41</span><span>▮▮▮</span></div>
+      <div class="appbar"><span class="bk">‹</span><span>Abonnement</span></div>
+      <div class="bd">
+        <div class="sub">Plus d'appels, moins d'attente.</div>
+        <div class="gap"></div>
+        <div class="hero-b" style="padding:20px">
+          <div class="k2">Formule actuelle</div>
+          <div class="t" style="font-size:26px">DateNow Premium</div>
+          <div class="s" style="margin:0">Appels illimités, priorité dans la file et badge vérifié.</div>
+        </div>
+        <div class="gap"></div>
+        <div class="card">
+          <div class="perk"><div class="k">✓</div><div>Appels illimités chaque jour</div></div>
+          <div class="perk"><div class="k">✓</div><div>Priorité dans la file de match</div></div>
+          <div class="perk"><div class="k">✓</div><div>Badge « profil vérifié » mis en avant</div></div>
+          <div class="perk" style="margin:0"><div class="k">✓</div><div>Support prioritaire sous 24 h</div></div>
+        </div>
+        <div class="gap"></div>
+        <div class="card" style="background:var(--amber-tint);border-color:#EEDFC6;display:flex;gap:9px;align-items:flex-start;padding:12px">
+          <span style="color:var(--amber);font-size:13px">ⓘ</span>
+          <div style="font-size:11.5px;color:var(--amber);line-height:1.4">Paiement en mode démo — aucune somme ne sera débitée.</div>
+        </div>
+        <div class="gap"></div>
+        <div class="b b2" style="width:100%">Gérer mon abonnement</div>
+      </div>
+    </div><div class="cap"><b>Abonnement</b>La carte héros bordeaux signale le palier payant.</div></div>
+
+    <!-- QUOTA SHEET -->
+    <div class="pw"><div class="ph">
+      <div class="sb"><span>9:41</span><span>▮▮▮</span></div>
+      <div class="bd" style="opacity:.5">
+        <div class="row" style="padding:6px 0 14px">
+          <div style="flex:1"><div class="tiny">Bonsoir</div><div style="font-family:'Newsreader',serif;font-size:19px">Alexandre</div></div>
+          <div class="av" style="width:36px;height:36px"></div>
+        </div>
+        <div class="hero-b"><div class="k2">Ce soir sur DateNow</div><div class="t">Une vraie conversation,<br>maintenant.</div><div class="s">Cinq minutes en vidéo.</div><div class="hcta">Trouver quelqu'un</div></div>
+      </div>
+      <div class="sheet-scrim"></div>
+      <div class="sheet">
+        <div class="grab"></div>
+        <div class="icocirc" style="width:52px;height:52px;font-size:21px;margin:0 auto 14px">⏳</div>
+        <div class="h2s" style="text-align:center">Vous avez fait vos 3 appels</div>
+        <div class="gap-s"></div>
+        <div class="sub" style="text-align:center">Revenez demain à 8 h, ou passez en Premium pour continuer ce soir.</div>
+        <div class="gap-l"></div>
+        <div class="b b1">✦ Passer en Premium</div>
+        <div class="gap-s"></div>
+        <div class="b b3">Revenir demain</div>
+      </div>
+    </div><div class="cap"><b>Limite atteinte</b>Bottom sheet sur voile chaud, pas de noir opaque.</div></div>
+
+    <!-- EMPTY / ERROR -->
+    <div class="pw"><div class="ph">
+      <div class="sb"><span>9:41</span><span>▮▮▮</span></div>
+      <div class="appbar"><span class="bk">‹</span><span>Messages</span></div>
+      <div class="bd">
+        <div class="sub">Vos matchs après appel.</div>
+        <div class="gap-l"></div>
+        <div class="card" style="text-align:center;padding:26px 18px">
+          <div class="icocirc" style="width:50px;height:50px;font-size:20px;margin:0 auto 14px">💬</div>
+          <div class="h2s">Pas encore de conversation</div>
+          <div class="gap-s"></div>
+          <div class="sub">Vos discussions s'ouvriront ici dès qu'un appel se transformera en match réciproque.</div>
+          <div class="gap-l"></div>
+          <div class="b b3">Trouver quelqu'un</div>
+        </div>
+      </div>
+      <div class="nav"><div class="tb"><i>⌂</i>Accueil</div><div class="tb"><i>◇</i>Découvrir</div><div class="tb on"><i>✉</i>Messages</div><div class="tb"><i>☺</i>Profil</div></div>
+    </div><div class="cap"><b>État vide</b>Un état vide traité comme un écran à part entière.</div></div>
+
+  </div>
+</div></div>
+
+<footer><div class="wrap">
+  DateNow — 18 écrans en bordeaux <b>#6E2438</b> &amp; ivoire <b>#FBF8F4</b>. Prochaine étape : appliquer les tokens dans <code>app_colors.dart</code>, <code>app_typography.dart</code>, <code>app_theme.dart</code>, puis reprendre <code>gradient_background</code>, <code>glass_card</code> et <code>app_button</code> — ce qui rhabille automatiquement la majorité de ces écrans.
+</div></footer>
+
+</body>
+</html>
