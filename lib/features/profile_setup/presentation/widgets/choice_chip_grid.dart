@@ -4,8 +4,11 @@ import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 
-/// Wrap-style grid of selectable chips. The full chip is tappable; a thin
-/// brand-coloured border (and a soft tint) marks the selected state.
+/// Wrap-style grid of selectable chips. The full chip is tappable and a
+/// selected chip fills with bordeaux.
+///
+/// Chips used to be 41 px tall — under the 48 px minimum tap target, on a
+/// screen where users pick a dozen of them in a row.
 class ChoiceChipGrid<T> extends StatelessWidget {
   const ChoiceChipGrid({
     super.key,
@@ -57,22 +60,23 @@ class _Chip extends StatelessWidget {
         borderRadius: AppRadius.brPill,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
+          constraints: const BoxConstraints(minHeight: 48),
+          alignment: Alignment.center,
           padding: const EdgeInsets.symmetric(
             horizontal: AppSpacing.md,
-            vertical: 10,
+            vertical: 12,
           ),
           decoration: BoxDecoration(
-            color: selected ? AppColors.pinkSoft : AppColors.surface,
+            color: selected ? AppColors.bordeaux : AppColors.paper,
             borderRadius: AppRadius.brPill,
             border: Border.all(
-              color: selected ? AppColors.bordeaux : AppColors.hairline,
-              width: selected ? 1.5 : 1,
+              color: selected ? AppColors.bordeaux : AppColors.line,
             ),
           ),
           child: Text(
             label,
             style: AppTypography.bodyStrong.copyWith(
-              color: selected ? AppColors.textPrimary : AppColors.textSecondary,
+              color: selected ? Colors.white : AppColors.ink2,
             ),
           ),
         ),

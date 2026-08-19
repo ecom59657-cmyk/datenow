@@ -8,8 +8,12 @@ enum AppButtonVariant { primary, secondary, ghost }
 
 enum AppButtonSize { regular, large }
 
-/// The single button used across DateNow. Three variants, two sizes, a
-/// built-in loading state, and a gradient primary that matches the brand.
+/// The single button used across DateNow. Three variants, two sizes and a
+/// loading state that keeps its label.
+///
+/// One rule governs its use: **a screen carries at most one filled bordeaux
+/// button.** Two filled CTAs side by side cancel each other's hierarchy —
+/// the second one becomes [AppButtonVariant.secondary].
 class AppButton extends StatelessWidget {
   const AppButton({
     super.key,
@@ -49,9 +53,11 @@ class AppButton extends StatelessWidget {
       label: label,
       icon: icon,
       isLoading: isLoading,
-      color: variant == AppButtonVariant.primary
-          ? Colors.white
-          : AppColors.textPrimary,
+      color: switch (variant) {
+        AppButtonVariant.primary => Colors.white,
+        AppButtonVariant.secondary => AppColors.ink,
+        AppButtonVariant.ghost => AppColors.bordeaux,
+      },
     );
 
     final Widget body = switch (variant) {
@@ -78,7 +84,17 @@ class AppButton extends StatelessWidget {
         ),
     };
 
-    return expanded ? SizedBox(width: double.infinity, child: body) : body;
+    final sized = expanded ? SizedBox(width: double.infinity, child: body) : body;
+
+    // The button is an InkWell over a Container, so VoiceOver has nothing
+    // to announce on its own. Declaring it here also lets a disabled or
+    // loading button be read as unavailable instead of silently inert.
+    return Semantics(
+      button: true,
+      enabled: _enabled,
+      label: label,
+      child: ExcludeSemantics(child: sized),
+    );
   }
 }
 
@@ -102,25 +118,19 @@ class _PrimaryButton extends StatelessWidget {
     return Opacity(
       opacity: enabled ? 1 : 0.5,
       child: DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: AppColors.signatureGradient,
-          borderRadius: AppRadius.brXl,
-          boxShadow: enabled
-              ? [
-                  BoxShadow(
-                    color: AppColors.bordeaux.withValues(alpha: 0.35),
-                    blurRadius: 24,
-                    offset: const Offset(0, 8),
-                  ),
-                ]
-              : null,
+        decoration: const BoxDecoration(
+          // Flat bordeaux, not the signature gradient: the gradient is for
+          // large surfaces (hero cards, the call ground), and a shadow
+          // under every CTA is what made the old look heavy.
+          color: AppColors.bordeaux,
+          borderRadius: AppRadius.brPill,
         ),
         child: Material(
           color: Colors.transparent,
-          borderRadius: AppRadius.brXl,
+          borderRadius: AppRadius.brPill,
           child: InkWell(
             onTap: onPressed,
-            borderRadius: AppRadius.brXl,
+            borderRadius: AppRadius.brPill,
             child: Container(
               height: height,
               padding: padding,
@@ -154,18 +164,18 @@ class _SecondaryButton extends StatelessWidget {
     return Opacity(
       opacity: enabled ? 1 : 0.5,
       child: Material(
-        color: AppColors.surface,
-        borderRadius: AppRadius.brXl,
+        color: AppColors.sand,
+        borderRadius: AppRadius.brPill,
         child: InkWell(
           onTap: onPressed,
-          borderRadius: AppRadius.brXl,
+          borderRadius: AppRadius.brPill,
           child: Container(
             height: height,
             padding: padding,
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              borderRadius: AppRadius.brXl,
-              border: Border.all(color: AppColors.hairline),
+              borderRadius: AppRadius.brPill,
+              border: Border.all(color: AppColors.sandDeep),
             ),
             child: child,
           ),
@@ -196,13 +206,18 @@ class _GhostButton extends StatelessWidget {
       opacity: enabled ? 1 : 0.5,
       child: Material(
         color: Colors.transparent,
+        borderRadius: AppRadius.brPill,
         child: InkWell(
           onTap: onPressed,
-          borderRadius: AppRadius.brXl,
+          borderRadius: AppRadius.brPill,
           child: Container(
             height: height,
             padding: padding,
             alignment: Alignment.center,
+            decoration: BoxDecoration(
+              borderRadius: AppRadius.brPill,
+              border: Border.all(color: AppColors.line),
+            ),
             child: child,
           ),
         ),
@@ -226,21 +241,24 @@ class _ButtonContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (isLoading) {
-      return SizedBox(
-        height: 20,
-        width: 20,
-        child: CircularProgressIndicator(
-          strokeWidth: 2,
-          valueColor: AlwaysStoppedAnimation(color),
-        ),
-      );
-    }
+    // Loading keeps the label: a button that empties itself into a spinner
+    // leaves the user unsure of what they just triggered, and the width
+    // jump is visible on every submit.
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       mainAxisSize: MainAxisSize.max,
       children: [
-        if (icon != null) ...[
+        if (isLoading) ...[
+          SizedBox(
+            height: 18,
+            width: 18,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              valueColor: AlwaysStoppedAnimation(color),
+            ),
+          ),
+          const SizedBox(width: 8),
+        ] else if (icon != null) ...[
           Icon(icon, size: 18, color: color),
           const SizedBox(width: 8),
         ],

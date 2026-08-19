@@ -1,10 +1,19 @@
 import 'package:flutter/material.dart';
 
 import '../../app/theme/app_colors.dart';
+import 'grain_overlay.dart';
 
-/// A full-screen background with subtle radial brand glows on the deep
-/// near-black canvas. Used on auth/splash/onboarding screens to give the app
-/// its signature premium feel.
+/// The app's ground: flat ivory with a fine grain over it.
+///
+/// It used to be a near-black canvas with two saturated brand orbs. The
+/// orbs are gone — on paper, a coloured glow reads as a printing accident,
+/// not as depth. What remains is a single very quiet [AppColors.tint] halo
+/// behind the top of the screen, so hero areas breathe without introducing
+/// a second colour.
+///
+/// The name is kept (rather than renamed to something like `AppBackground`)
+/// because it is referenced from the auth, splash and onboarding trees; the
+/// gradient it now draws is simply almost invisible.
 class GradientBackground extends StatelessWidget {
   const GradientBackground({
     super.key,
@@ -14,59 +23,41 @@ class GradientBackground extends StatelessWidget {
 
   final Widget child;
 
-  /// 0.0 → flat black, 1.0 → full brand glow. Defaults to 1.0.
+  /// 0.0 → flat ivory, 1.0 → the (still discreet) tint halo. Same knob as
+  /// before so existing call sites keep working.
   final double intensity;
 
   @override
   Widget build(BuildContext context) {
     final i = intensity.clamp(0.0, 1.0);
     return DecoratedBox(
-      decoration: const BoxDecoration(color: AppColors.background),
+      decoration: const BoxDecoration(color: AppColors.ivory),
       child: Stack(
         children: [
-          // Top-left pink glow.
-          Positioned(
-            top: -180,
-            left: -120,
-            child: _GlowOrb(
-              color: AppColors.bordeaux.withValues(alpha: 0.35 * i),
-              size: 380,
+          if (i > 0)
+            Positioned(
+              top: -220,
+              left: -80,
+              right: -80,
+              child: IgnorePointer(
+                child: Container(
+                  height: 520,
+                  decoration: BoxDecoration(
+                    gradient: RadialGradient(
+                      center: Alignment.center,
+                      radius: 0.75,
+                      colors: [
+                        AppColors.tint.withValues(alpha: 0.85 * i),
+                        AppColors.ivory.withValues(alpha: 0),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
             ),
-          ),
-          // Bottom-right violet glow.
-          Positioned(
-            bottom: -200,
-            right: -140,
-            child: _GlowOrb(
-              color: AppColors.bordeauxLight.withValues(alpha: 0.30 * i),
-              size: 420,
-            ),
-          ),
+          const Positioned.fill(child: GrainOverlay()),
           Positioned.fill(child: child),
         ],
-      ),
-    );
-  }
-}
-
-class _GlowOrb extends StatelessWidget {
-  const _GlowOrb({required this.color, required this.size});
-
-  final Color color;
-  final double size;
-
-  @override
-  Widget build(BuildContext context) {
-    return IgnorePointer(
-      child: Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          gradient: RadialGradient(
-            colors: [color, color.withValues(alpha: 0)],
-          ),
-        ),
       ),
     );
   }

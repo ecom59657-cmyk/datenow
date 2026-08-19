@@ -4,7 +4,12 @@ import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_spacing.dart';
 import '../../app/theme/app_typography.dart';
 
-/// Small pill chip with a pulsing dot — e.g. "Online" status.
+/// Small pill with a pulsing dot — e.g. "En ligne".
+///
+/// Each status colour has a matching tint ground (sage/sageTint,
+/// bordeaux/tint, amber/amberTint, error/errorTint). Deriving the ground
+/// by alpha-blending the foreground, as this did before, produced washed
+/// greys on ivory instead of the warm grounds the palette defines.
 class StatusPill extends StatelessWidget {
   const StatusPill({
     super.key,
@@ -25,9 +30,8 @@ class StatusPill extends StatelessWidget {
         vertical: 6,
       ),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
+        color: _groundFor(color),
         borderRadius: AppRadius.brPill,
-        border: Border.all(color: color.withValues(alpha: 0.4)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -52,6 +56,16 @@ class StatusPill extends StatelessWidget {
     );
   }
 }
+
+/// Tint ground paired with a status foreground. Falls back to a 10 %
+/// wash for any colour outside the palette.
+Color _groundFor(Color fg) => switch (fg) {
+      AppColors.sage => AppColors.sageTint,
+      AppColors.bordeaux => AppColors.tint,
+      AppColors.amber => AppColors.amberTint,
+      AppColors.error => AppColors.errorTint,
+      _ => fg.withValues(alpha: 0.10),
+    };
 
 class _PulsingDot extends StatefulWidget {
   const _PulsingDot({required this.color});
