@@ -29,7 +29,19 @@ ENV['COCOAPODS_DISABLE_STATS'] = 'true'
 ENV['DIDIT_SDK_IOS_NFC_ENABLED'] = 'false'
 ENV['DIDIT_SDK_IOS_VARIANT']     = 'core'
 didit_sdk_ios_pod      = 'DiditSDK/Core'
-didit_sdk_ios_podspec  = 'https://raw.githubusercontent.com/didit-protocol/sdk-ios/main/DiditSDK.podspec'
+# Pinned to the 4.0.4 tag, NOT to `main`.
+#
+# `main` is a moving target: it served 4.0.4 when Podfile.lock was written
+# and serves 4.7.1 today. Any clean resolution — a fresh clone, CI, or a
+# `flutter clean` on this machine — therefore jumped the identity SDK seven
+# minor versions without a single line changing in git, and CocoaPods then
+# refused to install because the fetched spec no longer matched the lock.
+# Identity verification is a compliance gate (18+, face match, liveness);
+# it is not something that should change underneath us silently.
+#
+# Bump this ref deliberately, with the release notes read, when a newer
+# version is wanted.
+didit_sdk_ios_podspec  = 'https://raw.githubusercontent.com/didit-protocol/sdk-ios/4.0.4/DiditSDK.podspec'
 
 project 'Runner', {
   'Debug' => :debug,

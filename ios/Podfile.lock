@@ -174,7 +174,7 @@ DEPENDENCIES:
   - agora_uikit (from `.symlinks/plugins/agora_uikit/ios`)
   - app_links (from `.symlinks/plugins/app_links/ios`)
   - didit_sdk (from `.symlinks/plugins/didit_sdk/ios`)
-  - DiditSDK/Core (from `https://raw.githubusercontent.com/didit-protocol/sdk-ios/main/DiditSDK.podspec`)
+  - DiditSDK/Core (from `https://raw.githubusercontent.com/didit-protocol/sdk-ios/4.0.4/DiditSDK.podspec`)
   - firebase_core (from `.symlinks/plugins/firebase_core/ios`)
   - firebase_messaging (from `.symlinks/plugins/firebase_messaging/ios`)
   - Flutter (from `Flutter`)
@@ -221,7 +221,7 @@ EXTERNAL SOURCES:
   didit_sdk:
     :path: ".symlinks/plugins/didit_sdk/ios"
   DiditSDK:
-    :podspec: https://raw.githubusercontent.com/didit-protocol/sdk-ios/main/DiditSDK.podspec
+    :podspec: https://raw.githubusercontent.com/didit-protocol/sdk-ios/4.0.4/DiditSDK.podspec
   firebase_core:
     :path: ".symlinks/plugins/firebase_core/ios"
   firebase_messaging:
@@ -287,6 +287,6 @@ SPEC CHECKSUMS:
   sqflite_darwin: 20b2a3a3b70e43edae938624ce550a3cbf66a3d0
   url_launcher_ios: 7a95fa5b60cc718a708b8f2966718e93db0cef1b
 
-PODFILE CHECKSUM: 3cd748ebe9721e68cfb8bad46638e305ff09ffdd
+PODFILE CHECKSUM: fa3ff8927742dc34b8b9623545f41022847e369d
 
 COCOAPODS: 1.16.2
