@@ -16,6 +16,7 @@ import '../../onboarding/presentation/providers/onboarding_provider.dart';
 import 'providers/profile_setup_controller.dart';
 import 'steps/finalize_step.dart';
 import 'steps/identity_step.dart';
+import 'steps/prompts_step.dart';
 import 'steps/seeking_step.dart';
 import 'steps/vibe_step.dart';
 
@@ -33,7 +34,8 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
   final _pageController = PageController();
   int _index = 0;
   bool _submitting = false;
-  static const _stepCount = 4;
+  // Five since prompts joined: identity, seeking, vibe, prompts, finalize.
+  static const _stepCount = 5;
 
   @override
   void dispose() {
@@ -45,7 +47,8 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
         0 => d.isStep1Valid,
         1 => d.isStep2Valid,
         2 => d.isStep3Valid,
-        3 => d.isStep4Valid,
+        3 => d.isStep5Valid,
+        4 => d.isStep4Valid,
         _ => false,
       };
 
@@ -176,6 +179,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
                 IdentityStep(),
                 SeekingStep(),
                 VibeStep(),
+                PromptsStep(),
                 FinalizeStep(),
               ],
             ),

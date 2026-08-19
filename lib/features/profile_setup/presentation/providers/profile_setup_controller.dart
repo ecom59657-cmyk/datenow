@@ -10,6 +10,8 @@ import '../../../profile_moderation/data/photo_moderation_repository.dart';
 import '../../data/profile_repository.dart';
 import '../../domain/enums.dart';
 import '../../domain/interest.dart';
+import '../../domain/prompt.dart';
+import '../../domain/prompt_answer.dart';
 import '../../domain/user_profile.dart';
 
 /// Working copy of the profile being built across the multi-step flow.
@@ -52,6 +54,23 @@ class ProfileSetupController extends StateNotifier<ProfileDraft> {
       state = state.copyWith(seekingAgeMin: min, seekingAgeMax: max);
 
   void setMaxDistance(int km) => state = state.copyWith(maxDistanceKm: km);
+
+  /// Writes one answer. An empty string removes it, so clearing a field is
+  /// how you drop a prompt — no separate delete affordance to discover.
+  void setPrompt(PromptQuestion question, String answer) {
+    final next = [...state.prompts.where((p) => p.question != question)];
+    if (answer.trim().isNotEmpty) {
+      next.add(PromptAnswer(
+        question: question,
+        answer: answer.trim(),
+        position: next.length,
+      ));
+    }
+    for (var i = 0; i < next.length; i++) {
+      next[i] = next[i].copyWith(position: i);
+    }
+    state = state.copyWith(prompts: next);
+  }
 
   // ---------- Step 3 ----------
   void toggleIntention(Intention i) {
@@ -144,6 +163,7 @@ class ProfileSetupController extends StateNotifier<ProfileDraft> {
       intentions: state.intentions,
       interests: state.interests,
       availability: state.availability,
+      prompts: state.filledPrompts,
       photoUrls: photoUrls,
     );
 
@@ -184,6 +204,7 @@ class ProfileDraft {
     this.intentions = const <Intention>{},
     this.interests = const <Interest>{},
     this.availability,
+    this.prompts = const <PromptAnswer>[],
     this.photoBytes,
   });
 
@@ -211,6 +232,7 @@ class ProfileDraft {
   final Set<Intention> intentions;
   final Set<Interest> interests;
   final Availability? availability;
+  final List<PromptAnswer> prompts;
   final Uint8List? photoBytes;
 
   int? get age =>
@@ -229,6 +251,15 @@ class ProfileDraft {
 
   bool get isStep4Valid => availability != null;
 
+  /// Answers actually written, blanks dropped.
+  List<PromptAnswer> get filledPrompts =>
+      prompts.where((p) => p.isFilled).toList(growable: false);
+
+  /// Two answers, per [PromptRules.minAnswered]. Required inside the
+  /// wizard, but deliberately NOT part of [UserProfile.isComplete] — see
+  /// the note on the step for why.
+  bool get isStep5Valid => filledPrompts.length >= PromptRules.minAnswered;
+
   bool get isComplete =>
       isStep1Valid && isStep2Valid && isStep3Valid && isStep4Valid;
 
@@ -244,6 +275,7 @@ class ProfileDraft {
     Set<Intention>? intentions,
     Set<Interest>? interests,
     Availability? availability,
+    List<PromptAnswer>? prompts,
     Object? photoBytes = _unset,
   }) {
     return ProfileDraft(
@@ -259,6 +291,7 @@ class ProfileDraft {
       intentions: intentions ?? this.intentions,
       interests: interests ?? this.interests,
       availability: availability ?? this.availability,
+      prompts: prompts ?? this.prompts,
       photoBytes: identical(photoBytes, _unset)
           ? this.photoBytes
           : photoBytes as Uint8List?,

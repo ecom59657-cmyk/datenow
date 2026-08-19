@@ -2,6 +2,7 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 
 import '../../../core/utils/age.dart';
 import 'enums.dart';
+import 'prompt_answer.dart';
 import 'interest.dart';
 
 part 'user_profile.freezed.dart';
@@ -30,11 +31,21 @@ class UserProfile with _$UserProfile {
     @Default(<Interest>{}) Set<Interest> interests,
     Availability? availability,
     @Default(<String>[]) List<String> photoUrls,
+    @Default(<PromptAnswer>[]) List<PromptAnswer> prompts,
   }) = _UserProfile;
 
   /// Hard ceiling on the number of photos a profile can hold. Mirrors the
   /// constraint baked into the photos editor UI.
   static const int maxPhotos = 6;
+
+  /// Answered prompts, in the order the user chose, blanks dropped.
+  List<PromptAnswer> get filledPrompts => [
+        ...prompts.where((p) => p.isFilled),
+      ]..sort((a, b) => a.position.compareTo(b.position));
+
+  /// The one surfaced on a Discover card and during the call.
+  PromptAnswer? get leadPrompt =>
+      filledPrompts.isEmpty ? null : filledPrompts.first;
 
   /// Primary photo — the one revealed after a 5-minute date.
   String? get primaryPhotoUrl =>

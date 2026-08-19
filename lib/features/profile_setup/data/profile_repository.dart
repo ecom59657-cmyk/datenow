@@ -8,6 +8,8 @@ import '../../../core/services/supabase_service.dart';
 import '../../../core/utils/logger.dart';
 import '../domain/enums.dart';
 import '../domain/interest.dart';
+import '../domain/prompt.dart';
+import '../domain/prompt_answer.dart';
 import '../domain/user_profile.dart';
 
 /// Abstract profile store. Concrete impls plug in Supabase or an in-memory
@@ -217,7 +219,22 @@ class SupabaseProfileRepository implements ProfileRepository {
         .eq('user_id', userId)
         .order('position');
 
-    return _mapToProfile(userId, profileRow, prefsRow, photoRows);
+    // Best effort: the prompts table is young and a project that has not
+    // applied its migration yet must still be able to sign in. An empty
+    // list degrades to "no prompts answered", never to a failed profile
+    // load — the same reasoning as _fetchCalledPeerIds in Discover.
+    List<dynamic> promptRows = const [];
+    try {
+      promptRows = await _client
+          .from('user_prompts')
+          .select()
+          .eq('user_id', userId)
+          .order('position');
+    } catch (e) {
+      _log.warn('user_prompts unavailable for $userId: $e');
+    }
+
+    return _mapToProfile(userId, profileRow, prefsRow, photoRows, promptRows);
   }
 
   // ---------------------------------------------------------------------
@@ -260,6 +277,32 @@ class SupabaseProfileRepository implements ProfileRepository {
       if (profile.availability != null)
         'availability': profile.availability!.name,
     });
+
+    // 3. Replace the prompt rows. Delete-then-insert rather than upsert:
+    //    removing an answer has to remove its row, and the UNIQUE on
+    //    (user_id, position) would fight a reordering upsert.
+    try {
+      await _client
+          .from('user_prompts')
+          .delete()
+          .eq('user_id', profile.userId);
+      final filled = profile.filledPrompts;
+      if (filled.isNotEmpty) {
+        await _client.from('user_prompts').insert([
+          for (var i = 0; i < filled.length; i++)
+            {
+              'user_id': profile.userId,
+              'question': filled[i].question.name,
+              'answer': filled[i].answer.trim(),
+              'position': i,
+            },
+        ]);
+      }
+    } catch (e, st) {
+      // A prompts failure must not lose the rest of the profile the user
+      // just filled in — the answers are re-writable, a lost signup is not.
+      _log.error('saveProfile: user_prompts write failed', e, st);
+    }
 
     _log.info('saveProfile DB writes done for ${profile.userId}');
 
@@ -422,7 +465,7 @@ class SupabaseProfileRepository implements ProfileRepository {
       final profileRow = Map<String, dynamic>.from(r)
         ..remove('user_preferences');
 
-      profiles.add(_mapToProfile(id, profileRow, prefsRow, const []));
+      profiles.add(_mapToProfile(id, profileRow, prefsRow, const [], const []));
     }
 
     _log.info(
@@ -437,6 +480,7 @@ class SupabaseProfileRepository implements ProfileRepository {
     Map<String, dynamic> profileRow,
     Map<String, dynamic>? prefsRow,
     List<dynamic> photoRows,
+    List<dynamic> promptRows,
   ) {
     final birthDateRaw = profileRow['birth_date'] as String?;
     final birthDate =
@@ -490,7 +534,31 @@ class SupabaseProfileRepository implements ProfileRepository {
         prefsRow?['availability'] as String?,
       ),
       photoUrls: photoUrls,
+      prompts: _mapPrompts(promptRows),
     );
+  }
+
+  /// Rows whose `question` no longer exists in the enum are dropped rather
+  /// than crashing the profile load: the CHECK and the enum can only drift
+  /// during a rollback, and a stale answer is not worth a locked account.
+  List<PromptAnswer> _mapPrompts(List<dynamic> rows) {
+    final out = <PromptAnswer>[];
+    for (final raw in rows) {
+      final row = raw as Map<String, dynamic>;
+      final question = _enumFromName(
+        PromptQuestion.values,
+        row['question'] as String?,
+      );
+      final answer = (row['answer'] as String?)?.trim() ?? '';
+      if (question == null || answer.isEmpty) continue;
+      out.add(PromptAnswer(
+        question: question,
+        answer: answer,
+        position: (row['position'] as num?)?.toInt() ?? out.length,
+      ));
+    }
+    out.sort((a, b) => a.position.compareTo(b.position));
+    return out;
   }
 }
 

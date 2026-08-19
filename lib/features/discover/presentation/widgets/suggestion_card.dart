@@ -10,6 +10,7 @@ import '../../../../shared/widgets/app_card.dart';
 import '../../../../shared/widgets/veil.dart';
 import '../../../matching/domain/match_score.dart';
 import '../../../matching/presentation/widgets/compatibility_badge.dart';
+import '../../../profile_setup/domain/prompt.dart';
 import '../../domain/weekly_suggestion.dart';
 
 /// One weekly proposal.
@@ -121,6 +122,42 @@ class SuggestionCard extends StatelessWidget {
                 ],
                 const SizedBox(height: AppSpacing.xs),
                 CompatibilityBadge(score: score, compact: true),
+                // The one human sentence on the card. Everything else here
+                // is an enum, so this is the only thing that reads like a
+                // person rather than a filter result — and it is what the
+                // caller opens with once the video starts.
+                if (candidate.leadPrompt case final prompt?) ...[
+                  const SizedBox(height: AppSpacing.sm),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(AppSpacing.sm),
+                    decoration: const BoxDecoration(
+                      color: AppColors.sand,
+                      borderRadius: AppRadius.brMd,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          prompt.question.label(l10n).toUpperCase(),
+                          style: AppTypography.overline.copyWith(
+                            color: AppColors.clay,
+                            fontSize: 10,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          prompt.answer,
+                          style: AppTypography.h3.copyWith(fontSize: 15),
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 const SizedBox(height: AppSpacing.md),
                 Row(
                   children: [
