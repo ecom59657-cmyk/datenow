@@ -138,3 +138,67 @@ TestFlight** au statut *Processing* (~5–15 min), puis *Ready to Submit*.
 | Archive grisée dans Product | simulateur sélectionné | Choisir *Any iOS Device (arm64)* |
 | App rejetée en Beta Review | infos de test manquantes | Remplir description + contact + What to Test |
 | Build bloqué en *Processing* | traitement Apple en cours | Attendre 15 min, rafraîchir |
+
+---
+
+## Erreur 91169 — « unsupported platform in the arm64 slice »
+
+```
+Invalid executable. The "Runner.app/Frameworks/objective_c.framework/objective_c"
+executable references an unsupported platform in the arm64 slice.
+Simulator platforms aren't permitted.                          code = 91169
+```
+
+**Ce n'est pas un problème de signature ni de profil.** L'archive contenait
+littéralement le framework compilé pour le simulateur. Vérification :
+
+```bash
+otool -l build/ios/archive/Runner.xcarchive/Products/Applications/Runner.app\
+/Frameworks/objective_c.framework/objective_c | grep -A2 LC_BUILD_VERSION
+# platform 2 = iOS (bon) · platform 7 = simulateur iOS (rejeté)
+```
+
+**Cause.** `objective_c` (dépendance transitive, 9.3.0) passe par le pipeline
+*native assets* de Flutter, dont la sortie va dans `build/native_assets/ios/`
+— **le même chemin pour l'appareil et pour le simulateur**. Un
+`flutter build ios --simulator` écrase donc l'artefact iOS, et le
+`flutter build ipa` suivant réutilise celui du simulateur sans rien signaler.
+Le build passe, l'upload échoue.
+
+**Le nettoyage partiel ne suffit pas** — deux échecs successifs avant de
+trouver la bonne granularité :
+
+1. supprimer `build/native_assets/` seul → l'archive échoue sur
+   `NativeAssetsManifest.json references objective_c, which was not found` :
+   le cache `.dart_tool/hooks_runner/` croit le paquet déjà construit ;
+2. supprimer aussi `.dart_tool/hooks_runner/` → `lipo: can't open input file:
+   .dart_tool/hooks_runner/shared/objective_c/build/<hash>/objective_c.dylib` :
+   `.dart_tool/flutter_build/` garde les anciens chemins.
+
+**La procédure qui marche :**
+
+```bash
+flutter clean && flutter pub get && flutter build ipa
+```
+
+`flutter clean` ne touche pas `ios/Pods`, et le podspec Didit est épinglé sur
+le tag `4.0.4` (Podfile et Podfile.lock) — le `pod install` ne repartira pas
+sur la branche `main`, qui est le piège documenté plus haut.
+
+**Règle simple : toujours `flutter clean` avant `flutter build ipa` dès qu'un
+build simulateur a eu lieu dans la session.** C'est-à-dire, en pratique,
+toujours.
+
+**Vérification avant upload** — chaque framework embarqué doit annoncer iOS :
+
+```bash
+A=build/ios/archive/Runner.xcarchive/Products/Applications/Runner.app
+for f in $A/Frameworks/*.framework; do n=$(basename $f .framework);
+  otool -l "$f/$n" 2>/dev/null | grep -A2 LC_BUILD_VERSION |
+  grep " platform" | head -1 | sed "s|^|$n |"; done
+```
+
+Les frameworks Agora, AppAuth, GTM* et FBLPromises n'affichent rien : ils
+utilisent l'ancienne commande `LC_VERSION_MIN_IPHONEOS`, ce qui est normal et
+se vérifie avec `grep -oE "LC_VERSION_MIN_[A-Z_]+"`. Un
+`LC_VERSION_MIN_IPHONEOS_SIMULATOR` serait le problème.
