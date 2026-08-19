@@ -1,7 +1,7 @@
 # Dossier d'appel — App Store Guideline 4.3(b) « Design Spam »
 
-**App :** DateNow (`0.1.0+52`) — dating app live-matching
-**Date :** 9 juin 2026
+**App :** DateNow (`0.1.0+70`) — dating app live-matching
+**Date :** 9 juin 2026 — *références code revérifiées le 19 août 2026 sur `feat/redesign-voile`*
 **Objet :** réponse argumentée au rejet 4.3(b) + plan de mise en conformité métadonnées/marketing
 **Concurrents de référence cités par Apple (catégorie saturée) :** Tinder, Bumble, Hinge, Fruitz, Happn
 
@@ -45,46 +45,53 @@ La colonne DateNow ne partage **aucune** case avec les 5 autres. C'est l'argumen
 
 ### Pilier 1 — Disponibilité immédiate (real-time, pas une file statique)
 **Vérifié ✅**
-- `lib/features/presence/domain/presence_status.dart:9-13` — enum de présence `online / searching / inCall / offline`.
-- `lib/features/presence/data/presence_repository.dart:46-55` — `setStatus()` écrit l'état temps réel dans `user_presence`.
-- `lib/features/presence/data/presence_repository.dart:76-87` — `availableDateProposalsToday()` ne compte que les pairs à présence **fraîche** (non offline / non banni / pas déjà en call).
-- `lib/features/matching/data/matching_driver.dart:26-44` — `joinQueue / leaveQueue / heartbeat` maintiennent la dispo vivante.
+- `lib/features/presence/domain/presence_status.dart:10-13` — enum de présence `online / searching / inCall / offline`.
+- `lib/features/presence/data/presence_repository.dart:46` — `setStatus()` écrit l'état temps réel dans `user_presence`.
+- `lib/features/presence/data/presence_repository.dart:59` — `activeProfilesCount()` : compteur de personnes joignables, servi par une RPC `SECURITY DEFINER` à horloge serveur (fenêtre de fraîcheur 60 s).
+- `lib/features/presence/data/presence_repository.dart:76` — `availableDateProposalsToday()` ne compte que les pairs à présence **fraîche** (non offline / non banni / pas déjà en call).
+- `lib/features/matching/data/matching_driver.dart:34-44` — `joinQueue / leaveQueue / heartbeat` maintiennent la dispo vivante.
 
 → On ne matche pas sur un catalogue de profils dormants, mais sur **qui est joignable à l'instant T**.
 
 ### Pilier 2 — Date vidéo AVANT le chat
 **Vérifié ✅**
-- `lib/features/matching/presentation/matching_screen.dart:34-36` — après match, court reveal du score **(aucune photo)**, puis push direct vers le call.
-- `lib/features/call/presentation/call_screen.dart:28-39` — écran d'appel live 5 min = **premier** contact.
-- `lib/features/post_call/presentation/post_call_screen.dart:34-36` — « Real photos surface **only** here » : la photo n'apparaît qu'après l'appel.
-- `lib/features/messaging/presentation/conversation_screen.dart:423-433` — le chat est verrouillé tant qu'il n'y a pas de reveal mutuel.
+- `lib/features/matching/presentation/matching_screen.dart:34-37` — après match, court reveal du score **(aucune photo)**, puis push direct vers le call.
+- `lib/features/call/presentation/call_screen.dart:81` — la durée de l'appel est bornée par `AppConfig.maxCallDuration` (5 min) : ce call live est le **premier** contact.
+- `lib/features/post_call/presentation/post_call_screen.dart:36` — « Real photos surface **only** here » : la photo n'apparaît qu'après l'appel.
+- `lib/features/messaging/presentation/conversation_screen.dart:423-434` — le chat est verrouillé tant qu'il n'y a pas de reveal mutuel.
 
 ### Pilier 3 — Caméra floutée
 **Vérifié ✅**
-- `lib/features/call/presentation/agora_call_view.dart:767-775` — `BackdropFilter(ImageFilter.blur(sigmaX:15, sigmaY:15))` plein écran sur le flux distant.
-- `lib/features/call/presentation/agora_call_view.dart:979-987` — même flou sigma-15 sur l'auto-vue PIP (« never show a sharp camera, self-view included »).
-- `lib/features/call/presentation/agora_call_view.dart:1055-1061` + `call_screen.dart:891` — caption permanente « Caméra floutée jusqu'à la fin du date ».
+- `lib/features/call/presentation/agora_call_view.dart:768-775` — `BackdropFilter(ImageFilter.blur(sigmaX:15, sigmaY:15))` plein écran sur le flux distant.
+- `lib/features/call/presentation/agora_call_view.dart:986-989` — même flou sigma-15 sur l'auto-vue PIP (« never show a sharp camera, self-view included »).
+- `lib/features/call/presentation/agora_call_view.dart:1036` — `_BlurCaption`, la mention permanente affichée pendant tout l'appel.
+- `lib/features/call/presentation/call_screen.dart:881` — « Caméra floutée — la révélation, c'est pour la fin ».
+
+> Le flou de l'appel est **fixe et non désactivable** : un seul sigma, appliqué aux deux surfaces (flux distant et auto-vue), du début à la fin de la date. Aucun palier, aucun réglage, aucun déblocage payant.
 
 ### Pilier 4 — Révélation progressive
 **Vérifié ✅**
-- `lib/features/post_call/data/reveal_repository.dart:79-136` — machine à états `selfDecideReveal → waitingForPeerReveal → mutual → matched`.
-- `lib/features/post_call/presentation/post_call_screen.dart:103-106` — animation de reveal de 1,1 s.
-- `lib/features/matching/presentation/matching_screen.dart:35-36` — score révélé d'abord, photo bien plus tard.
+- `lib/features/post_call/data/reveal_repository.dart:79-95` — machine à états `PostCallStage` : `selfDecideReveal → waitingForPeerReveal → mutual → matched`.
+- `lib/shared/widgets/veil.dart:12-25` — le **Voile**, composant unique à quatre niveaux : sigma 26 (Découvrir) → 16 (match trouvé) → 7 (fin de date) → 0 (après décision mutuelle **des deux** personnes).
+- `lib/shared/widgets/veil.dart:142-151` — le flou utilise `TileMode.decal` précisément pour que les pixels de bord ne trahissent pas la silhouette du visage.
+- `lib/features/post_call/presentation/post_call_screen.dart:874-889` — la chorégraphie de la révélation : 400 ms d'immobilité, puis le flou tombe sur 1 s, et les boutons de décision n'apparaissent qu'à 1600 ms.
+- `lib/features/matching/presentation/matching_screen.dart:36` — score révélé d'abord, photo bien plus tard.
 
 → Séquence : score seul → vidéo floutée → photo animée → décision mutuelle → chat. Le visage se mérite.
 
 ### Pilier 5 — Suppression du swipe infini
 **Vérifié ✅ (absence confirmée)**
-- Aucune occurrence de `swipe`, `CardStack`, deck à gestes dans `lib/`.
-- `lib/features/discover/presentation/discover_screen.dart:23-28` — au lieu d'une pile : suggestions hebdo **plafonnées à 3** + matchs confirmés.
+- Aucune occurrence de `swipe`, `CardStack`, `Dismissible` ou deck à gestes dans `lib/` — vérifiable par simple recherche.
+- `lib/features/discover/data/weekly_suggestions_service.dart:34` — `static const int weeklySlots = 3` : le plafond hebdomadaire est une constante du service, pas une limite d'affichage.
+- `lib/features/discover/presentation/discover_screen.dart:46` — l'écran ne consomme que ces suggestions et les matchs confirmés.
 - `lib/features/matching/data/matching_driver.dart:55-69` — un seul meilleur candidat par recherche, pas une file à balayer.
-- `lib/features/quota/presentation/widgets/quota_limit_sheet.dart:9` — plafond quotidien (5 dates/jour côté hommes).
+- `lib/features/quota/data/quota_service.dart:16` — `static const int maleDailyCap = 5` : plafond quotidien côté serveur.
 
 ### Pilier 6 — Interaction temps réel
 **Vérifié ✅**
-- `lib/features/presence/data/presence_repository.dart:108-114` — `watchPresence()` via Supabase Realtime `.stream(primaryKey:['user_id'])`.
-- `lib/features/matching/data/matchmaking_repository.dart:210-213` — `watchMyActiveCall()` stream sur `calls`.
-- `lib/features/post_call/presentation/post_call_screen.dart:43-46` — stream `reveals` = source de vérité unique, convergence des 2 clients.
+- `lib/features/presence/data/presence_repository.dart:108` — `watchPresence()` via Supabase Realtime `.stream(primaryKey:['user_id'])`.
+- `lib/features/matching/data/matchmaking_repository.dart:210` — `watchMyActiveCall()` stream sur `calls`.
+- `lib/features/post_call/presentation/post_call_screen.dart:162` — `watchReveals()` = source de vérité unique, convergence des 2 clients.
 
 ---
 
@@ -110,9 +117,9 @@ La colonne DateNow ne partage **aucune** case avec les 5 autres. C'est l'argumen
 |---|---|---|---|
 | 1 | Home « dispo maintenant » + CTA « Trouver un date » | `home_screen.dart` | Pilier 1 — entrée par la disponibilité, pas par une pile |
 | 2 | Matching live (score, **sans photo**) | `matching_screen.dart` | Piliers 2+6 — match temps réel, visage caché |
-| 3 | Appel vidéo **caméra floutée** + caption | `agora_call_view.dart` / `call_screen.dart:891` | Piliers 2+3 — LE différenciateur, plein écran |
-| 4 | Post-call : **révélation progressive** de la photo | `post_call_screen.dart` | Pilier 4 — la photo se mérite |
-| 5 | Discover : 3 suggestions/sem (**pas de deck**) | `discover_screen.dart` | Pilier 5 — anti swipe infini |
+| 3 | Appel vidéo **caméra floutée** + caption | `agora_call_view.dart:768` / `call_screen.dart:881` | Piliers 2+3 — LE différenciateur, plein écran |
+| 4 | Post-call : **révélation progressive** de la photo | `post_call_screen.dart:874` + `veil.dart` | Pilier 4 — la photo se mérite |
+| 5 | Discover : 3 suggestions/sem (**pas de deck**) | `discover_screen.dart` / `weekly_suggestions_service.dart:34` | Pilier 5 — anti swipe infini |
 | 6 | Quota atteint (plafond quotidien) | `quota_limit_sheet.dart` | Pilier 5 — interactions bornées |
 
 ---
@@ -186,14 +193,18 @@ Thank you for reconsidering. We're happy to answer any questions.
 
 ## 7. Modifications marketing / métadonnées (pour ne PAS retomber sur 4.3(b))
 
-### 7.1 — CORRECTIF BLOQUANT : stats home codées en dur
-`lib/features/home/presentation/home_screen.dart:109` (`'1.2k'`) et `:117` (`'38s'`) sont **des valeurs statiques en dur** (« 1.2k personnes en ligne », « 38s temps de match moyen »).
+### 7.1 — ~~CORRECTIF BLOQUANT~~ : stats home codées en dur → **corrigé**
 
-**Risque double :**
-- **2.3.1 / métadonnées trompeuses** — afficher un compteur d'audience fictif est exactement le type de chiffre qu'Apple sanctionne, *en plus* du 4.3(b).
-- **Auto-sabotage du Pilier 1** — si le reviewer voit que le compteur « temps réel » est en dur, il décrédibilise toute la thèse « real-time availability ».
+Au build 52, `home_screen.dart` affichait deux tuiles en dur : « 1.2k personnes en ligne » et « 38 s de temps de match moyen ». C'était un double risque — métadonnées trompeuses (2.3.1) **et** auto-sabotage du Pilier 1, un compteur « temps réel » figé décrédibilisant toute la thèse de la disponibilité.
 
-**Action :** soit brancher ces tuiles sur des compteurs réels (le RPC `available_date_proposals_today()` existe déjà et alimente déjà la 3ᵉ tuile, `home_screen.dart:131`), soit les retirer / remplacer par une formulation non chiffrée (« Des personnes dispo en ce moment ») tant que le volume réel est faible au lancement. **À faire avant resoumission.**
+**Fait.** Les deux tuiles sont branchées ou retirées :
+
+- `lib/features/home/presentation/home_screen.dart:116` — la tuile « personnes en ligne » lit `activeProfilesCountProvider`, servi par la RPC `active_profiles_count()` (horloge serveur, fenêtre de fraîcheur 60 s).
+- `lib/features/home/presentation/widgets/people_online_display.dart` — erreur, `null` et `0` affichent tous l'état vide, **jamais un nombre**. Testé FR + EN dans `test/people_online_format_test.dart`.
+- `lib/features/home/presentation/home_screen.dart:133` — « 38 s » est remplacé par un fait produit vérifiable, la durée d'un date, tirée de `AppConfig.maxCallDuration`.
+- `lib/features/home/presentation/home_screen.dart:149` — la troisième tuile lisait déjà `available_date_proposals_today()`.
+
+Il ne reste **aucun chiffre d'audience inventé** dans l'interface.
 
 ### 7.2 — Sous-titre App Store (30 car.)
 Bannir « Rencontre, Chat, Célibataires ». Proposer :
@@ -211,17 +222,25 @@ Garder « Lifestyle » ou « Social Networking » selon le positionnement, mais 
 
 ---
 
+## 7.6 — La refonte visuelle (branche `feat/redesign-voile`)
+
+Depuis le rejet, toute la direction artistique a changé : le fond quasi-noir et le dégradé rose→violet — soit exactement la palette de la catégorie — sont remplacés par un thème clair ivoire et bordeaux, une typographie serif éditoriale (Newsreader), des cartes papier séparées par des filets, et un seul écran resté sombre : l'appel vidéo.
+
+Ça compte pour un 4.3(b), parce que la moitié du verdict se joue sur les visuels de la fiche : les anciennes captures montraient une app sombre à dégradé saturé, ce qui *ressemble* à la concurrence citée avant même qu'on lise un mot. Les nouvelles ne ressemblent à aucune des cinq.
+
+Le Voile — `lib/shared/widgets/veil.dart` — est le composant qui matérialise le cœur du produit : un flou à quatre niveaux qui se lève au fil de la relation, jamais avant la décision mutuelle. C'est la mécanique du Pilier 4 rendue visible à l'écran.
+
 ## 8. Checklist avant resoumission
 
-- [ ] **7.1** Stats home en dur (`1.2k` / `38s`) branchées sur du réel ou retirées
+- [x] **7.1** Stats home en dur (`1.2k` / `38s`) branchées sur du réel ou retirées — *fait, commit `a13a455`*
 - [ ] Captures App Store refaites selon le storyboard (section 5), capture « caméra floutée » incluse
 - [ ] App Preview vidéo 15–20 s (match → call flouté → reveal)
 - [ ] Sous-titre + mots-clés dégénérisés (7.2 / 7.3)
 - [ ] 1ʳᵉ ligne de description = phrase-pivot ; cohérence avec `getdatenow.app`
-- [ ] Compte démo Apple Review vérifié fonctionnel + parcours complet faisable (déjà en place, à re-tester)
+- [ ] Compte démo Apple Review vérifié fonctionnel + parcours complet faisable (déjà en place, à re-tester **sur la nouvelle DA**)
 - [ ] Texte d'appel (section 6) prêt dans Resolution Center
 - [ ] (Recommandé) Screen recording du core loop attaché à la réponse
 
 ---
 
-*Toutes les références code de ce dossier ont été vérifiées sur la branche `test/matching-v2-activation` au build `0.1.0+52`.*
+*Toutes les références code de ce dossier ont été revérifiées le 19 août 2026 sur la branche `feat/redesign-voile` au build `0.1.0+70`. Elles ont dérivé depuis la rédaction initiale (build 52) : la refonte a déplacé du code de présentation, sans jamais toucher aux six mécaniques ci-dessus. À revérifier avant tout envoi si d'autres commits s'intercalent.*
