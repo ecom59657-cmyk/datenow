@@ -1,45 +1,31 @@
 import 'package:flutter/material.dart';
 
-import '../../../../app/theme/app_colors.dart';
+import '../../../../shared/widgets/veil.dart';
 
-/// Premium silhouette stand-in shown anywhere a photo would normally appear
-/// **before** a successful live date. Real photos are intentionally locked
-/// behind the post-call reveal screen.
+/// Stand-in shown anywhere a photo would normally appear **before** a
+/// successful live date. Real photos only ever surface on the post-call
+/// reveal screen.
+///
+/// This is now the [Veil] at [VeilLevel.v4] over a warm placeholder, so the
+/// pre-match silhouette, the suggestion cards and the reveal are visibly
+/// the same object at different distances — instead of three unrelated
+/// widgets that each invented their own grey circle.
 class BlurredAvatar extends StatelessWidget {
-  const BlurredAvatar({super.key, this.size = 120});
+  const BlurredAvatar({super.key, this.size = 120, this.level = VeilLevel.v4});
 
   final double size;
 
+  /// Lets a caller show a closer level (e.g. [VeilLevel.v3] once matched).
+  final VeilLevel level;
+
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return SizedBox(
       width: size,
       height: size,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            AppColors.surfaceElevated,
-            AppColors.surface,
-          ],
-        ),
-        border: Border.all(color: AppColors.hairline, width: 1.5),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.bordeaux.withValues(alpha: 0.15),
-            blurRadius: 28,
-            spreadRadius: 2,
-          ),
-        ],
-      ),
-      child: Center(
-        child: Icon(
-          Icons.person_rounded,
-          color: AppColors.textTertiary.withValues(alpha: 0.7),
-          size: size * 0.45,
-        ),
+      child: Veil(
+        level: level,
+        child: const VeilPlaceholder(),
       ),
     );
   }

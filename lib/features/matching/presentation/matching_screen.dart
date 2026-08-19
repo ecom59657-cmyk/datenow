@@ -21,6 +21,7 @@ import '../../presence/presentation/presence_controller.dart';
 import '../../profile_setup/data/profile_repository.dart';
 import '../../profile_setup/domain/user_profile.dart';
 import '../../profile_setup/presentation/providers/profile_provider.dart';
+import '../../../shared/widgets/veil.dart';
 import '../../profile_setup/presentation/widgets/blurred_avatar.dart';
 import '../data/matching_driver.dart';
 import '../data/matching_driver_provider.dart';
@@ -719,7 +720,11 @@ class _FoundView extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const Spacer(flex: 2),
-        const Center(child: BlurredAvatar(size: 180))
+        // v3: a match has been found, so the Veil steps one level closer
+        // than the Discover cards — the same person, less far away.
+        const Center(
+          child: BlurredAvatar(size: 180, level: VeilLevel.v3),
+        )
             .animate()
             .scale(
               duration: 360.ms,

@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'dart:math';
-import 'dart:typed_data';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -18,6 +18,7 @@ import '../../../core/utils/profile_format.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../shared/widgets/app_button.dart';
 import '../../../shared/widgets/app_scaffold.dart';
+import '../../../shared/widgets/veil.dart';
 import '../../discover/data/discover_repository.dart';
 import '../../matching/data/matching_repository.dart';
 import '../../messaging/data/messaging_repository.dart';
@@ -812,7 +813,7 @@ class _RevealingView extends StatelessWidget {
 ///
 /// Minimal copy on purpose: only "À toi de jouer ! ✨", the countdown, the
 /// name/age and the two buttons — the photo is the dominant element.
-class _MutualRevealView extends StatelessWidget {
+class _MutualRevealView extends StatefulWidget {
   const _MutualRevealView({
     required this.match,
     required this.peerPhotoBytes,
@@ -837,9 +838,59 @@ class _MutualRevealView extends StatelessWidget {
   final VoidCallback onPass;
 
   @override
+  State<_MutualRevealView> createState() => _MutualRevealViewState();
+}
+
+class _MutualRevealViewState extends State<_MutualRevealView> {
+  /// The Veil starts where the date left it — v2, the level both people
+  /// were looking at when the call ended — and only then lifts. Starting
+  /// from a sharp photo would throw away the whole point of the product.
+  VeilLevel _level = VeilLevel.v2;
+
+  /// The two decision buttons stay out until [VeilTiming.decisionUnlock].
+  /// Offering "On continue / Pas cette fois" while the face is still
+  /// resolving forces a choice about someone the user has not yet seen.
+  bool _decisionOffered = false;
+
+  final List<Timer> _beats = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _playReveal();
+  }
+
+  /// The choreography. The 400 ms of stillness after the first haptic is
+  /// deliberate: it is the beat that makes the reveal land as an event.
+  void _playReveal() {
+    HapticFeedback.selectionClick();
+    _beats.add(Timer(VeilTiming.stillness, () {
+      if (!mounted) return;
+      HapticFeedback.mediumImpact();
+      setState(() => _level = VeilLevel.v1);
+    }));
+    _beats.add(Timer(VeilTiming.settle, () {
+      if (!mounted) return;
+      HapticFeedback.lightImpact();
+    }));
+    _beats.add(Timer(VeilTiming.decisionUnlock, () {
+      if (!mounted) return;
+      setState(() => _decisionOffered = true);
+    }));
+  }
+
+  @override
+  void dispose() {
+    for (final beat in _beats) {
+      beat.cancel();
+    }
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final candidate = match?.candidate;
+    final candidate = widget.match?.candidate;
     return Column(
       children: [
         const SizedBox(height: AppSpacing.sm),
@@ -849,8 +900,8 @@ class _MutualRevealView extends StatelessWidget {
           style: AppTypography.h1,
         ),
         const SizedBox(height: AppSpacing.md),
-        // Neon countdown, sitting between the title and the photo.
-        _CountdownCircle(seconds: countdown),
+        // Countdown, sitting between the title and the photo.
+        _CountdownCircle(seconds: widget.countdown),
         const SizedBox(height: AppSpacing.md),
         // Dominant reveal photo — fills the remaining vertical space, so it
         // scales up on big iPhones without ever overflowing small ones.
@@ -858,10 +909,18 @@ class _MutualRevealView extends StatelessWidget {
           child: Center(
             child: AspectRatio(
               aspectRatio: 4 / 5,
-              child: _RevealPhotoCard(
-                bytes: peerPhotoBytes,
-                loading: peerPhotoLoading,
-                fallbackName: candidate?.firstName,
+              child: AnimatedScale(
+                // 0.94 → 1 travelling with the blur, so the photo settles
+                // towards the viewer as it resolves.
+                scale: _level == VeilLevel.v1 ? 1.0 : 0.94,
+                duration: VeilTiming.reveal,
+                curve: VeilTiming.curve,
+                child: _RevealPhotoCard(
+                  bytes: widget.peerPhotoBytes,
+                  loading: widget.peerPhotoLoading,
+                  fallbackName: candidate?.firstName,
+                  level: _level,
+                ),
               ),
             ),
           ),
@@ -880,18 +939,31 @@ class _MutualRevealView extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
           ),
         const SizedBox(height: AppSpacing.lg),
-        AppButton(
-          label: l10n.postCallMatch,
-          icon: Icons.favorite_rounded,
-          size: AppButtonSize.large,
-          onPressed: onMatch,
-        ),
-        const SizedBox(height: AppSpacing.sm),
-        AppButton(
-          label: l10n.postCallPass,
-          variant: AppButtonVariant.secondary,
-          size: AppButtonSize.large,
-          onPressed: onPass,
+        // Reserved height: the buttons fade in where they will sit, so the
+        // photo never jumps upward at 1600 ms.
+        AnimatedOpacity(
+          opacity: _decisionOffered ? 1 : 0,
+          duration: AppDurations.normal,
+          child: IgnorePointer(
+            ignoring: !_decisionOffered,
+            child: Column(
+              children: [
+                AppButton(
+                  label: l10n.postCallMatch,
+                  icon: Icons.favorite_rounded,
+                  size: AppButtonSize.large,
+                  onPressed: widget.onMatch,
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                AppButton(
+                  label: l10n.postCallPass,
+                  variant: AppButtonVariant.secondary,
+                  size: AppButtonSize.large,
+                  onPressed: widget.onPass,
+                ),
+              ],
+            ),
+          ),
         ),
         const SizedBox(height: AppSpacing.lg),
       ],
@@ -960,11 +1032,16 @@ class _CountdownCircle extends StatelessWidget {
 class _RevealPhotoCard extends StatelessWidget {
   const _RevealPhotoCard({
     required this.bytes,
+    required this.level,
     this.loading = false,
     this.fallbackName,
   });
 
   final Uint8List? bytes;
+
+  /// Where the Veil currently sits. The parent walks it from
+  /// [VeilLevel.v2] (how the date ended) to [VeilLevel.v1].
+  final VeilLevel level;
 
   /// While true (and bytes still null) we show a brief spinner. Bounded
   /// by the parent's 10 s photo-load timeout — it can never hang.
@@ -979,7 +1056,7 @@ class _RevealPhotoCard extends StatelessWidget {
     final Widget content = bytes == null
         ? (loading
             ? const ColoredBox(
-                color: AppColors.surface,
+                color: AppColors.sand,
                 child: Center(
                   child: SizedBox(
                     width: 28,
@@ -992,57 +1069,28 @@ class _RevealPhotoCard extends StatelessWidget {
                 ),
               )
             : _PhotoFallback(name: fallbackName))
-        : TweenAnimationBuilder<double>(
-            tween: Tween<double>(begin: 24, end: 0),
-            duration: const Duration(milliseconds: 1100),
-            curve: Curves.easeOutCubic,
-            builder: (context, sigma, child) => ImageFiltered(
-              imageFilter: ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
-              child: child,
-            ),
-            child: SizedBox.expand(
-              child: Image.memory(
-                bytes!,
-                fit: BoxFit.cover,
-                gaplessPlayback: true,
-              ),
+        : SizedBox.expand(
+            child: Image.memory(
+              bytes!,
+              fit: BoxFit.cover,
+              gaplessPlayback: true,
             ),
           );
 
+    // The Veil owns the blur, the warm cast and the grain. The card keeps
+    // a hairline instead of the old double bordeaux glow — a coloured halo
+    // around the face is the one thing that would cheapen this moment.
     return DecoratedBox(
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(28),
-        border: Border.all(
-          color: AppColors.bordeaux.withValues(alpha: 0.6),
-          width: 2,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.bordeaux.withValues(alpha: 0.4),
-            blurRadius: 44,
-            spreadRadius: 2,
-            offset: const Offset(0, 10),
-          ),
-          BoxShadow(
-            color: AppColors.bordeauxLight.withValues(alpha: 0.28),
-            blurRadius: 60,
-            spreadRadius: 6,
-          ),
-        ],
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: AppColors.line),
       ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(28),
+      child: Veil(
+        level: level,
+        shape: VeilShape.card,
         child: content,
       ),
-    )
-        .animate()
-        .scale(
-          begin: const Offset(1.05, 1.05),
-          end: const Offset(1, 1),
-          duration: 1100.ms,
-          curve: Curves.easeOutCubic,
-        )
-        .fadeIn(duration: 350.ms);
+    );
   }
 }
 
@@ -1643,66 +1691,46 @@ class _PhotoReveal extends StatelessWidget {
     if (!revealed || bytes == null) {
       return Column(
         children: [
-          Stack(
-            alignment: Alignment.center,
-            children: [
-              const BlurredAvatar(size: _preRevealSize),
-              if (bytes != null)
-                ClipOval(
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
-                    child: const SizedBox(
-                      width: _preRevealSize,
-                      height: _preRevealSize,
-                    ),
+          // Pre-reveal: the peer's own photo under the Veil when we have
+          // it, the warm placeholder when we don't. Either way v3 — the
+          // level the app shows between the match and the reveal.
+          SizedBox(
+            width: _preRevealSize,
+            height: _preRevealSize,
+            child: bytes == null
+                ? const BlurredAvatar(size: _preRevealSize, level: VeilLevel.v3)
+                : Veil(
+                    level: VeilLevel.v3,
+                    child: Image.memory(bytes!, fit: BoxFit.cover),
                   ),
-                ),
-            ],
           ),
           const SizedBox(height: AppSpacing.sm),
           Text(
             l10n.hiddenPhotoLabel,
-            style: AppTypography.caption.copyWith(
-              color: AppColors.textTertiary,
-            ),
+            style: AppTypography.caption.copyWith(color: AppColors.ink2),
           ),
         ],
       );
     }
 
-    // Reveal — large portrait card with a brand-pink glow + a soft
-    // "developing from blur" animation. The image fills the card via
-    // BoxFit.cover so a tall portrait shows the face without letterbox.
+    // Reveal — large portrait card. The Veil stays at v1: blur gone, warm
+    // veil down to 35 %, grain still there, so a revealed photo still
+    // reads as part of the app rather than a raw camera roll image.
     return LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth.clamp(0.0, _revealMaxWidth);
         final height = width / _revealAspect;
-        return Container(
+        return SizedBox(
           width: width,
           height: height,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(28),
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.bordeaux.withValues(alpha: 0.32),
-                blurRadius: 36,
-                spreadRadius: 2,
-                offset: const Offset(0, 12),
-              ),
-            ],
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(28),
-            child: TweenAnimationBuilder<double>(
-              tween: Tween<double>(begin: 26, end: 0),
-              duration: const Duration(milliseconds: 1100),
-              curve: Curves.easeOutCubic,
-              builder: (context, sigma, child) {
-                return ImageFiltered(
-                  imageFilter: ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
-                  child: child,
-                );
-              },
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(color: AppColors.line),
+            ),
+            child: Veil(
+              level: VeilLevel.v1,
+              shape: VeilShape.card,
               child: Image.memory(
                 bytes!,
                 width: width,
@@ -1714,10 +1742,10 @@ class _PhotoReveal extends StatelessWidget {
         )
             .animate()
             .scale(
-              duration: 520.ms,
-              begin: const Offset(0.92, 0.92),
+              duration: VeilTiming.reveal,
+              begin: const Offset(0.94, 0.94),
               end: const Offset(1, 1),
-              curve: Curves.easeOutBack,
+              curve: VeilTiming.curve,
             )
             .fadeIn(duration: 380.ms);
       },
