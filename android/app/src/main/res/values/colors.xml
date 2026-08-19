@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- DateNow app ground (ivory #FBF8F4) used for the native launch screen
-         so it matches the app's ivory ground and there is no flash on
-         startup before Flutter draws its first frame. -->
-    <color name="launch_background">#FFFBF8F4</color>
+    <!-- DateNow splash ground (bordeauxDeep #451523) for the native launch screen
+         so it matches the splash Flutter draws next. The splash is the one
+         bordeaux screen outside the call; everywhere else is ivory. -->
+    <color name="launch_background">#FF451523</color>
 </resources>

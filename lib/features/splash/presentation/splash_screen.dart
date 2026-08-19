@@ -1,79 +1,92 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_spacing.dart';
-import '../../../app/theme/app_typography.dart';
-import '../../../l10n/app_localizations.dart';
 import '../../../shared/widgets/app_logo.dart';
-import '../../../shared/widgets/app_scaffold.dart';
 
-/// Premium open animation, shown while the router warms up auth + session.
+/// Open animation, shown while the router warms up auth + session.
 ///
 /// It owns NO navigation — the GoRouter `redirect` decides when to leave,
-/// and the `splashGateProvider` guarantees this screen stays visible for a
-/// minimum elegant window (≈1.1 s) so the animation is actually seen. The
-/// dark `#0A0A0F` canvas matches the native launch screen, so there is no
-/// flash on entry and the exit is a soft cross-fade (see the route's
-/// `CustomTransitionPage`).
+/// and `splashGateProvider` holds the screen for a minimum window (≈1.1 s)
+/// so the animation is actually seen.
+///
+/// Bordeaux, alone in the app: everywhere else the ground is ivory and dark
+/// is reserved for the call. Here it earns its place — the wordmark and the
+/// ivory-grounded icon need something to stand against, and an app opening
+/// on its own colour states what it is before a single screen loads. The
+/// native launch screen carries the same bordeaux, so the ground never
+/// changes between the two.
 class SplashScreen extends StatelessWidget {
   const SplashScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    return AppScaffold(
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            // Wordmark sitting over a soft brand halo that breathes — the
-            // halo is purely decorative so it ignores pointers and never
-            // affects layout (it's in a non-expanding Stack with the logo).
-            Stack(
-              alignment: Alignment.center,
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      // Light glyphs: the rest of the app runs dark-on-ivory, and this is
+      // the one screen where that would be unreadable.
+      value: const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.light,
+        statusBarBrightness: Brightness.dark,
+        systemNavigationBarColor: AppColors.bordeauxDeep,
+        systemNavigationBarIconBrightness: Brightness.light,
+      ),
+      child: Scaffold(
+        backgroundColor: AppColors.bordeauxDeep,
+        body: DecoratedBox(
+          decoration: const BoxDecoration(
+            gradient: AppColors.signatureGradient,
+          ),
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const _LogoHalo(),
-                const AppLogo(fontSize: 46)
-                    .animate()
-                    .fadeIn(duration: 700.ms, curve: Curves.easeOut)
-                    .scale(
-                      begin: const Offset(0.92, 0.92),
-                      end: const Offset(1, 1),
-                      duration: 700.ms,
-                      curve: Curves.easeOutCubic,
-                    ),
+                Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    const _LogoHalo(),
+                    const AppLogo(
+                      fontSize: 46,
+                      showMark: true,
+                      onDark: true,
+                    )
+                        .animate()
+                        .fadeIn(duration: 700.ms, curve: Curves.easeOut)
+                        .scale(
+                          begin: const Offset(0.92, 0.92),
+                          end: const Offset(1, 1),
+                          duration: 700.ms,
+                          curve: Curves.easeOutCubic,
+                        ),
+                  ],
+                ),
+                // No tagline. It faded in at 450 ms on a screen that is
+                // gone in about a second — nobody finished reading it, and
+                // a line you cannot read is worse than no line: it makes
+                // the opening feel busy.
+                const SizedBox(height: AppSpacing.xxl),
+                const SizedBox(
+                  height: 26,
+                  width: 26,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.2,
+                    valueColor: AlwaysStoppedAnimation(AppColors.paper),
+                  ),
+                ).animate().fadeIn(delay: 800.ms, duration: 500.ms),
               ],
             ),
-            const SizedBox(height: AppSpacing.md),
-            Text(
-              l10n.appTagline,
-              style: AppTypography.body.copyWith(
-                color: AppColors.textSecondary,
-              ),
-            ).animate().fadeIn(delay: 450.ms, duration: 600.ms),
-            const SizedBox(height: AppSpacing.xxl),
-            const SizedBox(
-              height: 26,
-              width: 26,
-              child: CircularProgressIndicator(
-                strokeWidth: 2.2,
-                valueColor: AlwaysStoppedAnimation(AppColors.bordeaux),
-              ),
-            ).animate().fadeIn(delay: 800.ms, duration: 500.ms),
-          ],
+          ),
         ),
       ),
     );
   }
 }
 
-/// Faint warm halo behind the wordmark. It used to be bordeaux at 22 %
-/// over near-black, which read as a glow; the same recipe over ivory read
-/// as a stain around the logo. It is now a [AppColors.tint] wash — barely
-/// there, just enough to keep the centre of the screen from feeling flat.
-/// Decorative: wrapped in [IgnorePointer] and given a fixed size so it
-/// never shifts the centred column.
+/// Soft light behind the wordmark, so the centre of the screen lifts off
+/// the bordeaux instead of sitting flat on it. Decorative: it ignores
+/// pointers and has a fixed size, so it never shifts the centred column.
 class _LogoHalo extends StatelessWidget {
   const _LogoHalo();
 
@@ -81,15 +94,15 @@ class _LogoHalo extends StatelessWidget {
   Widget build(BuildContext context) {
     return IgnorePointer(
       child: Container(
-        width: 260,
-        height: 260,
+        width: 280,
+        height: 280,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           gradient: RadialGradient(
             colors: [
-              AppColors.tint,
-              AppColors.tint.withValues(alpha: 0.45),
-              AppColors.tint.withValues(alpha: 0),
+              AppColors.paper.withValues(alpha: 0.14),
+              AppColors.paper.withValues(alpha: 0.05),
+              AppColors.paper.withValues(alpha: 0),
             ],
             stops: const [0.0, 0.55, 1.0],
           ),
