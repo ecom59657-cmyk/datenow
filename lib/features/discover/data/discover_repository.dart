@@ -181,19 +181,15 @@ class MockDiscoverRepository implements DiscoverRepository {
     // Build the pool. When a real `CandidateSource` is wired (Supabase mode)
     // we ask it for every other completed profile; otherwise we fall back to
     // the synthetic factory so the demo path keeps working.
-    final pool = <({UserProfile candidate, int distanceKm})>[];
+    final pool = <({UserProfile candidate, int? distanceKm})>[];
     if (_candidateSource != null) {
       try {
         final reals = await _candidateSource(self);
         _log.info('pool: ${reals.length} real candidates from source');
         for (final c in reals) {
-          // No geo backend yet — synthesise a plausible distance the same
-          // way the factory does so the existing distance score keeps
-          // weighting cross-user pairs.
-          pool.add((
-            candidate: c,
-            distanceKm: _factory.distanceFor(self),
-          ));
+          // Unknown, not invented. Synthesising here meant the persisted
+          // weekly score carried a random 0..20 for the whole week.
+          pool.add((candidate: c, distanceKm: null));
         }
       } catch (e, st) {
         _log.error('candidate source failed; falling back to synthetic', e, st);
@@ -236,7 +232,9 @@ class MockDiscoverRepository implements DiscoverRepository {
           status: SuggestionStatus.pending,
           createdAt: now,
           candidate: ranked.candidate,
-          distanceKm: ranked.distanceKm,
+          // WeeklySuggestion carries 0 for "unknown" — SuggestionCard
+          // already hides the line rather than claiming "0 km".
+          distanceKm: ranked.distanceKm ?? 0,
         ),
       );
     }
@@ -455,11 +453,9 @@ class SupabaseDiscoverRepository implements DiscoverRepository {
     required sb.SupabaseClient client,
     required WeeklySuggestionsService service,
     required ProfileRepository profiles,
-    required MockCandidateFactory factory,
   })  : _client = client,
         _service = service,
         _profiles = profiles,
-        _factory = factory,
         _matches = _SupabaseMutualMatchesSource(
           client: client,
           profiles: profiles,
@@ -469,10 +465,6 @@ class SupabaseDiscoverRepository implements DiscoverRepository {
   final WeeklySuggestionsService _service;
   final ProfileRepository _profiles;
 
-  /// Still needed for the distance the scorer weighs. There is no geo
-  /// backend yet, so this is a synthetic value — see [_hydrate] for why it
-  /// is never persisted nor shown.
-  final MockCandidateFactory _factory;
   final _SupabaseMutualMatchesSource _matches;
 
   static const _log = AppLogger('SupaDiscover');
@@ -589,13 +581,16 @@ class SupabaseDiscoverRepository implements DiscoverRepository {
     _log.info('week $week — ${current.length} kept, $missing to fill, '
         '${excluded.length} peers excluded');
 
-    final pool = <({UserProfile candidate, int distanceKm})>[];
+    final pool = <({UserProfile candidate, int? distanceKm})>[];
     try {
       final reals = await _profiles.fetchPotentialCandidates(
         selfUserId: self.userId,
       );
       for (final c in reals) {
-        pool.add((candidate: c, distanceKm: _factory.distanceFor(self)));
+        // Real profiles, unknown positions: see the note on
+        // MatchingService.calculateCompatibility. The day a distance is
+        // available per candidate, it goes here.
+        pool.add((candidate: c, distanceKm: null));
       }
     } catch (e, st) {
       _log.error('candidate fetch failed — no batch this round', e, st);
@@ -776,7 +771,6 @@ final discoverRepositoryProvider = Provider<DiscoverRepository>((ref) {
     client: ref.watch(supabaseClientProvider),
     service: service,
     profiles: ref.watch(profileRepositoryProvider),
-    factory: MockCandidateFactory(),
   );
 });
 

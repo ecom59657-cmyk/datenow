@@ -10,7 +10,7 @@ import '../../profile_setup/domain/user_profile.dart';
 /// weekly batch.
 typedef RankedCandidate = ({
   UserProfile candidate,
-  int distanceKm,
+  int? distanceKm,
   MatchScore score,
 });
 
@@ -73,7 +73,7 @@ class WeeklySuggestionsService {
   /// suggestions were retained.
   List<RankedCandidate> selectFor({
     required UserProfile self,
-    required Iterable<({UserProfile candidate, int distanceKm})> pool,
+    required Iterable<({UserProfile candidate, int? distanceKm})> pool,
     Set<String> excludedUserIds = const {},
   }) {
     final ranked = <RankedCandidate>[];

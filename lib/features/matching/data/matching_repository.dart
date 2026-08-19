@@ -73,7 +73,10 @@ class MockMatchingRepository implements MatchingRepository {
         int bestScore = -1;
         int rejected = 0;
         for (final c in reals) {
-          final distanceKm = _factory.distanceFor(self);
+          // Real people, unknown positions. This used to roll a die, which
+          // both moved the score by up to 20 points and could trip the
+          // distance hard gate — dropping a genuine candidate by chance.
+          const distanceKm = null;
           final score =
               _service.calculateCompatibility(self, c, distanceKm: distanceKm);
           if (score == null) {
@@ -84,7 +87,9 @@ class MockMatchingRepository implements MatchingRepository {
             bestScore = score.percentage;
             best = ActiveMatch(
               candidate: c,
-              distanceKm: distanceKm,
+              // ActiveMatch keeps 0 for unknown; the UI prints the line
+              // only when there is a real figure.
+              distanceKm: distanceKm ?? 0,
               score: score,
             );
           }

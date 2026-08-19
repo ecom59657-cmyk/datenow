@@ -30,22 +30,51 @@ class MatchingService {
   /// Returns `null` when any hard gate fails — in that case the candidate
   /// must not be proposed at all, regardless of how high the soft score
   /// would have been.
+  /// [distanceKm] is nullable, and null means *unknown* — not zero.
+  ///
+  /// It used to be required, and every caller synthesised it with
+  /// `MockCandidateFactory.distanceFor`, which is `1 + random(maxDistanceKm)`.
+  /// Two consequences, both measured rather than assumed:
+  ///
+  ///   * the same pair scored anywhere from 65 to 85 depending on the roll —
+  ///     20 points, enough to cross from "Forte compatibilité" to "Très
+  ///     compatible". Discover persists that number for a week, so the dice
+  ///     stuck;
+  ///   * the roll fed a hard gate too. It is drawn from *self's* radius and
+  ///     compared against the *smaller* of the two, so a real candidate could
+  ///     be dropped outright by chance.
+  ///
+  /// Passing 0 was worse than useless: `1 - 0/cap` is 1, so a distance nobody
+  /// knew was awarded full marks.
+  ///
+  /// Unknown now removes the axis from the total and renormalises over the
+  /// weights that did apply, so two candidates stay comparable on the same
+  /// 0..100 scale whether or not their position is known. An unknown never
+  /// rewards and never punishes.
   MatchScore? calculateCompatibility(
     UserProfile a,
     UserProfile b, {
-    required int distanceKm,
+    required int? distanceKm,
   }) {
     if (!_hardGatesPass(a, b, distanceKm: distanceKm)) return null;
 
     final breakdown = <String, int>{
       'intentions': _scoreIntentions(a, b),
       'interests': _scoreInterests(a, b),
-      'distance': _scoreDistance(a, b, distanceKm),
       'availability': _scoreAvailability(a, b),
       'age': _scoreAge(a, b),
+      if (distanceKm != null) 'distance': _scoreDistance(a, b, distanceKm),
     };
 
-    final total = breakdown.values.fold<int>(0, (sum, v) => sum + v);
+    const appliedWithoutDistance =
+        _wIntentions + _wInterests + _wAvailability + _wAge;
+    final applied = distanceKm == null
+        ? appliedWithoutDistance
+        : appliedWithoutDistance + _wDistance;
+
+    final raw = breakdown.values.fold<int>(0, (sum, v) => sum + v);
+    final total = applied == 100 ? raw : (raw * 100 / applied).round();
+
     return MatchScore(
       percentage: total.clamp(0, 100),
       breakdown: Map.unmodifiable(breakdown),
@@ -59,7 +88,7 @@ class MatchingService {
   bool _hardGatesPass(
     UserProfile a,
     UserProfile b, {
-    required int distanceKm,
+    required int? distanceKm,
   }) {
     // Reciprocal gender: each side must list the other's gender.
     if (a.gender == null || b.gender == null) return false;
@@ -71,9 +100,14 @@ class MatchingService {
     if (b.age! < a.seekingAgeMin || b.age! > a.seekingAgeMax) return false;
     if (a.age! < b.seekingAgeMin || a.age! > b.seekingAgeMax) return false;
 
-    // Distance: must be within both users' max-distance threshold.
-    final dCap = math.min(a.maxDistanceKm, b.maxDistanceKm);
-    if (distanceKm > dCap) return false;
+    // Distance: must be within both users' max-distance threshold — but
+    // only when it is known. Rejecting on an unknown position would empty
+    // the pool; rejecting on a synthesised one, which is what used to
+    // happen, dropped real people at random.
+    if (distanceKm != null) {
+      final dCap = math.min(a.maxDistanceKm, b.maxDistanceKm);
+      if (distanceKm > dCap) return false;
+    }
 
     // Head-on clash of intentions. Five minutes of live video is too
     // expensive to spend on a serious/casual mismatch, and neither person
