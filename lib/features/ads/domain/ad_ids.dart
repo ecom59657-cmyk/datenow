@@ -20,9 +20,9 @@ abstract final class AdIds {
   static const _testRewardedAndroid = 'ca-app-pub-3940256099942544/5224354917';
 
   // --- Real units — publisher pub-7977656042089301 -----------------------
-  // TODO(datenow): paste the values from AdMob once the app + rewarded unit
-  // are created. App IDs use a '~' separator, ad units use '/'.
-  static const _liveAppIdIos = '';
+  // TODO(datenow): the rewarded unit still has to be created in the console.
+  // Android has no AdMob app entry yet — only iOS is registered.
+  static const _liveAppIdIos = 'ca-app-pub-7977656042089301~4639616959';
   static const _liveAppIdAndroid = '';
   static const _liveRewardedIos = '';
   static const _liveRewardedAndroid = '';

@@ -102,14 +102,12 @@
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	<!-- AdMob ============================================================
-	     GADApplicationIdentifier is Google's TEST app id. The SDK raises on
-	     launch if this key is missing or malformed, so it must always hold a
-	     valid value.
-	     TODO(datenow): replace with the real id from AdMob (Apps > DateNow >
-	     App settings), format ca-app-pub-7977656042089301~XXXXXXXXXX.
-	     Note the '~' separator — an ad unit id (with '/') will not work. -->
+	     Real app id for DateNow (iOS), read from AdMob > Apps > DateNow >
+	     App settings. The SDK raises on launch if this key is missing or
+	     malformed, so it must always hold a valid value. Ad *units* are
+	     switched to Google's test ids in debug — see lib/features/ads/. -->
 	<key>GADApplicationIdentifier</key>
-	<string>ca-app-pub-3940256099942544~1458002511</string>
+	<string>ca-app-pub-7977656042089301~4639616959</string>
 	<key>NSUserTrackingUsageDescription</key>
 	<string>DateNow utilise cet identifiant pour afficher des publicités adaptées à tes centres d'intérêt. Sans ton accord, tu verras des publicités moins pertinentes — l'application fonctionne exactement de la même façon.</string>
 	<!-- Attribution networks. Google's published list is longer; these are
