@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../app/router/app_routes.dart';
@@ -8,6 +9,10 @@ import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../l10n/app_localizations.dart';
 import '../../../../shared/widgets/app_button.dart';
+import '../../../ads/presentation/providers/ads_providers.dart';
+import '../../../profile_setup/presentation/providers/profile_provider.dart';
+import '../../data/quota_repository.dart';
+import '../providers/quota_provider.dart';
 
 /// Premium bottom-sheet shown when a male user hits the daily 5-match cap.
 /// Women never see this — their cap is `null`.
@@ -20,12 +25,68 @@ Future<void> showQuotaLimitSheet(BuildContext context) {
   );
 }
 
-class _QuotaLimitSheet extends StatelessWidget {
+class _QuotaLimitSheet extends ConsumerStatefulWidget {
   const _QuotaLimitSheet();
+
+  @override
+  ConsumerState<_QuotaLimitSheet> createState() => _QuotaLimitSheetState();
+}
+
+class _QuotaLimitSheetState extends ConsumerState<_QuotaLimitSheet> {
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Fetch while the user reads the sheet: a rewarded video takes a
+    // second or two to arrive, and asking after the tap makes the button
+    // feel broken.
+    if (ref.read(adsEnabledProvider)) {
+      ref.read(rewardedAdServiceProvider).preload();
+    }
+  }
+
+  /// Shows the rewarded video and grants one date — but only on a reward
+  /// callback from Google. Dismissing early grants nothing.
+  Future<void> _watchAdForBonus() async {
+    final l10n = AppLocalizations.of(context);
+    setState(() => _busy = true);
+
+    final ads = ref.read(rewardedAdServiceProvider);
+    if (!ads.isReady) await ads.preload();
+
+    if (!ads.isReady) {
+      if (!mounted) return;
+      setState(() => _busy = false);
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(l10n.quotaAdUnavailable)));
+      return;
+    }
+
+    final earned = await ads.showAndAwaitReward();
+
+    if (earned) {
+      final profile = ref.read(currentProfileProvider).asData?.value;
+      if (profile != null) {
+        await ref.read(quotaRepositoryProvider).grantBonusDate(profile);
+        ref.invalidate(quotaStatusProvider);
+      }
+    }
+
+    if (!mounted) return;
+    setState(() => _busy = false);
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+    if (earned) {
+      messenger.showSnackBar(SnackBar(content: Text(l10n.quotaAdRewarded)));
+      navigator.pop();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final adsEnabled = ref.watch(adsEnabledProvider);
 
     return SafeArea(
       child: Container(
@@ -84,16 +145,30 @@ class _QuotaLimitSheet extends StatelessWidget {
               label: l10n.quotaUnlockCta,
               icon: Icons.bolt_rounded,
               size: AppButtonSize.large,
-              onPressed: () {
-                Navigator.of(context).pop();
-                context.pushNamed(AppRoute.settingsSubscription.name);
-              },
+              onPressed: _busy
+                  ? null
+                  : () {
+                      Navigator.of(context).pop();
+                      context.pushNamed(AppRoute.settingsSubscription.name);
+                    },
             ),
+            // Free users get a way out that costs nothing but attention.
+            // Premium already paid for it, so they never see this.
+            if (adsEnabled) ...[
+              const SizedBox(height: AppSpacing.sm),
+              AppButton(
+                label: _busy ? l10n.quotaAdLoading : l10n.quotaWatchAdCta,
+                icon: Icons.play_circle_outline_rounded,
+                variant: AppButtonVariant.secondary,
+                isLoading: _busy,
+                onPressed: _busy ? null : _watchAdForBonus,
+              ),
+            ],
             const SizedBox(height: AppSpacing.sm),
             AppButton(
               label: l10n.quotaComeBackCta,
               variant: AppButtonVariant.ghost,
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: _busy ? null : () => Navigator.of(context).pop(),
             ),
             const SizedBox(height: AppSpacing.xs),
           ],

@@ -514,6 +514,10 @@
   "quotaLimitBody": "You've used your 5 dates for today. Come back tomorrow or unlock more dates.",
   "quotaUnlockCta": "Unlock more dates",
   "quotaComeBackCta": "Come back tomorrow",
+  "quotaWatchAdCta": "Watch a video (+1 date)",
+  "quotaAdLoading": "Loading video…",
+  "quotaAdUnavailable": "No video available right now.",
+  "quotaAdRewarded": "+1 date unlocked for today.",
 
   "discoverSuggestionsSection": "This week's suggestions",
   "discoverMatchesSection": "Confirmed matches",

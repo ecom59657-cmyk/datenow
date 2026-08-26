@@ -51,6 +51,15 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        <!-- AdMob. Google's TEST app id: the SDK throws on launch when this
+             is missing or malformed, so it must always be a valid value.
+             TODO(datenow): replace with the real id from AdMob (Apps >
+             DateNow > App settings), format
+             ca-app-pub-7977656042089301~XXXXXXXXXX. The '~' matters — an ad
+             unit id (with '/') will not work here. -->
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="ca-app-pub-3940256099942544~3347511713"/>
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

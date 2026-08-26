@@ -457,6 +457,10 @@
   "quotaLimitBody": "Tu as utilisé tes 5 rencontres du jour. Reviens demain ou débloque plus de dates.",
   "quotaUnlockCta": "Débloquer plus de dates",
   "quotaComeBackCta": "Revenir demain",
+  "quotaWatchAdCta": "Regarder une vidéo (+1 date)",
+  "quotaAdLoading": "Chargement de la vidéo…",
+  "quotaAdUnavailable": "Aucune vidéo disponible pour l'instant.",
+  "quotaAdRewarded": "+1 date débloquée pour aujourd'hui.",
 
   "discoverSuggestionsSection": "Propositions de la semaine",
   "discoverMatchesSection": "Matchs effectués",

@@ -14,6 +14,12 @@ abstract class QuotaRepository {
   /// Bumps the daily counter by one. Safe to call even for unlimited users
   /// — the counter is harmless there.
   Future<void> recordMatch(UserProfile self);
+
+  /// Grants one extra date for today, earned by watching a rewarded ad.
+  ///
+  /// Callers must only invoke this after Google has confirmed the reward.
+  /// Granting on dismissal would hand out free dates for closing a video.
+  Future<void> grantBonusDate(UserProfile self);
 }
 
 // ---------------------------------------------------------------------------
@@ -25,6 +31,7 @@ class MockQuotaRepository implements QuotaRepository {
 
   final QuotaService _service;
   final Map<String, int> _countsByKey = {};
+  final Map<String, int> _bonusByKey = {};
 
   static const _log = AppLogger('MockQuota');
 
@@ -39,11 +46,13 @@ class MockQuotaRepository implements QuotaRepository {
   @override
   Future<QuotaStatus> currentStatus(UserProfile self) async {
     final cap = _service.capFor(self.gender);
-    final used = _countsByKey[_key(self.userId)] ?? 0;
+    final key = _key(self.userId);
+    final used = _countsByKey[key] ?? 0;
     return QuotaStatus(
       usedToday: used,
       cap: cap,
       checkedAt: DateTime.now(),
+      bonusToday: _bonusByKey[key] ?? 0,
     );
   }
 
@@ -53,6 +62,14 @@ class MockQuotaRepository implements QuotaRepository {
     final next = (_countsByKey[k] ?? 0) + 1;
     _countsByKey[k] = next;
     _log.info('matches today for ${self.userId}: $next');
+  }
+
+  @override
+  Future<void> grantBonusDate(UserProfile self) async {
+    final k = _key(self.userId);
+    final next = (_bonusByKey[k] ?? 0) + 1;
+    _bonusByKey[k] = next;
+    _log.info('bonus dates today for ${self.userId}: $next');
   }
 }
 
@@ -81,6 +98,14 @@ class SupabaseQuotaRepository implements QuotaRepository {
     // TODO(datenow): insert into a `match_consumptions` table with a
     // `consumed_at` timestamp; the daily count is derived server-side.
     throw UnimplementedError('SupabaseQuotaRepository.recordMatch');
+  }
+
+  @override
+  Future<void> grantBonusDate(UserProfile self) {
+    // TODO(datenow): insert into a `quota_bonuses` table. Verify the grant
+    // server-side against an AdMob SSV callback before trusting it — a
+    // client-only grant is trivially forged by a repackaged APK.
+    throw UnimplementedError('SupabaseQuotaRepository.grantBonusDate');
   }
 }
 

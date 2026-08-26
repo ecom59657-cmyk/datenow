@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
 
 import 'app/app.dart';
 import 'core/notifications/push_notifications_service.dart';
@@ -50,6 +51,15 @@ Future<void> main() async {
       // service so a missing GoogleService-Info.plist does not crash
       // the app — push features just stay dormant.
       await PushNotificationsService.instance.initialize();
+
+      // Initialise the ad SDK, never gate start-up on it. This only spins
+      // up the SDK — no ad is requested and no consent form is shown here.
+      // Both happen lazily on the first rewarded preload, in RewardedAdService.
+      try {
+        await MobileAds.instance.initialize();
+      } catch (e) {
+        _log.warn('AdMob init failed ($e) — rewarded dates stay unavailable.');
+      }
 
       runApp(const ProviderScope(child: DateNowApp()));
     },

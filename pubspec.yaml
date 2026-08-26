@@ -49,6 +49,11 @@ dependencies:
   agora_rtc_engine: ">=6.3.0 <6.5.0"
   permission_handler: ^11.3.1
 
+  # AdMob — rewarded video only (see lib/features/ads/). app_tracking_transparency
+  # supplies the iOS 14.5+ prompt that google_mobile_ads does not request itself.
+  google_mobile_ads: ^5.2.0
+  app_tracking_transparency: ^2.0.6
+
   # Native Didit identity verification SDK — wraps the iOS Swift +
   # Android Kotlin SDKs in a unified Dart API. Replaced url_launcher
   # in Phase 6 of the identity rollout : the user no longer leaves
