@@ -20,11 +20,13 @@ abstract final class AdIds {
   static const _testRewardedAndroid = 'ca-app-pub-3940256099942544/5224354917';
 
   // --- Real units — publisher pub-7977656042089301 -----------------------
-  // TODO(datenow): the rewarded unit still has to be created in the console.
-  // Android has no AdMob app entry yet — only iOS is registered.
+  // iOS is fully registered. Android has no AdMob app entry yet, so its
+  // constants stay empty on purpose: isConfigured then reports false there
+  // and the entry point hides itself rather than firing a doomed request.
+  // TODO(datenow): register the Android app in AdMob before shipping to Play.
   static const _liveAppIdIos = 'ca-app-pub-7977656042089301~4639616959';
   static const _liveAppIdAndroid = '';
-  static const _liveRewardedIos = '';
+  static const _liveRewardedIos = 'ca-app-pub-7977656042089301/4131973190';
   static const _liveRewardedAndroid = '';
 
   static bool get _isAndroid => Platform.isAndroid;
