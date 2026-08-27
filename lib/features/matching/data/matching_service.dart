@@ -18,11 +18,22 @@ class MatchingService {
   // hundred points therefore discriminated nothing and inflated every score
   // by the same amount. Its weight goes where it actually separates people:
   // intentions first, then distance and age.
-  static const int _wIntentions = 30;
-  static const int _wInterests = 25;
-  static const int _wDistance = 20;
-  static const int _wAge = 15;
-  static const int _wAvailability = 10;
+  static const int _wIntentions = 26;
+  static const int _wInterests = 22;
+  static const int _wDistance = 18;
+  static const int _wAge = 12;
+  static const int _wAvailability = 8;
+
+  /// Drinking, smoking, education. Ordinary personal data: it weighs as soon
+  /// as both sides have answered, with no separate opt-in, because being
+  /// brought closer to a non-smoker is not a decision about who someone is.
+  static const int _wLifestyle = 8;
+
+  /// Origins and religion. Article 9 data, so this weight applies ONLY when
+  /// both people explicitly asked to be matched on it. Declining costs
+  /// nothing: the axis drops out and the remaining weights are rescaled to
+  /// 100, exactly as an unknown distance already is.
+  static const int _wAffinity = 6;
 
   /// Computes the compatibility between [a] and [b] given their current
   /// geographic [distanceKm].
@@ -58,26 +69,47 @@ class MatchingService {
   }) {
     if (!_hardGatesPass(a, b, distanceKm: distanceKm)) return null;
 
+    // Both background axes are optional in the same sense distance already
+    // was: absent means "does not apply", never "scores zero". A zero would
+    // quietly punish the people who declined to answer, which is the one
+    // thing a consent-based axis must never do.
+    final lifestyle = _scoreLifestyle(a, b);
+    final affinity = _scoreAffinity(a, b);
+
     final breakdown = <String, int>{
       'intentions': _scoreIntentions(a, b),
       'interests': _scoreInterests(a, b),
       'availability': _scoreAvailability(a, b),
       'age': _scoreAge(a, b),
       if (distanceKm != null) 'distance': _scoreDistance(a, b, distanceKm),
+      if (lifestyle != null) 'lifestyle': lifestyle,
+      if (affinity != null) 'affinity': affinity,
     };
 
-    const appliedWithoutDistance =
-        _wIntentions + _wInterests + _wAvailability + _wAge;
-    final applied = distanceKm == null
-        ? appliedWithoutDistance
-        : appliedWithoutDistance + _wDistance;
+    var applied = _wIntentions + _wInterests + _wAvailability + _wAge;
+    if (distanceKm != null) applied += _wDistance;
+    if (lifestyle != null) applied += _wLifestyle;
+    if (affinity != null) applied += _wAffinity;
 
-    final raw = breakdown.values.fold<int>(0, (sum, v) => sum + v);
-    final total = applied == 100 ? raw : (raw * 100 / applied).round();
+    // Rescale the axes themselves, not just the total.
+    //
+    // The old code rounded a total and left the breakdown on the raw scale.
+    // That was consistent only while every axis applied — which used to be
+    // the normal case and, with two optional background axes, no longer is.
+    // Scaling the parts and summing them makes "the breakdown adds up to the
+    // percentage" true by construction rather than by luck, so no reader has
+    // to know which axes happened to apply.
+    final scaled = applied == 100
+        ? breakdown
+        : breakdown.map(
+            (axis, points) =>
+                MapEntry(axis, (points * 100 / applied).round()),
+          );
+    final total = scaled.values.fold<int>(0, (sum, v) => sum + v);
 
     return MatchScore(
       percentage: total.clamp(0, 100),
-      breakdown: Map.unmodifiable(breakdown),
+      breakdown: Map.unmodifiable(scaled),
     );
   }
 
@@ -134,6 +166,71 @@ class MatchingService {
   // ---------------------------------------------------------------------
   // Soft scoring axes — each returns `0..weight`.
   // ---------------------------------------------------------------------
+
+  /// Drinking, smoking and education, averaged over the fields BOTH sides
+  /// answered. Null when they share no answered field — the axis then drops
+  /// out of the denominator instead of scoring zero.
+  int? _scoreLifestyle(UserProfile a, UserProfile b) {
+    final parts = <double>[
+      if (a.drinking != null && b.drinking != null)
+        _ordinalCloseness(a.drinking!.index, b.drinking!.index,
+            Drinking.values.length),
+      if (a.smoking != null && b.smoking != null)
+        _ordinalCloseness(
+            a.smoking!.index, b.smoking!.index, Smoking.values.length),
+      if (a.education != null && b.education != null)
+        _educationCloseness(a.education!, b.education!),
+    ];
+    if (parts.isEmpty) return null;
+    final avg = parts.reduce((x, y) => x + y) / parts.length;
+    return (_wLifestyle * avg).round();
+  }
+
+  /// Origins and religion — the article 9 axis.
+  ///
+  /// Gated on BOTH sides having explicitly consented to be matched on that
+  /// field. One-sided consent is not enough: weighing someone's religion
+  /// because the other person cares would process their belief for a purpose
+  /// they never agreed to.
+  int? _scoreAffinity(UserProfile a, UserProfile b) {
+    final parts = <double>[];
+
+    if (a.matchOnOrigins &&
+        b.matchOnOrigins &&
+        a.origins.isNotEmpty &&
+        b.origins.isNotEmpty) {
+      final shared = a.origins.intersection(b.origins).length;
+      final union = a.origins.union(b.origins).length;
+      parts.add(union == 0 ? 0 : shared / union);
+    }
+
+    if (a.matchOnReligion &&
+        b.matchOnReligion &&
+        a.religion != null &&
+        b.religion != null) {
+      parts.add(a.religion == b.religion ? 1 : 0);
+    }
+
+    if (parts.isEmpty) return null;
+    final avg = parts.reduce((x, y) => x + y) / parts.length;
+    return (_wAffinity * avg).round();
+  }
+
+  /// 1 for the same answer, decaying with the distance between two ordered
+  /// answers. "Never" and "often" are further apart than "never" and
+  /// "socially", and the score should say so.
+  double _ordinalCloseness(int i, int j, int levels) {
+    if (levels <= 1) return 1;
+    return 1 - (i - j).abs() / (levels - 1);
+  }
+
+  /// Education is only partly ordered — `other` sits outside the ladder, so
+  /// it matches itself and nothing else rather than pretending to be a rung.
+  double _educationCloseness(EducationLevel a, EducationLevel b) {
+    if (a == b) return 1;
+    if (a == EducationLevel.other || b == EducationLevel.other) return 0;
+    return _ordinalCloseness(a.index, b.index, EducationLevel.values.length - 1);
+  }
 
   int _scoreIntentions(UserProfile a, UserProfile b) {
     return _weightedJaccard(a.intentions, b.intentions, _wIntentions);

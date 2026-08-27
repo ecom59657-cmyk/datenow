@@ -7,7 +7,7 @@
 // Discover persists that number for a week, so the die stuck.
 //
 // Passing 0 instead was worse: `1 - 0/cap` is 1, so a distance nobody knew
-// was awarded the full 20 points.
+// was awarded the full distance weight.
 
 import 'package:datenow/features/matching/data/matching_service.dart';
 import 'package:datenow/features/matching/domain/match_score.dart';
@@ -72,10 +72,15 @@ void main() {
       final unknown = _svc.calculateCompatibility(_a, _b, distanceKm: null)!;
       final atZero = _svc.calculateCompatibility(_a, _b, distanceKm: 0)!;
 
-      // 0 km is a genuine "next door" and still earns the 20 points. The
-      // point is that "unknown" must not land on the same number by
-      // accident, which is exactly what used to happen.
-      expect(atZero.breakdown['distance'], 20);
+      // 0 km is a genuine "next door" and still earns the axis in full. A
+      // literal would go stale the next time a weight moves, so the property
+      // is stated instead: nothing beats being next door.
+      final atOne = _svc.calculateCompatibility(_a, _b, distanceKm: 1)!;
+      expect(atZero.breakdown['distance']!,
+          greaterThanOrEqualTo(atOne.breakdown['distance']!));
+
+      // And the point of the whole test: "unknown" must not land on the same
+      // number as "next door" by accident, which is what used to happen.
       expect(unknown.percentage, isNot(equals(atZero.percentage)));
     });
 
@@ -106,17 +111,25 @@ void main() {
       );
 
       final s = _svc.calculateCompatibility(self, twin, distanceKm: null)!;
-      expect(s.breakdown['age'], 15, reason: 'the pair must be age-perfect');
+      // Rescaled, not raw: with the distance axis absent the remaining
+      // weights are stretched back over 100, so an age-perfect pair reads
+      // higher than the raw 12.
+      expect(s.breakdown['age'], greaterThan(12),
+          reason: 'the pair must be age-perfect, on the rescaled scale');
       expect(s.percentage, 100,
           reason: 'the scale must stay 0..100 when an axis is missing');
     });
 
     test('the renormalisation is exactly "over the weights that applied"', () {
-      // The property, rather than one hand-computed example: without the
-      // distance axis the applicable weights are 30+25+10+15 = 80.
+      // The property, rather than a hand-computed example. The axes are now
+      // rescaled themselves when one drops out, so the invariant is simply
+      // that the parts add up to the whole — no denominator to keep in sync
+      // with the weights table, which is what made the old version of this
+      // test go stale the day a weight moved.
       final s = _svc.calculateCompatibility(_a, _b, distanceKm: null)!;
       final sum = s.breakdown.values.fold<int>(0, (t, v) => t + v);
-      expect(s.percentage, (sum * 100 / 80).round());
+      expect(s.percentage, sum);
+      expect(s.breakdown.containsKey('distance'), isFalse);
     });
 
     test('stays inside 0..100 for a poor pair', () {

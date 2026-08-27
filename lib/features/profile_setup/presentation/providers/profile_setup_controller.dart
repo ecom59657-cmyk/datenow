@@ -52,6 +52,13 @@ class ProfileSetupController extends StateNotifier<ProfileDraft> {
 
   /// Recorded once the OS has actually granted the permission — never on
   /// the tap that opens the dialog. A refusal must leave this false.
+  /// Consent to weigh origins. Withdrawing it must be as easy as giving it,
+  /// so this is a plain toggle, and clearing the answers clears it too.
+  void setMatchOnOrigins(bool v) => state = state.copyWith(matchOnOrigins: v);
+
+  void setMatchOnReligion(bool v) =>
+      state = state.copyWith(matchOnReligion: v);
+
   void setLocationGranted(bool granted) =>
       state = state.copyWith(locationGranted: granted);
 
@@ -120,6 +127,8 @@ class ProfileSetupController extends StateNotifier<ProfileDraft> {
   void clearBackground() => state = state.copyWith(
         origins: const <Origin>{},
         religion: null,
+        matchOnOrigins: false,
+        matchOnReligion: false,
         drinking: null,
         smoking: null,
         education: null,
@@ -203,6 +212,8 @@ class ProfileSetupController extends StateNotifier<ProfileDraft> {
       photoUrls: photoUrls,
       origins: state.origins,
       religion: state.religion,
+      matchOnOrigins: state.matchOnOrigins,
+      matchOnReligion: state.matchOnReligion,
       drinking: state.drinking,
       smoking: state.smoking,
       education: state.education,
@@ -249,6 +260,8 @@ class ProfileDraft {
     this.photoBytes,
     this.locationGranted = false,
     this.origins = const <Origin>{},
+    this.matchOnOrigins = false,
+    this.matchOnReligion = false,
     this.religion,
     this.drinking,
     this.smoking,
@@ -291,6 +304,13 @@ class ProfileDraft {
 
   /// Optional background. Nothing here gates a step: the wizard must be
   /// completable without answering any of it.
+  /// Explicit consent to weigh origins in the score. Separate from having
+  /// answered: article 9 needs agreement to the *purpose*, not just the data.
+  final bool matchOnOrigins;
+
+  /// Same, for religion.
+  final bool matchOnReligion;
+
   final Set<Origin> origins;
   final Religion? religion;
   final Drinking? drinking;
@@ -359,6 +379,8 @@ class ProfileDraft {
     Object? photoBytes = _unset,
     bool? locationGranted,
     Set<Origin>? origins,
+    bool? matchOnOrigins,
+    bool? matchOnReligion,
     // The sentinel, not a plain nullable: `religion: null` has to mean
     // "clear it". Tapping the selected chip again is how a single-select
     // answer is taken back, and `??` would silently keep the old value.
@@ -386,6 +408,8 @@ class ProfileDraft {
           : photoBytes as Uint8List?,
       locationGranted: locationGranted ?? this.locationGranted,
       origins: origins ?? this.origins,
+      matchOnOrigins: matchOnOrigins ?? this.matchOnOrigins,
+      matchOnReligion: matchOnReligion ?? this.matchOnReligion,
       religion: identical(religion, _unset)
           ? this.religion
           : religion as Religion?,

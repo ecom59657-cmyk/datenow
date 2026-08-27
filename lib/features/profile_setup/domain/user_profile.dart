@@ -42,6 +42,18 @@ class UserProfile with _$UserProfile {
     Drinking? drinking,
     Smoking? smoking,
     EducationLevel? education,
+
+    // Explicit, per-axis consent to weigh a special-category answer in the
+    // compatibility score. Article 9 of the GDPR forbids processing origins
+    // and religious belief unless the person explicitly agreed to that
+    // specific purpose — so declaring the answer and agreeing to be matched
+    // on it are two separate acts, and the second defaults to no.
+    //
+    // Lifestyle answers (drinking, smoking, education) carry no such flag:
+    // they are ordinary personal data and weigh as soon as both sides have
+    // answered.
+    @Default(false) bool matchOnOrigins,
+    @Default(false) bool matchOnReligion,
   }) = _UserProfile;
 
   /// Hard ceiling on the number of photos a profile can hold. Mirrors the

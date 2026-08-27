@@ -67,6 +67,16 @@ class BackgroundStep extends ConsumerWidget {
           isSelected: draft.origins.contains,
           onToggle: ctrl.toggleOrigin,
         ),
+        // Only offered once there is an answer to govern. A consent switch
+        // above an empty question asks someone to agree to nothing.
+        if (draft.origins.isNotEmpty) ...[
+          const SizedBox(height: AppSpacing.sm),
+          _ConsentSwitch(
+            label: l10n.backgroundUseOriginsForMatching,
+            value: draft.matchOnOrigins,
+            onChanged: ctrl.setMatchOnOrigins,
+          ),
+        ],
         const SizedBox(height: AppSpacing.xl),
 
         _Label(l10n.religionLabel),
@@ -77,6 +87,14 @@ class BackgroundStep extends ConsumerWidget {
           isSelected: (r) => draft.religion == r,
           onToggle: ctrl.setReligion,
         ),
+        if (draft.religion != null) ...[
+          const SizedBox(height: AppSpacing.sm),
+          _ConsentSwitch(
+            label: l10n.backgroundUseReligionForMatching,
+            value: draft.matchOnReligion,
+            onChanged: ctrl.setMatchOnReligion,
+          ),
+        ],
         const SizedBox(height: AppSpacing.xl),
 
         _Label(l10n.drinkingLabel),
@@ -108,20 +126,43 @@ class BackgroundStep extends ConsumerWidget {
           onToggle: ctrl.setEducation,
         ),
 
-        if (hasAny) ...[
-          const SizedBox(height: AppSpacing.xl),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton.icon(
-              onPressed: ctrl.clearBackground,
-              icon: const Icon(Icons.backspace_outlined, size: 18),
-              label: Text(l10n.backgroundClear),
-              style: TextButton.styleFrom(
-                foregroundColor: AppColors.textSecondary,
-              ),
-            ),
-          ),
-        ],
+        const SizedBox(height: AppSpacing.xl),
+        // Offered whether or not anything was filled in. Consent is only
+        // freely given if refusing is as visible as accepting, and an "erase"
+        // button that appears once you have already answered is not the same
+        // affordance as being told up front that you may skip all of this.
+        // A button when there is something to erase; a plain line when there
+        // is not. Refusing has to be as visible as accepting, but a button
+        // that does nothing observable when tapped is its own small lie.
+        Align(
+          alignment: Alignment.centerLeft,
+          child: hasAny
+              ? TextButton.icon(
+                  onPressed: ctrl.clearBackground,
+                  icon: const Icon(Icons.backspace_outlined, size: 18),
+                  label: Text(l10n.backgroundClear),
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppColors.textSecondary,
+                  ),
+                )
+              // Full width with a flexible label: the sentence is long enough
+              // to overflow a min-sized Row on a narrow phone.
+              : Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.block_outlined,
+                        size: 18, color: AppColors.textTertiary),
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      child: Text(
+                        l10n.backgroundPreferNotToSay,
+                        style: AppTypography.caption
+                            .copyWith(color: AppColors.textTertiary),
+                      ),
+                    ),
+                  ],
+                ),
+        ),
         const SizedBox(height: AppSpacing.xxl),
       ],
     );
@@ -179,6 +220,52 @@ class _Label extends StatelessWidget {
         color: AppColors.textSecondary,
         fontWeight: FontWeight.w600,
         letterSpacing: 0.3,
+      ),
+    );
+  }
+}
+
+/// One line, one switch, one article 9 purpose.
+///
+/// A switch rather than a pre-ticked box: explicit consent has to be an
+/// affirmative act, and taking it back has to be as easy as giving it.
+class _ConsentSwitch extends StatelessWidget {
+  const _ConsentSwitch({
+    required this.label,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final String label;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: AppRadius.brLg,
+      onTap: () => onChanged(!value),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                style: AppTypography.caption.copyWith(
+                  color: AppColors.textSecondary,
+                  height: 1.35,
+                ),
+              ),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            Switch.adaptive(
+              value: value,
+              onChanged: onChanged,
+              activeThumbColor: AppColors.bordeaux,
+            ),
+          ],
+        ),
       ),
     );
   }

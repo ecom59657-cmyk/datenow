@@ -25,6 +25,9 @@ mutual reveal. The service is operated by the DateNow team. Questions:
 |----------|----------|--------|
 | Account | email, password (hashed), creation date | you, at sign-up |
 | Profile | first name, birth date, gender, sexual orientation, preferences, intentions, interests, distance preference | you, at onboarding + profile edits |
+| Background (optional) | drinking, smoking, education | you, at onboarding — used to refine suggestions |
+| Background, sensitive (optional) | ethnic origins, religion | you, at onboarding — **special category data under article 9 GDPR**; weighed in suggestions only with your explicit, separate consent, and only when both people have given it |
+| Location | approximate coordinates and the time they were taken | your device, when you allow it — required to find people near you |
 | Photos | up to 6 profile photos | you, from your device |
 | Matching state | active queue presence, compatibility scores | computed |
 | Calls | caller / callee ids, channel name, start / end timestamps, ready flags | server, during a date |
@@ -36,20 +39,40 @@ mutual reveal. The service is operated by the DateNow team. Questions:
 | Settings | notification toggles, privacy toggles | you, from Settings |
 | Technical | device model, OS version, error logs (anonymised) | automatic |
 
-We **do not collect**: precise location (GPS), contacts, browsing
-history, microphone or camera input outside of an active date,
-advertising identifiers.
+**Location.** DateNow matches on proximity, so it needs a position. Your
+coordinates are captured only when the app is in the foreground and you have
+allowed it, never in the background, and they are stored as a single point
+that is overwritten on each refresh — we keep no history of where you have
+been. Other people never see your position; they see a distance.
+
+**Advertising identifier.** If you agree to the tracking prompt, Google
+AdMob may use your device's advertising identifier to select the rewarded
+video shown when you ask for an extra date. Declining changes nothing except
+how relevant those videos are.
+
+We **do not collect**: contacts, browsing history, microphone or camera
+input outside of an active date, background location.
 
 ## 3. How we use your data
 
-- Propose **compatible matches** (≥ 75 % compatibility score).
+- Propose **compatible matches**, ranked by a compatibility score built from
+  your intentions, interests, distance, age and — where you provided them and,
+  for the sensitive ones, explicitly agreed — your background answers.
 - Operate the **5-minute video date** (Agora.io as our video provider).
 - Secure your account (Supabase Auth handles passwords + session tokens).
 - Process **reports** and apply moderation actions.
 - Send **notifications** that you have opted in to.
 - Improve the **matching quality** with anonymised aggregates.
 
-We **never** use your data for advertising and **never** sell it.
+We **never** sell your data.
+
+Advertising is limited to one place: the rewarded video you can choose to
+watch to earn an extra date for the day. It is opt-in — nothing is shown
+unless you ask for it — and there are no banners or interstitials anywhere in
+the app. Google AdMob serves that video and receives what it needs to do so;
+if you decline the tracking prompt it still works, with less relevant videos.
+We do not build advertising profiles, and your profile answers are never sent
+to an advertiser.
 
 ## 4. Camera and microphone (Agora video)
 
@@ -81,8 +104,10 @@ We share strictly with the providers we need to run the service:
 | Supabase | database, authentication, storage, edge functions | EU |
 | Agora.io | real-time video / audio infrastructure | global |
 | Apple App Store / TestFlight | distribution + crash reporting | global |
+| Google AdMob | serves the opt-in rewarded video only | global |
 
-We do **not** share with advertising or data-broker networks.
+We do **not** share with data-broker networks, and no provider above receives
+your profile answers, your messages, or your location.
 
 ## 7. Reporting and moderation
 

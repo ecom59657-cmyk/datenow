@@ -437,6 +437,11 @@ class SupabaseProfileRepository implements ProfileRepository {
         'drinking': profile.drinking?.name,
         'smoking': profile.smoking?.name,
         'education': profile.education?.name,
+        // Consent travels with the answer it governs, and defaults to false
+        // server-side too — so a row written by an older client build never
+        // silently enables matching on article 9 data.
+        'match_on_origins': profile.matchOnOrigins,
+        'match_on_religion': profile.matchOnReligion,
       });
     } catch (e, st) {
       // Same contract as the prompts above, and it matters more here: these
@@ -685,6 +690,8 @@ class SupabaseProfileRepository implements ProfileRepository {
       ),
       photoUrls: photoUrls,
       prompts: _mapPrompts(promptRows),
+      matchOnOrigins: backgroundRow?['match_on_origins'] as bool? ?? false,
+      matchOnReligion: backgroundRow?['match_on_religion'] as bool? ?? false,
       origins: readOrigins(backgroundRow?['origins'] as List?),
       religion: _enumFromName(
         Religion.values,
