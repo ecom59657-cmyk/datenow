@@ -23,11 +23,21 @@ abstract class QuotaRepository {
   /// — the counter is harmless there.
   Future<void> recordMatch(UserProfile self);
 
-  /// Grants one extra date for today, earned by watching a rewarded ad.
+  /// Settles the extra date a finished video earns, and reports whether it
+  /// is actually available now.
   ///
-  /// Callers must only invoke this after Google has confirmed the reward.
-  /// Granting on dismissal would hand out free dates for closing a video.
-  Future<void> grantBonusDate(UserProfile self);
+  /// Not "grant": with AdMob server-side verification the grant happens in
+  /// Postgres, driven by a signed callback from Google that this process
+  /// never sees. All the app can do is wait for it and say whether it
+  /// arrived. [knownBonusToday] is the count read *before* the video, so a
+  /// callback that lands early is not mistaken for one that never came.
+  ///
+  /// False means "not yet", never "denied" — the date may still appear a
+  /// moment later.
+  Future<bool> awaitRewardedBonus(
+    UserProfile self, {
+    required int knownBonusToday,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -74,11 +84,17 @@ class MockQuotaRepository implements QuotaRepository {
   }
 
   @override
-  Future<void> grantBonusDate(UserProfile self) async {
+  Future<bool> awaitRewardedBonus(
+    UserProfile self, {
+    required int knownBonusToday,
+  }) async {
+    // No server, no signature, nothing to wait for: the mock is the whole
+    // world here, so it grants directly.
     final k = _key(self.userId);
     final next = (_bonusByKey[k] ?? 0) + 1;
     _bonusByKey[k] = next;
     _log.info('bonus dates today for ${self.userId}: $next');
+    return true;
   }
 }
 
@@ -131,21 +147,37 @@ class SupabaseQuotaRepository implements QuotaRepository {
   @override
   Future<void> recordMatch(UserProfile self) async {}
 
-  /// Claims one extra date after a rewarded video.
+  /// Waits for AdMob's signed callback to be settled in Postgres.
   ///
-  /// The server refuses past three a day, so a repackaged client that skips
-  /// the video buys a bounded number of dates rather than an endless supply.
-  /// Making it unforgeable needs AdMob server-side verification, which will
-  /// write these rows with a signed transaction id instead.
+  /// This app has no way to grant itself anything any more — that is the
+  /// point of SSV, and grant_quota_bonus() is revoked from `authenticated`.
+  /// Google posts to the admob-ssv Edge Function directly, so the only thing
+  /// left to do here is ask again until the row shows up.
+  ///
+  /// Polling rather than a realtime subscription: it runs once, for a few
+  /// seconds, on a sheet the user is already looking at. A subscription
+  /// would cost a socket and a lifecycle for the same six seconds.
   @override
-  Future<void> grantBonusDate(UserProfile self) async {
-    final row =
-        await _client.rpc('grant_quota_bonus') as Map<String, dynamic>;
-    if (row['granted'] == true) {
-      _log.info('bonus granted — bonus_today=${row['bonus_today']}');
-    } else {
-      _log.warn('bonus refused: ${row['reason']}');
+  Future<bool> awaitRewardedBonus(
+    UserProfile self, {
+    required int knownBonusToday,
+  }) async {
+    const backoff = [300, 500, 800, 1200, 1500, 1700]; // ~6 s in total
+    for (final ms in backoff) {
+      await Future<void>.delayed(Duration(milliseconds: ms));
+      try {
+        final status = await currentStatus(self, isPremium: false);
+        if (status.bonusToday > knownBonusToday) {
+          _log.info('bonus settled — bonus_today=${status.bonusToday}');
+          return true;
+        }
+      } catch (e) {
+        // A blip mid-poll is not a refusal; keep asking.
+        _log.warn('bonus poll failed ($e)');
+      }
     }
+    _log.warn('bonus did not settle within the window — it may still land');
+    return false;
   }
 }
 

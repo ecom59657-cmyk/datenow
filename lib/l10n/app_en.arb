@@ -521,6 +521,8 @@
   "quotaAdLoading": "Loading video…",
   "quotaAdUnavailable": "No video available right now.",
   "quotaAdRewarded": "+1 date unlocked for today.",
+  "quotaAdVerifying": "Verifying…",
+  "quotaAdPending": "Video watched — your bonus date lands in a moment.",
 
   "discoverSuggestionsSection": "This week's suggestions",
   "discoverMatchesSection": "Confirmed matches",

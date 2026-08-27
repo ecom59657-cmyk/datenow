@@ -67,6 +67,10 @@ class _FakeAds extends RewardedAdService {
   final bool earn;
   int shows = 0;
 
+  /// What was handed to Google as the person to credit. Google echoes this
+  /// back in the SSV callback, so an empty one means a reward nobody gets.
+  String? lastUserId;
+
   @override
   bool get isReady => true;
 
@@ -74,8 +78,9 @@ class _FakeAds extends RewardedAdService {
   Future<void> preload() async {}
 
   @override
-  Future<bool> showAndAwaitReward() async {
+  Future<bool> showAndAwaitReward({required String userId}) async {
     shows++;
+    lastUserId = userId;
     return earn;
   }
 
@@ -293,14 +298,38 @@ void main() {
       expect(body, isNot(contains('complete(true)')));
     });
 
-    test('the sheet grants only inside the earned branch', () {
+    test('the sheet waits for the bonus only inside the earned branch', () {
       final src = _src(_sheetPath);
-      final grant = src.indexOf('grantBonusDate');
-      final guard = src.lastIndexOf('if (earned)', grant);
+      final settle = src.indexOf('awaitRewardedBonus');
+      final guard = src.lastIndexOf('if (earned)', settle);
       expect(guard, greaterThan(-1),
-          reason: 'grantBonusDate must sit under `if (earned)`');
-      // Nothing may close the branch between the guard and the grant.
-      expect(src.substring(guard, grant), isNot(contains('}\n    }')));
+          reason: 'awaitRewardedBonus must sit under `if (earned)`');
+      expect(src.substring(guard, settle), isNot(contains('}\n    }')));
+    });
+
+    test('the app has no way to grant itself a date', () {
+      // The whole point of SSV. If this string comes back, someone gave the
+      // client its own grant again and "you must watch the video" is a
+      // promise the app makes to itself.
+      final repo = _src('lib/features/quota/data/quota_repository.dart');
+      expect(repo, isNot(contains("rpc('grant_quota_bonus')")),
+          reason: 'the client must not call the self-grant RPC');
+      expect(
+        _src('supabase/migrations/20260827110000_quota_bonus_ssv.sql'),
+        contains(
+            'REVOKE EXECUTE ON FUNCTION public.grant_quota_bonus() FROM authenticated'),
+        reason: 'the grant must be revoked server-side, not just unused',
+      );
+    });
+
+    test('Google is told who to credit, before the video plays', () {
+      final src = _src(_servicePath);
+      final options = src.indexOf('setServerSideOptions');
+      final show = src.indexOf('await ad.show');
+      expect(options, greaterThan(-1),
+          reason: 'without SSV options the callback names nobody');
+      expect(options, lessThan(show),
+          reason: 'options must be set before the ad is shown');
     });
 
     test('a failed show never grants', () {
@@ -413,14 +442,11 @@ void main() {
           reason: 'the sheet stays open — nothing was unlocked');
     });
 
-    testWidgets('a reward landing before the profile loads is lost — known gap',
+    testWidgets('with no profile loaded, the video is not even played',
         (tester) async {
-      // Documents a real hole rather than asserting it is fine: when
-      // `currentProfileProvider` has not resolved, the sheet drops the
-      // reward with no grant, no retry and no message. The user watched a
-      // full video for nothing. Reachable only if the sheet is opened
-      // before the profile stream has emitted, which the router makes
-      // unlikely but not impossible (cold start straight into Discover).
+      // This used to play the ad and then discover there was nobody to
+      // credit — thirty seconds watched for nothing. The profile is now
+      // read before the video, so the failure happens before the cost.
       final ads = _FakeAds(earn: true);
       await _openSheet(
         tester,
@@ -430,9 +456,21 @@ void main() {
       await tester.tap(find.text('Regarder une vidéo (+1 date)'));
       await tester.pumpAndSettle();
 
-      expect(ads.shows, 1, reason: 'the video was watched to the end');
-      expect((await repo.currentStatus(_male, isPremium: false)).bonusToday, 0,
-          reason: 'and nothing was granted — this is the gap to close');
+      expect(ads.shows, 0, reason: 'no impression burned for nobody');
+      expect((await repo.currentStatus(_male, isPremium: false)).bonusToday, 0);
+    });
+
+    testWidgets('the signed-in user is the one Google is told to credit',
+        (tester) async {
+      final ads = _FakeAds(earn: true);
+      await _openSheet(
+        tester,
+        _sheetHost(repo: repo, ads: ads, adsEnabled: true),
+      );
+      await tester.tap(find.text('Regarder une vidéo (+1 date)'));
+      await tester.pumpAndSettle();
+
+      expect(ads.lastUserId, _male.userId);
     });
 
     testWidgets('the button is preloaded, not fetched on tap', (tester) async {

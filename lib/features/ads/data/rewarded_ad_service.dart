@@ -77,10 +77,27 @@ class RewardedAdService {
   ///
   /// Resolves `false` when no ad is available or the user dismissed early.
   /// Callers must treat `false` as "grant nothing".
-  Future<bool> showAndAwaitReward() async {
+  ///
+  /// [userId] is handed to Google so its server-side verification callback
+  /// can name who to pay. Without it the callback still arrives, signed and
+  /// valid, with nobody attached — and the reward is lost. It is set here
+  /// rather than at load time because it is the last moment we are certain
+  /// which account is on screen.
+  Future<bool> showAndAwaitReward({required String userId}) async {
     final ad = _ad;
     if (ad == null) {
       _log.warn('show requested with no ad loaded');
+      return false;
+    }
+
+    try {
+      await ad.setServerSideOptions(
+        ServerSideVerificationOptions(userId: userId),
+      );
+    } catch (e) {
+      // Showing anyway would burn an impression for a reward nobody can be
+      // credited with. Better to fail before the video than after it.
+      _log.error('could not set SSV options ($e) — refusing to show');
       return false;
     }
 

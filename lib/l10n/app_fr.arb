@@ -461,6 +461,8 @@
   "quotaAdLoading": "Chargement de la vidéo…",
   "quotaAdUnavailable": "Aucune vidéo disponible pour l'instant.",
   "quotaAdRewarded": "+1 date débloquée pour aujourd'hui.",
+  "quotaAdVerifying": "Validation…",
+  "quotaAdPending": "Vidéo bien regardée — ta date bonus arrive dans un instant.",
 
   "discoverSuggestionsSection": "Propositions de la semaine",
   "discoverMatchesSection": "Matchs effectués",

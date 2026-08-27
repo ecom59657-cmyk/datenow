@@ -66,7 +66,7 @@ void main() {
     });
   });
 
-  group('MockQuotaRepository.grantBonusDate', () {
+  group('MockQuotaRepository.awaitRewardedBonus', () {
     const male = UserProfile(userId: 'u-male', gender: Gender.male);
     const woman = UserProfile(userId: 'u-woman', gender: Gender.female);
 
@@ -93,7 +93,7 @@ void main() {
       expect(before.isExhausted, isTrue);
       final spent = before.usedToday;
 
-      await repo.grantBonusDate(male);
+      await repo.awaitRewardedBonus(male, knownBonusToday: 0);
 
       final status = await repo.currentStatus(male, isPremium: false);
       expect(status.isExhausted, isFalse);
@@ -104,7 +104,7 @@ void main() {
 
     test('spending the bonus exhausts the day again', () async {
       await exhaust(male);
-      await repo.grantBonusDate(male);
+      await repo.awaitRewardedBonus(male, knownBonusToday: 0);
       await repo.recordMatch(male);
 
       expect((await repo.currentStatus(male, isPremium: false)).isExhausted,
@@ -112,7 +112,7 @@ void main() {
     });
 
     test('bonuses are scoped to one user, not shared', () async {
-      await repo.grantBonusDate(male);
+      await repo.awaitRewardedBonus(male, knownBonusToday: 0);
       final other = await repo.currentStatus(
         const UserProfile(userId: 'u-other', gender: Gender.male),
         isPremium: false,
@@ -121,7 +121,7 @@ void main() {
     });
 
     test('granting to an unlimited user changes nothing observable', () async {
-      await repo.grantBonusDate(woman);
+      await repo.awaitRewardedBonus(woman, knownBonusToday: 0);
       final status = await repo.currentStatus(woman, isPremium: false);
       expect(status.isUnlimited, isTrue);
       expect(status.remaining, isNull);

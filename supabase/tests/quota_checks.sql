@@ -119,6 +119,30 @@ SELECT 'fnv1a stays inside 32 bits',
   CASE WHEN public.quota_fnv1a(repeat('x', 500)) BETWEEN 0 AND 4294967295
        THEN 'PASS' ELSE 'FAIL' END
 UNION ALL
+-- ── After AdMob SSV: the client cannot pay itself ────────────────────
+SELECT 'fn grant_quota_bonus_ssv(uuid,text)',
+  CASE WHEN to_regprocedure('public.grant_quota_bonus_ssv(uuid,text)') IS NOT NULL
+       THEN 'PASS' ELSE 'FAIL' END
+UNION ALL
+-- The single most important row in this file. If it goes green→red, the app
+-- can grant itself dates again and "you must watch the video" is over.
+SELECT 'authenticated CANNOT call grant_quota_bonus',
+  CASE WHEN NOT has_function_privilege(
+              'authenticated', 'public.grant_quota_bonus()', 'EXECUTE')
+       THEN 'PASS' ELSE 'FAIL' END
+UNION ALL
+-- This one takes a user id as an argument; reachable by a client, it would
+-- let anyone credit anyone.
+SELECT 'authenticated CANNOT call grant_quota_bonus_ssv',
+  CASE WHEN NOT has_function_privilege(
+              'authenticated', 'public.grant_quota_bonus_ssv(uuid,text)', 'EXECUTE')
+       THEN 'PASS' ELSE 'FAIL' END
+UNION ALL
+SELECT 'authenticated CAN still read its own quota',
+  CASE WHEN has_function_privilege(
+              'authenticated', 'public.quota_status()', 'EXECUTE')
+       THEN 'PASS' ELSE 'FAIL' END
+UNION ALL
 -- Europe/Paris, not UTC: a cap that rolls over at 02:00 local is a bug.
 SELECT 'quota_day() is the Paris date',
   CASE WHEN public.quota_day() = (now() AT TIME ZONE 'Europe/Paris')::date

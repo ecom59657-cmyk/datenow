@@ -45,6 +45,11 @@ class _QuotaLimitSheet extends ConsumerStatefulWidget {
 class _QuotaLimitSheetState extends ConsumerState<_QuotaLimitSheet> {
   bool _busy = false;
 
+  /// The video is over and we are waiting on Google's callback. Separate from
+  /// [_busy] only so the button can stop claiming to be loading a video that
+  /// has already played.
+  bool _verifying = false;
+
   @override
   void initState() {
     super.initState();
@@ -56,10 +61,25 @@ class _QuotaLimitSheetState extends ConsumerState<_QuotaLimitSheet> {
     }
   }
 
-  /// Shows the rewarded video and grants one date — but only on a reward
-  /// callback from Google. Dismissing early grants nothing.
+  /// Shows the rewarded video and waits for the date it earns.
+  ///
+  /// The app cannot grant anything any more: since AdMob server-side
+  /// verification landed, Google posts a signed callback to the admob-ssv
+  /// Edge Function and Postgres writes the row. Closing the video early
+  /// produces no callback and so no date — which is the point.
   Future<void> _watchAdForBonus() async {
     final l10n = AppLocalizations.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+
+    // Read the profile BEFORE the video, not after. Discovering there is
+    // nobody to credit once someone has watched thirty seconds is the worst
+    // possible order.
+    final profile = ref.read(currentProfileProvider).asData?.value;
+    if (profile == null) {
+      messenger.showSnackBar(SnackBar(content: Text(l10n.quotaAdUnavailable)));
+      return;
+    }
+
     setState(() => _busy = true);
 
     final ads = ref.read(rewardedAdServiceProvider);
@@ -68,28 +88,46 @@ class _QuotaLimitSheetState extends ConsumerState<_QuotaLimitSheet> {
     if (!ads.isReady) {
       if (!mounted) return;
       setState(() => _busy = false);
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(l10n.quotaAdUnavailable)));
+      messenger.showSnackBar(SnackBar(content: Text(l10n.quotaAdUnavailable)));
       return;
     }
 
-    final earned = await ads.showAndAwaitReward();
+    // The bonus count as it stands now. Google's callback can land while the
+    // video is still closing, so without a baseline an early grant would look
+    // like no grant at all.
+    final repo = ref.read(quotaRepositoryProvider);
+    var knownBonus = 0;
+    try {
+      knownBonus =
+          (await repo.currentStatus(profile, isPremium: false)).bonusToday;
+    } catch (e) {
+      // Unreadable baseline: 0 is the safe assumption — worst case we notice
+      // the bonus one poll later than we could have.
+    }
 
+    final earned = await ads.showAndAwaitReward(userId: profile.userId);
+
+    var settled = false;
     if (earned) {
-      final profile = ref.read(currentProfileProvider).asData?.value;
-      if (profile != null) {
-        await ref.read(quotaRepositoryProvider).grantBonusDate(profile);
-        ref.invalidate(quotaStatusProvider);
-      }
+      if (mounted) setState(() => _verifying = true);
+      settled =
+          await repo.awaitRewardedBonus(profile, knownBonusToday: knownBonus);
+      ref.invalidate(quotaStatusProvider);
     }
 
     if (!mounted) return;
-    setState(() => _busy = false);
-    final messenger = ScaffoldMessenger.of(context);
-    final navigator = Navigator.of(context);
-    if (earned) {
+    setState(() {
+      _busy = false;
+      _verifying = false;
+    });
+
+    if (settled) {
       messenger.showSnackBar(SnackBar(content: Text(l10n.quotaAdRewarded)));
-      navigator.pop();
+      Navigator.of(context).pop();
+    } else if (earned) {
+      // Watched, signed, just not arrived yet. Saying nothing here would read
+      // as "you watched that for nothing".
+      messenger.showSnackBar(SnackBar(content: Text(l10n.quotaAdPending)));
     }
   }
 
@@ -167,7 +205,11 @@ class _QuotaLimitSheetState extends ConsumerState<_QuotaLimitSheet> {
             if (adsEnabled) ...[
               const SizedBox(height: AppSpacing.sm),
               AppButton(
-                label: _busy ? l10n.quotaAdLoading : l10n.quotaWatchAdCta,
+                label: _verifying
+                    ? l10n.quotaAdVerifying
+                    : _busy
+                        ? l10n.quotaAdLoading
+                        : l10n.quotaWatchAdCta,
                 icon: Icons.play_circle_outline_rounded,
                 variant: AppButtonVariant.secondary,
                 isLoading: _busy,

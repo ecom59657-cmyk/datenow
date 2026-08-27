@@ -43,6 +43,7 @@ $PSQL -c "CREATE DATABASE dn;" >/dev/null
 echo "▸ supabase stubs"
 $PSQL -d dn >/dev/null <<'SQL'
 CREATE ROLE authenticated;
+CREATE ROLE service_role;
 CREATE SCHEMA IF NOT EXISTS auth;
 CREATE TABLE auth.users (id UUID PRIMARY KEY);
 CREATE OR REPLACE FUNCTION auth.uid() RETURNS UUID LANGUAGE sql STABLE AS $$
@@ -67,6 +68,9 @@ SQL
 
 echo "▸ apply 20260827100000_quota_server_side.sql"
 $PSQL -d dn -f "$ROOT/supabase/migrations/20260827100000_quota_server_side.sql" >/dev/null
+
+echo "▸ apply 20260827110000_quota_bonus_ssv.sql"
+$PSQL -d dn -f "$ROOT/supabase/migrations/20260827110000_quota_bonus_ssv.sql" >/dev/null
 
 echo "▸ structural checks"
 set +e
@@ -164,20 +168,43 @@ BEGIN
   PERFORM pg_temp.ck('the day boundary is Paris midnight',
                      (s->>'used_today')::int = 2);
 
-  -- ── the bonus, and its ceiling ────────────────────────────────────
-  s := public.grant_quota_bonus();
-  PERFORM pg_temp.ck('a first bonus is granted', (s->>'granted')::bool);
+  -- ── the bonus, granted only by a verified callback ────────────────
+  s := public.grant_quota_bonus_ssv(free_man, 'txn-001');
+  PERFORM pg_temp.ck('a verified callback grants a date', (s->>'granted')::bool);
   s := public.quota_status();
   PERFORM pg_temp.ck('the bonus shows in the status', (s->>'bonus_today')::int = 1);
+  PERFORM pg_temp.ck('and it is marked verified',
+    (SELECT verified FROM public.quota_bonuses WHERE ssv_transaction_id = 'txn-001'));
 
-  PERFORM public.grant_quota_bonus();
-  PERFORM public.grant_quota_bonus();
-  s := public.grant_quota_bonus();
+  -- Google redelivers a callback it could not confirm. Paying twice for one
+  -- video is the failure this guards.
+  s := public.grant_quota_bonus_ssv(free_man, 'txn-001');
+  PERFORM pg_temp.ck('a redelivered callback is a no-op', (s->>'replay')::bool);
+  s := public.quota_status();
+  PERFORM pg_temp.ck('a replay does not pay twice', (s->>'bonus_today')::int = 1);
+
+  PERFORM public.grant_quota_bonus_ssv(free_man, 'txn-002');
+  PERFORM public.grant_quota_bonus_ssv(free_man, 'txn-003');
+  s := public.grant_quota_bonus_ssv(free_man, 'txn-004');
   PERFORM pg_temp.ck('a fourth bonus is refused', (s->>'granted')::bool = false);
   PERFORM pg_temp.ck('and says why', s->>'reason' = 'daily_bonus_limit');
 
   s := public.quota_status();
   PERFORM pg_temp.ck('the ceiling holds at three', (s->>'bonus_today')::int = 3);
+
+  -- A stale install can echo back an id that no longer resolves.
+  s := public.grant_quota_bonus_ssv(
+         '0000000a-0000-4000-8000-0000000000ff', 'txn-ghost');
+  PERFORM pg_temp.ck('an unknown user is refused, not created',
+                     s->>'reason' = 'unknown_user');
+
+  BEGIN
+    PERFORM public.grant_quota_bonus_ssv(free_man, '');
+    PERFORM pg_temp.ck('an empty transaction id is refused', false);
+  EXCEPTION WHEN OTHERS THEN
+    PERFORM pg_temp.ck('an empty transaction id is refused',
+                       SQLERRM = 'missing_argument');
+  END;
 
   -- One person's bonuses are not another's.
   PERFORM pg_temp.as_user(paid_man);
@@ -231,7 +258,7 @@ if echo "$ALL" | grep -qE "FAIL|ERROR:|ERREUR:"; then
 fi
 
 COUNT=$(echo "$ALL" | grep -c "PASS" || true)
-EXPECTED=40
+EXPECTED=49
 if [ "$COUNT" -lt "$EXPECTED" ]; then
   echo
   echo "✗ expected $EXPECTED checks, saw $COUNT — did a script stop early?"
