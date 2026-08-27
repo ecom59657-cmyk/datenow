@@ -78,3 +78,9 @@ build_log*.txt
 
 # Supabase CLI local state
 supabase/.temp/
+
+# Wrangler local state (Cloudflare). Holds a cached account id and a Pages
+# build cache — machine-local, regenerated on demand. Matched at any depth
+# rather than pinned to website/ so a second wrangler project does not have
+# to rediscover this.
+.wrangler/
