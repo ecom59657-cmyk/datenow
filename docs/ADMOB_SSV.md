@@ -26,7 +26,7 @@ there. Check what is actually live before deciding you are in a hurry.
 | `admob-ssv` Edge Function (signature check + grant) | ✅ `supabase/functions/admob-ssv/` |
 | Client sends `userId` to Google | ✅ `RewardedAdService.showAndAwaitReward` |
 | Client waits for the grant instead of making it | ✅ `SupabaseQuotaRepository.awaitRewardedBonus` |
-| Callback URL registered in the AdMob console | ❌ **manual, see below** |
+| Callback URL registered in the AdMob console | ❌ manual — done for iOS on 2026-08-27, see below |
 
 ## What is already deployed
 
@@ -36,7 +36,18 @@ As of 2026-08-27, on project `acastkbndpygowltemzp`:
 |---|---|
 | Both migrations | ✅ applied via the SQL Editor, and recorded in `supabase_migrations.schema_migrations` so the CLI stays in step |
 | `admob-ssv` function | ✅ deployed, **Verify JWT off**, at `https://acastkbndpygowltemzp.supabase.co/functions/v1/admob-ssv` |
-| Callback URL in AdMob | ❌ still to do |
+| Callback URL in AdMob | ✅ registered on the rewarded unit `ca-app-pub-7977656042089301/4131973190` |
+| AdMob app approval | ⏳ **"Examen requis"** — no live ad serves until Google approves the app |
+| `app-ads.txt` validation | ⏳ crawl pending; the file, the domain and the publisher id all check out |
+
+Two of those are waits, not tasks. The approval is the one that bites: until
+it clears, live ad units answer "no fill" (error code 3), the rewarded video
+never loads, and the sheet says *"Aucune vidéo disponible pour l'instant"* —
+which is the code behaving correctly and looks exactly like a broken
+integration. Do not go hunting in the SSV wiring for it.
+
+`app-ads.txt` is not a prerequisite for anything here. Unvalidated, some
+programmatic buyers decline to bid, so fill and eCPM suffer; nothing breaks.
 
 Smoke-tested from outside with no valid signature — the four answers that say
 it is wired correctly:
