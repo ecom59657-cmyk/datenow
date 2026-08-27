@@ -58,16 +58,23 @@ class QuotaService {
     return _isBoostedDay(dayKey(userId, now)) ? boostDates : 0;
   }
 
-  /// FNV-1a over the day key. Hand-rolled rather than `String.hashCode`
-  /// because that carries no cross-version stability guarantee, and a
-  /// boost that moves when the SDK updates is a bug report nobody can
-  /// reproduce.
-  bool _isBoostedDay(String key) {
+  /// FNV-1a, 32-bit. Hand-rolled rather than `String.hashCode` because that
+  /// carries no cross-version stability guarantee, and a boost that moves
+  /// when the SDK updates is a bug report nobody can reproduce.
+  ///
+  /// Public so it can be pinned against `public.quota_fnv1a` in Postgres —
+  /// the two must agree or the server and the client disagree about which
+  /// days are boosted. See supabase/tests/quota_checks.sql.
+  ///
+  /// Not a security primitive. Do not use it for anything secret.
+  static int fnv1a(String key) {
     var hash = 0x811c9dc5;
     for (final unit in key.codeUnits) {
       hash ^= unit;
       hash = (hash * 0x01000193) & 0xFFFFFFFF;
     }
-    return hash % boostOneInN == 0;
+    return hash;
   }
+
+  bool _isBoostedDay(String key) => fnv1a(key) % boostOneInN == 0;
 }

@@ -10,6 +10,7 @@ import '../../../matching/domain/match_score.dart';
 import '../../../matching/presentation/providers/active_match_provider.dart';
 import '../../../profile_setup/presentation/providers/profile_provider.dart';
 import '../../../quota/data/quota_repository.dart';
+import '../../../quota/domain/quota_status.dart';
 import '../../../quota/presentation/widgets/quota_limit_sheet.dart';
 import '../../../subscription/presentation/providers/subscription_provider.dart';
 import '../../data/discover_repository.dart';
@@ -60,9 +61,17 @@ Future<void> startDateFromSuggestion(
   } catch (e) {
     _log.warn('Subscription unreadable ($e) — using the free cap.');
   }
-  final status = await quotaRepo.currentStatus(self, isPremium: isPremium);
+  // Wrapped like the Home gate: a quota backend that is down must not
+  // swallow the tap. We log and let the date through — a blocked paying
+  // user is a worse failure than a free extra date during an outage.
+  QuotaStatus? status;
+  try {
+    status = await quotaRepo.currentStatus(self, isPremium: isPremium);
+  } catch (e, st) {
+    _log.error('Quota check failed (continuing anyway): $e', e, st);
+  }
   if (!context.mounted) return;
-  if (status.isExhausted) {
+  if (status != null && status.isExhausted) {
     await showQuotaLimitSheet(context, dailyCap: status.effectiveCap ?? 0);
     return;
   }

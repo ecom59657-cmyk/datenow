@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 
+import '../../../core/services/supabase_service.dart';
 import '../../../core/utils/logger.dart';
 import '../../profile_setup/domain/user_profile.dart';
 import '../domain/quota_status.dart';
@@ -86,37 +87,65 @@ class MockQuotaRepository implements QuotaRepository {
 // ---------------------------------------------------------------------------
 
 class SupabaseQuotaRepository implements QuotaRepository {
-  SupabaseQuotaRepository(this._client, this._service);
+  SupabaseQuotaRepository(this._client);
 
-  // ignore: unused_field
   final sb.SupabaseClient _client;
-  // ignore: unused_field
-  final QuotaService _service;
 
+  // No QuotaService here on purpose. Every number this class returns is the
+  // server's; keeping a local copy of the policy would invite someone to
+  // "fall back" to it and quietly re-open the cap during an outage.
+  static const _log = AppLogger('SupabaseQuota');
+
+  /// Reads today's allowance from `quota_status()`.
+  ///
+  /// [isPremium] is accepted for interface parity but deliberately ignored:
+  /// the server reads `subscriptions` itself. A client that could name its
+  /// own tier could name the wrong one.
   @override
   Future<QuotaStatus> currentStatus(
     UserProfile self, {
     required bool isPremium,
-  }) {
-    // TODO(datenow): call a Postgres function that counts today's matches
-    // for `self.userId` using server-side `now()` so the day boundary is
-    // consistent across devices.
-    throw UnimplementedError('SupabaseQuotaRepository.currentStatus');
+  }) async {
+    final row = await _client.rpc('quota_status') as Map<String, dynamic>;
+    _log.info(
+      'quota_status → used=${row['used_today']} cap=${row['cap'] ?? "∞"} '
+      'bonus=${row['bonus_today']} boost=${row['boost_today']} '
+      'premium=${row['is_premium']} day=${row['day']}',
+    );
+    return QuotaStatus(
+      usedToday: (row['used_today'] as num).toInt(),
+      cap: (row['cap'] as num?)?.toInt(),
+      checkedAt: DateTime.now(),
+      bonusToday: (row['bonus_today'] as num).toInt(),
+      boostToday: (row['boost_today'] as num).toInt(),
+    );
   }
 
+  /// Nothing to write. Consumption is derived from `public.calls`, which the
+  /// matching RPCs already insert into — so a date counts the moment it
+  /// actually happens, on whichever path started it.
+  ///
+  /// This is also the fix for a live bug: the Home "Lancer un date" button
+  /// never called this method, so only Discover-initiated dates were ever
+  /// charged. Deriving the count removes the possibility of forgetting.
   @override
-  Future<void> recordMatch(UserProfile self) {
-    // TODO(datenow): insert into a `match_consumptions` table with a
-    // `consumed_at` timestamp; the daily count is derived server-side.
-    throw UnimplementedError('SupabaseQuotaRepository.recordMatch');
-  }
+  Future<void> recordMatch(UserProfile self) async {}
 
+  /// Claims one extra date after a rewarded video.
+  ///
+  /// The server refuses past three a day, so a repackaged client that skips
+  /// the video buys a bounded number of dates rather than an endless supply.
+  /// Making it unforgeable needs AdMob server-side verification, which will
+  /// write these rows with a signed transaction id instead.
   @override
-  Future<void> grantBonusDate(UserProfile self) {
-    // TODO(datenow): insert into a `quota_bonuses` table. Verify the grant
-    // server-side against an AdMob SSV callback before trusting it — a
-    // client-only grant is trivially forged by a repackaged APK.
-    throw UnimplementedError('SupabaseQuotaRepository.grantBonusDate');
+  Future<void> grantBonusDate(UserProfile self) async {
+    final row =
+        await _client.rpc('grant_quota_bonus') as Map<String, dynamic>;
+    if (row['granted'] == true) {
+      _log.info('bonus granted — bonus_today=${row['bonus_today']}');
+    } else {
+      _log.warn('bonus refused: ${row['reason']}');
+    }
   }
 }
 
@@ -127,10 +156,12 @@ class SupabaseQuotaRepository implements QuotaRepository {
 final quotaServiceProvider = Provider<QuotaService>((_) => const QuotaService());
 
 final quotaRepositoryProvider = Provider<QuotaRepository>((ref) {
-  // TODO(datenow): the Supabase quota backend (a Postgres function +
-  // table counting matches per day) hasn't been deployed yet. Until it
-  // is, we use the in-memory mock even when the rest of the app talks
-  // to Supabase. This keeps "Find a date" working end-to-end instead of
-  // dying on an UnimplementedError when the user taps the CTA.
-  return MockQuotaRepository(ref.watch(quotaServiceProvider));
+  final service = ref.watch(quotaServiceProvider);
+  // The mock survives only where there is no server to ask: widget tests,
+  // and a build with no Supabase credentials. Everywhere else the cap is
+  // decided in Postgres, where killing the app does not reset it.
+  if (ref.watch(supabaseAvailableProvider)) {
+    return SupabaseQuotaRepository(ref.watch(supabaseClientProvider));
+  }
+  return MockQuotaRepository(service);
 });

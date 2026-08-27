@@ -7,6 +7,8 @@
 // anyone who pulls to refresh gets unlimited dates. And a boost that leaks
 // onto unlimited users is harmless but dishonest in the analytics.
 
+import 'dart:io';
+
 import 'package:datenow/features/profile_setup/domain/enums.dart';
 import 'package:datenow/features/profile_setup/domain/user_profile.dart';
 import 'package:datenow/features/quota/data/quota_repository.dart';
@@ -165,6 +167,56 @@ void main() {
       final s = status(cap: null, boost: 1);
       expect(s.effectiveCap, isNull);
       expect(s.isExhausted, isFalse);
+    });
+  });
+
+  // -------------------------------------------------------------------
+  group('the hash agrees with Postgres', () {
+    // The boost is computed twice — once in Dart for the mock, once in SQL
+    // for the real thing. If the two implementations drift, the app and the
+    // server disagree about which days are boosted and the user watches the
+    // cap change when the screen reloads.
+    //
+    // These three literals are the contract. They also appear verbatim in
+    // supabase/tests/quota_checks.sql, which asserts them against
+    // public.quota_fnv1a. Change one side and one of the two suites fails.
+    const pinned = {
+      'a': 3826002220,
+      'datenow': 587590907,
+      '0000000a-0000-4000-8000-000000000003:2026-08-27': 801266412,
+    };
+
+    test('the pinned values still hash the same', () {
+      pinned.forEach((key, expected) {
+        expect(QuotaService.fnv1a(key), expected, reason: 'drifted on "$key"');
+      });
+    });
+
+    test('the SQL side pins the exact same numbers', () {
+      final sql = File('supabase/tests/quota_checks.sql').readAsStringSync();
+      for (final value in pinned.values) {
+        expect(sql, contains('$value'),
+            reason: 'quota_checks.sql no longer pins $value');
+      }
+    });
+
+    test('the hash stays inside 32 bits', () {
+      for (final key in ['', 'x', 'x' * 500, '💥']) {
+        final h = QuotaService.fnv1a(key);
+        expect(h, inInclusiveRange(0, 0xFFFFFFFF), reason: 'on "$key"');
+      }
+    });
+
+    test('the pinned day key really is a boosted day', () {
+      // Ties the raw hash back to the decision the product makes with it.
+      expect(
+        _service.boostFor(
+          '0000000a-0000-4000-8000-000000000003',
+          now: DateTime(2026, 8, 27),
+          hasCap: true,
+        ),
+        1,
+      );
     });
   });
 

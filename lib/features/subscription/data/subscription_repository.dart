@@ -66,17 +66,47 @@ class MockSubscriptionRepository implements SubscriptionRepository {
 class SupabaseSubscriptionRepository implements SubscriptionRepository {
   SupabaseSubscriptionRepository(this._client);
 
-  // ignore: unused_field
   final sb.SupabaseClient _client;
+
+  static const _log = AppLogger('SupabaseSubscription');
 
   @override
   bool get isConfigured => false;
 
+  /// Follows the caller's row in `public.subscriptions`.
+  ///
+  /// This used to throw, which had a consequence nobody was looking for:
+  /// every reader of the tier — the rewarded-ad entry point among them —
+  /// saw an error instead of a value and quietly assumed "not premium".
+  /// The ad button therefore never rendered in a build talking to Supabase.
+  ///
+  /// A missing row means free: `handle_new_user` does not create one, and
+  /// absence is exactly what free means. An expired `active_until` also
+  /// means free — a lapsed subscription must not keep paying for itself.
   @override
   Stream<SubscriptionState> watchState(String userId) {
-    // TODO(datenow): subscribe to a `subscriptions` table fed by a Stripe
-    // webhook function so the UI updates immediately after checkout.
-    throw UnimplementedError('SupabaseSubscriptionRepository.watchState');
+    return _client
+        .from('subscriptions')
+        .stream(primaryKey: ['user_id'])
+        .eq('user_id', userId)
+        .map(_stateFrom)
+        .handleError((Object e, StackTrace st) {
+      _log.error('subscription stream failed: $e', e, st);
+    });
+  }
+
+  static SubscriptionState _stateFrom(List<Map<String, dynamic>> rows) {
+    if (rows.isEmpty) return const SubscriptionState.free();
+    final row = rows.first;
+    final until = row['active_until'] == null
+        ? null
+        : DateTime.tryParse(row['active_until'] as String);
+    final paid = row['tier'] == 'premium' &&
+        (until == null || until.isAfter(DateTime.now()));
+    return SubscriptionState(
+      tier: paid ? SubscriptionTier.premium : SubscriptionTier.free,
+      activeUntil: until,
+    );
   }
 
   @override
