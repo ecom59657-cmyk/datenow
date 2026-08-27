@@ -8,6 +8,7 @@ class QuotaStatus {
     required this.cap,
     required this.checkedAt,
     this.bonusToday = 0,
+    this.boostToday = 0,
   });
 
   final int usedToday;
@@ -19,11 +20,20 @@ class QuotaStatus {
   /// count stays truthful for analytics.
   final int bonusToday;
 
+  /// Extra dates offered today by the surprise daily boost. Kept apart
+  /// from [bonusToday] because the two are different products: one is
+  /// paid for with attention, the other is a gift. Analytics that merged
+  /// them could not tell whether the ads or the boost brings people back.
+  final int boostToday;
+
   bool get isUnlimited => cap == null;
 
-  /// Effective allowance for today: the base cap plus anything earned.
-  /// `null` when unlimited.
-  int? get effectiveCap => cap == null ? null : cap! + bonusToday;
+  /// Everything granted on top of the base cap today.
+  int get extraToday => bonusToday + boostToday;
+
+  /// Effective allowance for today: the base cap plus anything earned or
+  /// offered. `null` when unlimited.
+  int? get effectiveCap => cap == null ? null : cap! + extraToday;
 
   bool get isExhausted {
     final limit = effectiveCap;

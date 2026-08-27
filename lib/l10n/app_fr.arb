@@ -454,7 +454,7 @@
   "photosPrivacyHeader": "Reste privée jusqu'au date en direct",
 
   "quotaLimitTitle": "Tu as utilisé tes dates",
-  "quotaLimitBody": "Tu as utilisé tes 5 rencontres du jour. Reviens demain ou débloque plus de dates.",
+  "quotaLimitBody": "Tu as utilisé tes {count} rencontres du jour. Reviens demain ou débloque plus de dates.",
   "quotaUnlockCta": "Débloquer plus de dates",
   "quotaComeBackCta": "Revenir demain",
   "quotaWatchAdCta": "Regarder une vidéo (+1 date)",
@@ -581,7 +581,7 @@
   "homePremiumTeaserCta": "Découvrir",
   "subscriptionCurrentFree": "DateNow Free",
   "subscriptionCurrentPremium": "DateNow Premium",
-  "subscriptionFreeBody": "5 dates par jour, propositions hebdo, matching de base.",
+  "subscriptionFreeBody": "3 dates par jour, propositions hebdo, matching de base.",
   "subscriptionPremiumBody": "Tu profites déjà de tous les avantages Premium.",
   "subscriptionBenefit1Title": "Dates illimités",
   "subscriptionBenefit1Body": "Lance autant de dates que tu le souhaites.",
@@ -609,7 +609,7 @@
   "helpFaqQ2": "Pourquoi les photos sont-elles cachées ?",
   "helpFaqA2": "DateNow privilégie la vraie conversation. Les photos ne sont révélées qu'après un date de 5 minutes réussi.",
   "helpFaqQ3": "Combien de matchs puis-je lancer par jour ?",
-  "helpFaqA3": "Les comptes hommes gratuits ont 5 dates par jour. Les femmes et les Premium en ont illimité.",
+  "helpFaqA3": "Les comptes hommes gratuits ont 3 dates par jour, 6 avec Premium. Les femmes en ont un nombre illimité. Certains jours, une date bonus s'ajoute en cadeau.",
   "helpFaqQ4": "Comment fonctionnent les propositions hebdo ?",
   "helpFaqA4": "Chaque semaine on propose jusqu'à 3 profils à compatibilité ≥ 75 %. Vous pouvez lancer un date ou supprimer une proposition.",
 

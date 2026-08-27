@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../profile_setup/presentation/providers/profile_provider.dart';
+import '../../../subscription/presentation/providers/subscription_provider.dart';
 import '../../data/quota_repository.dart';
 import '../../domain/quota_status.dart';
 
@@ -16,5 +17,13 @@ final quotaStatusProvider = FutureProvider<QuotaStatus>((ref) {
       QuotaStatus(usedToday: 0, cap: 0, checkedAt: DateTime.now()),
     );
   }
-  return ref.watch(quotaRepositoryProvider).currentStatus(profile);
+  // The cap depends on the tier, so this snapshot has to follow the
+  // subscription stream. While it is still loading we answer "free" —
+  // the provider re-emits with the real cap the moment it resolves, and
+  // briefly understating the allowance is safer than overstating it.
+  final isPremium =
+      ref.watch(subscriptionStateProvider).asData?.value.isPremium ?? false;
+  return ref
+      .watch(quotaRepositoryProvider)
+      .currentStatus(profile, isPremium: isPremium);
 });

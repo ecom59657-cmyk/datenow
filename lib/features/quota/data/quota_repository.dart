@@ -9,7 +9,14 @@ import 'quota_service.dart';
 /// Tracks how many matches each user has consumed today and decides whether
 /// they can start another live date.
 abstract class QuotaRepository {
-  Future<QuotaStatus> currentStatus(UserProfile self);
+  /// Today's snapshot. [isPremium] is passed in rather than looked up:
+  /// the cap depends on the subscription, and a repository that reached
+  /// for a provider to find out would be untestable and would couple the
+  /// data layer to Riverpod.
+  Future<QuotaStatus> currentStatus(
+    UserProfile self, {
+    required bool isPremium,
+  });
 
   /// Bumps the daily counter by one. Safe to call even for unlimited users
   /// — the counter is harmless there.
@@ -35,17 +42,15 @@ class MockQuotaRepository implements QuotaRepository {
 
   static const _log = AppLogger('MockQuota');
 
-  String _key(String userId, [DateTime? now]) {
-    final d = now ?? DateTime.now();
-    final yyyy = d.year.toString().padLeft(4, '0');
-    final mm = d.month.toString().padLeft(2, '0');
-    final dd = d.day.toString().padLeft(2, '0');
-    return '$userId:$yyyy-$mm-$dd';
-  }
+  String _key(String userId, [DateTime? now]) =>
+      _service.dayKey(userId, now);
 
   @override
-  Future<QuotaStatus> currentStatus(UserProfile self) async {
-    final cap = _service.capFor(self.gender);
+  Future<QuotaStatus> currentStatus(
+    UserProfile self, {
+    required bool isPremium,
+  }) async {
+    final cap = _service.capFor(self.gender, isPremium: isPremium);
     final key = _key(self.userId);
     final used = _countsByKey[key] ?? 0;
     return QuotaStatus(
@@ -53,6 +58,9 @@ class MockQuotaRepository implements QuotaRepository {
       cap: cap,
       checkedAt: DateTime.now(),
       bonusToday: _bonusByKey[key] ?? 0,
+      // Recomputed on every read, never stored: it is a pure function of
+      // (user, day), so there is nothing to keep in sync.
+      boostToday: _service.boostFor(self.userId, hasCap: cap != null),
     );
   }
 
@@ -86,7 +94,10 @@ class SupabaseQuotaRepository implements QuotaRepository {
   final QuotaService _service;
 
   @override
-  Future<QuotaStatus> currentStatus(UserProfile self) {
+  Future<QuotaStatus> currentStatus(
+    UserProfile self, {
+    required bool isPremium,
+  }) {
     // TODO(datenow): call a Postgres function that counts today's matches
     // for `self.userId` using server-side `now()` so the day boundary is
     // consistent across devices.

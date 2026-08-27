@@ -11,6 +11,7 @@ import '../../../matching/presentation/providers/active_match_provider.dart';
 import '../../../profile_setup/presentation/providers/profile_provider.dart';
 import '../../../quota/data/quota_repository.dart';
 import '../../../quota/presentation/widgets/quota_limit_sheet.dart';
+import '../../../subscription/presentation/providers/subscription_provider.dart';
 import '../../data/discover_repository.dart';
 import '../../domain/mutual_match.dart';
 import '../../domain/weekly_suggestion.dart';
@@ -51,10 +52,18 @@ Future<void> startDateFromSuggestion(
   if (self == null) return;
 
   final quotaRepo = ref.read(quotaRepositoryProvider);
-  final status = await quotaRepo.currentStatus(self);
+  // Same reason as the Home gate: the cap depends on the tier. A failure
+  // to read it degrades to "free", never to a thrown flow.
+  var isPremium = false;
+  try {
+    isPremium = (await ref.read(subscriptionStateProvider.future)).isPremium;
+  } catch (e) {
+    _log.warn('Subscription unreadable ($e) — using the free cap.');
+  }
+  final status = await quotaRepo.currentStatus(self, isPremium: isPremium);
   if (!context.mounted) return;
   if (status.isExhausted) {
-    await showQuotaLimitSheet(context);
+    await showQuotaLimitSheet(context, dailyCap: status.effectiveCap ?? 0);
     return;
   }
 

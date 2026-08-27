@@ -74,42 +74,55 @@ void main() {
 
     setUp(() => repo = MockQuotaRepository(const QuotaService()));
 
+    /// Spends dates until the day is done. Loops on [isExhausted] rather
+    /// than on a literal count because the daily boost can quietly add one
+    /// — a hard-coded loop would leave the user with a date in hand.
+    Future<QuotaStatus> exhaust(UserProfile p) async {
+      var status = await repo.currentStatus(p, isPremium: false);
+      var guard = 0;
+      while (!status.isExhausted && guard++ < 20) {
+        await repo.recordMatch(p);
+        status = await repo.currentStatus(p, isPremium: false);
+      }
+      return status;
+    }
+
     test('a capped user who exhausted the day can date again after one ad',
         () async {
-      for (var i = 0; i < QuotaService.maleDailyCap; i++) {
-        await repo.recordMatch(male);
-      }
-      expect((await repo.currentStatus(male)).isExhausted, isTrue);
+      final before = await exhaust(male);
+      expect(before.isExhausted, isTrue);
+      final spent = before.usedToday;
 
       await repo.grantBonusDate(male);
 
-      final status = await repo.currentStatus(male);
+      final status = await repo.currentStatus(male, isPremium: false);
       expect(status.isExhausted, isFalse);
       expect(status.remaining, 1);
-      expect(status.usedToday, QuotaService.maleDailyCap);
+      expect(status.usedToday, spent,
+          reason: 'the bonus lifts the cap, it does not erase consumption');
     });
 
     test('spending the bonus exhausts the day again', () async {
-      for (var i = 0; i < QuotaService.maleDailyCap; i++) {
-        await repo.recordMatch(male);
-      }
+      await exhaust(male);
       await repo.grantBonusDate(male);
       await repo.recordMatch(male);
 
-      expect((await repo.currentStatus(male)).isExhausted, isTrue);
+      expect((await repo.currentStatus(male, isPremium: false)).isExhausted,
+          isTrue);
     });
 
     test('bonuses are scoped to one user, not shared', () async {
       await repo.grantBonusDate(male);
       final other = await repo.currentStatus(
         const UserProfile(userId: 'u-other', gender: Gender.male),
+        isPremium: false,
       );
       expect(other.bonusToday, 0);
     });
 
     test('granting to an unlimited user changes nothing observable', () async {
       await repo.grantBonusDate(woman);
-      final status = await repo.currentStatus(woman);
+      final status = await repo.currentStatus(woman, isPremium: false);
       expect(status.isUnlimited, isTrue);
       expect(status.remaining, isNull);
     });

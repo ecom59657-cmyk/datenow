@@ -105,7 +105,7 @@ Widget _sheetHost({
         home: Scaffold(
           body: Builder(
             builder: (context) => TextButton(
-              onPressed: () => showQuotaLimitSheet(context),
+              onPressed: () => showQuotaLimitSheet(context, dailyCap: 3),
               child: const Text('open'),
             ),
           ),
@@ -373,10 +373,11 @@ void main() {
 
     testWidgets('watching to the end grants one date and closes the sheet',
         (tester) async {
-      for (var i = 0; i < QuotaService.maleDailyCap; i++) {
+      var status = await repo.currentStatus(_male, isPremium: false);
+      while (!status.isExhausted) {
         await repo.recordMatch(_male);
+        status = await repo.currentStatus(_male, isPremium: false);
       }
-      expect((await repo.currentStatus(_male)).isExhausted, isTrue);
 
       final ads = _FakeAds(earn: true);
       await _openSheet(
@@ -387,7 +388,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(ads.shows, 1);
-      final status = await repo.currentStatus(_male);
+      status = await repo.currentStatus(_male, isPremium: false);
       expect(status.bonusToday, 1);
       expect(status.isExhausted, isFalse,
           reason: 'the user can start another date');
@@ -407,7 +408,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(ads.shows, 1);
-      expect((await repo.currentStatus(_male)).bonusToday, 0);
+      expect((await repo.currentStatus(_male, isPremium: false)).bonusToday, 0);
       expect(find.text('Revenir demain'), findsOneWidget,
           reason: 'the sheet stays open — nothing was unlocked');
     });
@@ -430,7 +431,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(ads.shows, 1, reason: 'the video was watched to the end');
-      expect((await repo.currentStatus(_male)).bonusToday, 0,
+      expect((await repo.currentStatus(_male, isPremium: false)).bonusToday, 0,
           reason: 'and nothing was granted — this is the gap to close');
     });
 

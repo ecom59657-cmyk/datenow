@@ -14,19 +14,29 @@ import '../../../profile_setup/presentation/providers/profile_provider.dart';
 import '../../data/quota_repository.dart';
 import '../providers/quota_provider.dart';
 
-/// Premium bottom-sheet shown when a male user hits the daily 5-match cap.
-/// Women never see this — their cap is `null`.
-Future<void> showQuotaLimitSheet(BuildContext context) {
+/// Bottom sheet shown when a capped user runs out of dates for the day.
+/// Women never see it — their cap is `null`.
+///
+/// [dailyCap] is the allowance the user just exhausted — the base cap plus
+/// anything an ad or the daily boost added. Passed in rather than read from
+/// a provider so the sheet always states the number the caller actually
+/// measured against, never a value that drifted between the two reads.
+Future<void> showQuotaLimitSheet(
+  BuildContext context, {
+  required int dailyCap,
+}) {
   return showModalBottomSheet<void>(
     context: context,
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
-    builder: (_) => const _QuotaLimitSheet(),
+    builder: (_) => _QuotaLimitSheet(dailyCap: dailyCap),
   );
 }
 
 class _QuotaLimitSheet extends ConsumerStatefulWidget {
-  const _QuotaLimitSheet();
+  const _QuotaLimitSheet({required this.dailyCap});
+
+  final int dailyCap;
 
   @override
   ConsumerState<_QuotaLimitSheet> createState() => _QuotaLimitSheetState();
@@ -129,7 +139,7 @@ class _QuotaLimitSheetState extends ConsumerState<_QuotaLimitSheet> {
             ),
             const SizedBox(height: AppSpacing.sm),
             Text(
-              l10n.quotaLimitBody,
+              l10n.quotaLimitBody(widget.dailyCap),
               textAlign: TextAlign.center,
               style:
                   AppTypography.body.copyWith(color: AppColors.textSecondary),

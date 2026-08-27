@@ -378,15 +378,24 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     // 3. Quota — wrapped: a broken quota backend should NOT block the
     //    button. We log and proceed in that case.
     try {
-      final status =
-          await ref.read(quotaRepositoryProvider).currentStatus(profile);
+      // Awaited rather than read off the cached AsyncValue: a paying user
+      // whose subscription stream has not resolved yet would otherwise be
+      // measured against the free cap and blocked at 3.
+      final isPremium =
+          (await ref.read(subscriptionStateProvider.future)).isPremium;
+      final status = await ref
+          .read(quotaRepositoryProvider)
+          .currentStatus(profile, isPremium: isPremium);
       _log.info(
         'Quota OK: used=${status.usedToday} cap=${status.cap ?? "∞"}',
       );
       if (status.isExhausted) {
         _log.info('Quota exhausted — showing limit sheet.');
         if (!context.mounted) return;
-        await showQuotaLimitSheet(context);
+        await showQuotaLimitSheet(
+          context,
+          dailyCap: status.effectiveCap ?? 0,
+        );
         return;
       }
     } catch (e, st) {

@@ -511,7 +511,10 @@
   "photosPrivacyHeader": "Stays private until the live date",
 
   "quotaLimitTitle": "You've used your dates",
-  "quotaLimitBody": "You've used your 5 dates for today. Come back tomorrow or unlock more dates.",
+  "quotaLimitBody": "You've used your {count} dates for today. Come back tomorrow or unlock more dates.",
+  "@quotaLimitBody": {
+    "placeholders": { "count": { "type": "int" } }
+  },
   "quotaUnlockCta": "Unlock more dates",
   "quotaComeBackCta": "Come back tomorrow",
   "quotaWatchAdCta": "Watch a video (+1 date)",
@@ -656,7 +659,7 @@
   "homePremiumTeaserCta": "Discover",
   "subscriptionCurrentFree": "DateNow Free",
   "subscriptionCurrentPremium": "DateNow Premium",
-  "subscriptionFreeBody": "5 dates a day, weekly suggestions, basic matching.",
+  "subscriptionFreeBody": "3 dates a day, weekly suggestions, basic matching.",
   "subscriptionPremiumBody": "You already enjoy every Premium perk.",
   "subscriptionBenefit1Title": "Unlimited dates",
   "subscriptionBenefit1Body": "Start as many dates as you want.",
@@ -684,7 +687,7 @@
   "helpFaqQ2": "Why are photos hidden?",
   "helpFaqA2": "DateNow is designed around real conversations first. Photos are revealed only after a successful 5-minute date.",
   "helpFaqQ3": "How many matches can I start each day?",
-  "helpFaqA3": "Free male accounts get 5 live dates per day. Women and Premium users have unlimited live dates.",
+  "helpFaqA3": "Free male accounts get 3 live dates per day, 6 with Premium. Women have unlimited live dates. Some days a bonus date is added as a gift.",
   "helpFaqQ4": "How do weekly suggestions work?",
   "helpFaqA4": "Every week we propose up to 3 reciprocal-compatibility profiles (75 % or higher). You can start a live date or remove a suggestion.",
 
