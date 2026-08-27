@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -16,6 +18,7 @@ import '../../../core/utils/display_name.dart';
 import '../../../core/utils/extensions.dart';
 import '../../../core/utils/logger.dart';
 import '../../identity/data/identity_repository.dart';
+import '../../profile_moderation/domain/photo_moderation_status.dart';
 import '../../profile_moderation/data/photo_moderation_repository.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../shared/widgets/app_button.dart';
@@ -306,12 +309,29 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     final hasApproved =
         await ref.read(hasApprovedPhotoProvider.future);
     if (!hasApproved) {
+      // "No approved photo" covers two very different situations, and
+      // telling someone to add a photo they just added is the worse of the
+      // two mistakes. A photo still pending or analyzing means the Vision
+      // pipeline has not answered yet — seconds, usually — so the honest
+      // message is "wait", not "upload".
+      ref.invalidate(myPhotoStatusesProvider);
+      final statuses = await ref.read(myPhotoStatusesProvider.future);
+      final awaitingVerdict = statuses.values.any(
+        (s) =>
+            s == PhotoModerationStatus.pending ||
+            s == PhotoModerationStatus.analyzing,
+      );
       _log.warn(
         'No approved photo for ${user.id} — blocking find date '
-        '(cached photoUrls=${profile.photoUrls.length})',
+        '(cached photoUrls=${profile.photoUrls.length}, '
+        'awaitingVerdict=$awaitingVerdict)',
       );
       if (!context.mounted) return;
-      await _showPhotoRequiredSheet(context);
+      final retry =
+          await _showPhotoRequiredSheet(context, pending: awaitingVerdict);
+      // The verdict usually lands while the sheet is open, so a retry is
+      // very often all it takes.
+      if (retry == true && mounted) unawaited(_onFindDate());
       return;
     }
     _log.info('Approved photo confirmed — gate cleared');
@@ -538,9 +558,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
 
   /// Premium bottom sheet shown when the user taps "Find a date" without
   /// a profile photo. Offers a one-tap path to the photos editor.
-  Future<void> _showPhotoRequiredSheet(BuildContext context) {
+  /// Returns true when the user asked to try again — only offered while a
+  /// verdict is still pending, since retrying changes nothing otherwise.
+  Future<bool?> _showPhotoRequiredSheet(
+    BuildContext context, {
+    bool pending = false,
+  }) {
     final l10n = AppLocalizations.of(context);
-    return showModalBottomSheet<void>(
+    return showModalBottomSheet<bool>(
       context: context,
       // Push onto the ROOT navigator — without this the sheet lives
       // inside the StatefulShellRoute branch and the bottom nav of
@@ -580,32 +605,46 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                   shape: BoxShape.circle,
                   color: AppColors.tint,
                 ),
-                child: const Icon(
-                  Icons.camera_alt_rounded,
+                child: Icon(
+                  pending
+                      ? Icons.hourglass_top_rounded
+                      : Icons.camera_alt_rounded,
                   color: AppColors.bordeaux,
                   size: 34,
                 ),
               ),
               const SizedBox(height: AppSpacing.lg),
               Text(
-                l10n.findDatePhotoRequiredTitle,
+                pending
+                    ? l10n.findDatePhotoPendingTitle
+                    : l10n.findDatePhotoRequiredTitle,
                 textAlign: TextAlign.center,
                 style: AppTypography.h2,
               ),
               const SizedBox(height: AppSpacing.sm),
               Text(
-                l10n.findDatePhotoRequiredBody,
+                pending
+                    ? l10n.findDatePhotoPendingBody
+                    : l10n.findDatePhotoRequiredBody,
                 textAlign: TextAlign.center,
                 style: AppTypography.body
                     .copyWith(color: AppColors.textSecondary),
               ),
               const SizedBox(height: AppSpacing.lg),
               AppButton(
-                label: l10n.findDatePhotoRequiredCta,
-                icon: Icons.add_a_photo_rounded,
+                label: pending
+                    ? l10n.findDatePhotoPendingCta
+                    : l10n.findDatePhotoRequiredCta,
+                icon: pending
+                    ? Icons.refresh_rounded
+                    : Icons.add_a_photo_rounded,
                 size: AppButtonSize.large,
                 onPressed: () {
-                  Navigator.of(sheetContext).pop();
+                  if (pending) {
+                    Navigator.of(sheetContext).pop(true);
+                    return;
+                  }
+                  Navigator.of(sheetContext).pop(false);
                   context.pushNamed(AppRoute.editPhotos.name);
                 },
               ),
@@ -613,7 +652,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
               AppButton(
                 label: l10n.findDatePhotoRequiredCancel,
                 variant: AppButtonVariant.secondary,
-                onPressed: () => Navigator.of(sheetContext).pop(),
+                onPressed: () => Navigator.of(sheetContext).pop(false),
               ),
               const SizedBox(height: AppSpacing.sm),
             ],

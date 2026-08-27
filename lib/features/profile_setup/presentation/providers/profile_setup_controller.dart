@@ -50,6 +50,11 @@ class ProfileSetupController extends StateNotifier<ProfileDraft> {
     state = state.copyWith(seekingGenders: next);
   }
 
+  /// Recorded once the OS has actually granted the permission — never on
+  /// the tap that opens the dialog. A refusal must leave this false.
+  void setLocationGranted(bool granted) =>
+      state = state.copyWith(locationGranted: granted);
+
   void setAgeRange(int min, int max) =>
       state = state.copyWith(seekingAgeMin: min, seekingAgeMax: max);
 
@@ -242,6 +247,7 @@ class ProfileDraft {
     this.availability,
     this.prompts = const <PromptAnswer>[],
     this.photoBytes,
+    this.locationGranted = false,
     this.origins = const <Origin>{},
     this.religion,
     this.drinking,
@@ -276,6 +282,13 @@ class ProfileDraft {
   final List<PromptAnswer> prompts;
   final Uint8List? photoBytes;
 
+  /// Whether the device has granted location access during signup.
+  ///
+  /// Device state, mirrored into the draft so the wizard can gate on it the
+  /// same way it gates on anything else. Like [photoBytes] it is signup-only
+  /// and never read again afterwards — the source of truth is the OS.
+  final bool locationGranted;
+
   /// Optional background. Nothing here gates a step: the wizard must be
   /// completable without answering any of it.
   final Set<Origin> origins;
@@ -300,15 +313,23 @@ class ProfileDraft {
 
   bool get isStep4Valid => availability != null;
 
-  /// The last step of the wizard: availability *and* a profile photo.
+  /// The last step of the wizard: availability, a profile photo, and a
+  /// granted location.
   ///
   /// Deliberately separate from [isStep4Valid] rather than folded into
   /// it. [isStep4Valid] feeds [isComplete], which the router reads to
-  /// decide whether someone still owes us onboarding — and [photoBytes]
-  /// is a transient buffer that only exists during signup. Adding the
-  /// photo there would make every returning user look incomplete and
-  /// send them back through the wizard.
-  bool get isFinalizeStepValid => isStep4Valid && photoBytes != null;
+  /// decide whether someone still owes us onboarding — and both
+  /// [photoBytes] and [locationGranted] are transient, signup-only state.
+  /// Adding them there would make every returning user look incomplete
+  /// and send them back through the wizard.
+  ///
+  /// Location is a hard requirement rather than a nicety:
+  /// `find_best_live_candidate_v1` rejects a caller whose
+  /// `profiles.location` is null with `no_location_self`, so without it
+  /// the user would enter the queue and never match. Asking here beats
+  /// discovering it at the first tap on Lancer un date.
+  bool get isFinalizeStepValid =>
+      isStep4Valid && photoBytes != null && locationGranted;
 
   /// Answers actually written, blanks dropped.
   List<PromptAnswer> get filledPrompts =>
@@ -336,6 +357,7 @@ class ProfileDraft {
     Availability? availability,
     List<PromptAnswer>? prompts,
     Object? photoBytes = _unset,
+    bool? locationGranted,
     Set<Origin>? origins,
     // The sentinel, not a plain nullable: `religion: null` has to mean
     // "clear it". Tapping the selected chip again is how a single-select
@@ -362,6 +384,7 @@ class ProfileDraft {
       photoBytes: identical(photoBytes, _unset)
           ? this.photoBytes
           : photoBytes as Uint8List?,
+      locationGranted: locationGranted ?? this.locationGranted,
       origins: origins ?? this.origins,
       religion: identical(religion, _unset)
           ? this.religion

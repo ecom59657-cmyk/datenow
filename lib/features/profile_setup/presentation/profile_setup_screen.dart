@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -9,6 +11,7 @@ import '../../../app/theme/app_typography.dart';
 import '../../../core/utils/age.dart';
 import '../../../core/utils/extensions.dart';
 import '../../../core/utils/logger.dart';
+import '../../../core/services/location_service.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../shared/widgets/app_button.dart';
 import '../../../shared/widgets/app_scaffold.dart';
@@ -137,6 +140,12 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
         return;
       }
       _log.info('Profile saved — finalising onboarding flag');
+
+      // Push the position now that the profiles row certainly exists.
+      // Permission was granted on the last step, so this opens no dialog —
+      // it just spares the first "Lancer un date" a GPS read it would
+      // otherwise do while the user waits on a spinner.
+      unawaited(LocationService.instance.captureAndPush());
       // Belt-and-suspenders: make sure the intro-onboarding flag is on
       // (it should already be from the welcome carousel) so the router
       // never bounces back to /onboarding while the redirect re-evaluates.

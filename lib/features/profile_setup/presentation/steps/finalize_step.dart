@@ -8,6 +8,7 @@ import '../../../../l10n/app_localizations.dart';
 import '../../domain/enums.dart';
 import '../providers/profile_setup_controller.dart';
 import '../widgets/choice_card.dart';
+import '../widgets/location_permission_card.dart';
 import '../widgets/photo_picker_card.dart';
 
 class FinalizeStep extends ConsumerWidget {
@@ -65,6 +66,21 @@ class FinalizeStep extends ConsumerWidget {
           bytes: draft.photoBytes,
           onPicked: ctrl.setPhotoBytes,
         ),
+        const SizedBox(height: AppSpacing.lg),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            _Label(l10n.locationSignupLabel),
+            Text(
+              l10n.photoRequired,
+              style: AppTypography.caption.copyWith(
+                color: AppColors.textTertiary,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        const LocationPermissionCard(),
         const SizedBox(height: AppSpacing.xxl),
       ],
     );

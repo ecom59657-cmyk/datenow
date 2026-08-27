@@ -59,7 +59,7 @@ void main() {
     });
   });
 
-  group('ProfileDraft — the last step now requires a photo', () {
+  group('ProfileDraft — the last step requires a photo and a location', () {
     // A draft that answers everything the wizard asks except the photo.
     ProfileDraft filledExceptPhoto() => ProfileDraft(
           userId: 'u1',
@@ -80,34 +80,55 @@ void main() {
     final photo = Uint8List.fromList(const [1, 2, 3]);
 
     test('everything answered but no photo does not finish signup', () {
-      final d = filledExceptPhoto();
+      final d = filledExceptPhoto().copyWith(locationGranted: true);
       expect(d.isStep4Valid, isTrue, reason: 'availability is set');
       expect(d.isFinalizeStepValid, isFalse,
           reason: 'the Terminer button must stay disabled without a photo');
     });
 
-    test('adding a photo unlocks the last step', () {
+    test('a photo without a location does not finish signup either', () {
+      // find_best_live_candidate_v1 rejects a caller whose location is null,
+      // so letting them through here only moves the dead end to the first
+      // tap on Lancer un date, with nothing on screen explaining it.
       final d = filledExceptPhoto().copyWith(photoBytes: photo);
+      expect(d.locationGranted, isFalse, reason: 'false until the OS grants');
+      expect(d.isFinalizeStepValid, isFalse);
+    });
+
+    test('a photo and a location together unlock the last step', () {
+      final d = filledExceptPhoto()
+          .copyWith(photoBytes: photo, locationGranted: true);
       expect(d.isFinalizeStepValid, isTrue);
+    });
+
+    test('a refused permission leaves the step locked', () {
+      // setLocationGranted(false) is what a dismissed dialog records. It must
+      // not read as "asked, therefore fine".
+      final d = filledExceptPhoto()
+          .copyWith(photoBytes: photo, locationGranted: false);
+      expect(d.isFinalizeStepValid, isFalse);
     });
 
     test('a photo alone is not enough — availability still counts', () {
       // Built from scratch rather than cleared with copyWith: availability
       // has no _unset sentinel, so `copyWith(availability: null)` keeps the
       // old value instead of erasing it.
-      final d = ProfileDraft(userId: 'u1', photoBytes: photo);
+      final d = ProfileDraft(
+          userId: 'u1', photoBytes: photo, locationGranted: true);
       expect(d.isStep4Valid, isFalse);
       expect(d.isFinalizeStepValid, isFalse);
     });
 
-    test('the photo rule never leaks into isComplete', () {
+    test('neither rule leaks into isComplete', () {
       // isComplete is what the router reads to decide whether someone
       // still owes us onboarding. photoBytes is a signup-only buffer, so
       // folding it in would send every returning user back through the
       // wizard.
       final d = filledExceptPhoto();
       expect(d.photoBytes, isNull);
-      expect(d.isComplete, isTrue);
+      expect(d.locationGranted, isFalse);
+      expect(d.isComplete, isTrue,
+          reason: 'a returning user must not be sent back through signup');
     });
 
     test('the wizard reads the photo rule, not the bare availability rule',
@@ -120,6 +141,22 @@ void main() {
       ).readAsStringSync();
       expect(src, contains('_Step.finalize => d.isFinalizeStepValid,'));
       expect(src, isNot(contains('_Step.finalize => d.isStep4Valid,')));
+
+      // And the card that records the grant is actually on the step.
+      final step = File(
+        'lib/features/profile_setup/presentation/steps/finalize_step.dart',
+      ).readAsStringSync();
+      expect(step, contains('LocationPermissionCard'));
+
+      // Only a real OS grant may set the flag — never the tap that opens
+      // the dialog.
+      final card = File(
+        'lib/features/profile_setup/presentation/widgets/'
+        'location_permission_card.dart',
+      ).readAsStringSync();
+      expect(card, contains('_record(_granted(status))'),
+          reason: 'the flag must follow the OS answer, not the tap');
+      expect(card, isNot(contains('_record(true);\n    }\n\n  Future<void> _request')));
     });
   });
 
