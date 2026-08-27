@@ -133,3 +133,75 @@ Deux autres choses volontairement absentes. **Aucune mention de correctif de bug
 le champ est lu par des gens qui hésitent à mettre à jour, pas par des
 testeurs. Et **aucune promesse de nouveauté fonctionnelle**, puisque le
 reviewer d'un dossier 4.3(b) compare ce champ à ce qu'il voit à l'écran.
+
+---
+
+## 7. Version 0.3.0 (75)
+
+### Texte promotionnel — 170 caractères
+
+Champ modifiable **sans nouveau build**, ce qui en fait le bon endroit pour
+annoncer la vidéo récompensée le jour où AdMob approuve l'app — et le mauvais
+endroit pour l'annoncer avant.
+
+**Retenu (107 caractères) :**
+
+```
+Cinq minutes en vidéo, sans photo. Vous ne vous découvrez que si vous décidez tous les deux de vous revoir.
+```
+
+### ⚠️ Ce qu'il ne faut PAS annoncer
+
+**La vidéo récompensée.** Le code est en place et testé, mais AdMob n'a pas
+encore approuvé l'application : les blocs réels répondent « no fill », la
+vidéo ne se charge pas, et l'utilisateur lit « Aucune vidéo disponible pour
+l'instant ». Annoncer une fonctionnalité qu'un examinateur peut toucher et
+trouver morte, c'est la règle 2.1 sur la complétude — et ce serait un refus
+mérité. À ajouter au texte promotionnel une fois l'approbation obtenue, sans
+nouveau build.
+
+### Nouveautés de cette version — 4 000 caractères
+
+Le parti pris : **annoncer la baisse du quota**. Le plafond n'était pas
+réellement appliqué avant — il vivait en mémoire et repartait à zéro à chaque
+relance — donc les comptes hommes passent d'un illimité de fait à trois par
+jour. Ne pas le dire, c'est laisser les gens le découvrir en tapant sur un mur,
+et c'est comme ça qu'on récolte des avis à une étoile qui parlent de dates
+« retirées en douce ».
+
+**Retenu (français, 588 caractères) :**
+
+```
+Vos réponses comptent enfin.
+
+Les questions facultatives de l'inscription affinent désormais vos suggestions. Origines et religion ne sont prises en compte que si vous l'autorisez explicitement, et seulement lorsque les deux personnes l'ont fait.
+
+Trois dates par jour pour les comptes hommes — et certains jours, une de plus, en cadeau.
+
+Les Réglages enregistrent enfin vos choix : notifications, confidentialité, comptes bloqués.
+
+Une photo et votre position sont maintenant demandées à l'inscription, au moment où l'on peut vous expliquer pourquoi, plutôt qu'au milieu d'une recherche.
+```
+
+**Version anglaise (482 caractères) :**
+
+```
+Your answers finally count.
+
+The optional questions at sign-up now shape your suggestions. Origins and religion are only taken into account if you explicitly allow it, and only when both people have.
+
+Three dates a day on free male accounts — and on some days, one more, as a gift.
+
+Settings now remember your choices: notifications, privacy, blocked accounts.
+
+A photo and your location are now asked for at sign-up, where we can explain why, rather than in the middle of a search.
+```
+
+### À mettre à jour en même temps dans App Store Connect
+
+- **Étiquette de confidentialité** : cette version collecte la **localisation
+  précise** et un **identifiant publicitaire**. L'ancienne étiquette ne les
+  déclare pas, et Apple compare l'étiquette à la politique de confidentialité.
+- **Compte démo** dans App Review Information : sans lui, l'examinateur est
+  seul dans la file d'attente et voit une application qui n'apparie personne.
+  C'est très probablement ce qui s'est joué dans le refus 4.3(b).
