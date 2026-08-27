@@ -106,6 +106,13 @@
 	     App settings. The SDK raises on launch if this key is missing or
 	     malformed, so it must always hold a valid value. Ad *units* are
 	     switched to Google's test ids in debug — see lib/features/ads/. -->
+	<!-- Export compliance. DateNow uses only the encryption Apple already
+	     exempts: HTTPS/TLS to Supabase and Agora, and the platform keychain.
+	     No proprietary or non-standard cryptography ships in the binary, so
+	     the answer is false and App Store Connect stops asking on every
+	     upload. Revisit if the app ever implements its own crypto. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>GADApplicationIdentifier</key>
 	<string>ca-app-pub-7977656042089301~4639616959</string>
 	<key>NSUserTrackingUsageDescription</key>
