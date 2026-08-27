@@ -300,6 +300,16 @@ class ProfileDraft {
 
   bool get isStep4Valid => availability != null;
 
+  /// The last step of the wizard: availability *and* a profile photo.
+  ///
+  /// Deliberately separate from [isStep4Valid] rather than folded into
+  /// it. [isStep4Valid] feeds [isComplete], which the router reads to
+  /// decide whether someone still owes us onboarding — and [photoBytes]
+  /// is a transient buffer that only exists during signup. Adding the
+  /// photo there would make every returning user look incomplete and
+  /// send them back through the wizard.
+  bool get isFinalizeStepValid => isStep4Valid && photoBytes != null;
+
   /// Answers actually written, blanks dropped.
   List<PromptAnswer> get filledPrompts =>
       prompts.where((p) => p.isFilled).toList(growable: false);

@@ -53,7 +53,7 @@ class FinalizeStep extends ConsumerWidget {
           children: [
             _Label(l10n.photoLabel),
             Text(
-              l10n.photoOptional,
+              l10n.photoRequired,
               style: AppTypography.caption.copyWith(
                 color: AppColors.textTertiary,
               ),

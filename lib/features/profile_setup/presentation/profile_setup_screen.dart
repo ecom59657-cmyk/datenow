@@ -71,7 +71,10 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
         _Step.seeking => d.isStep2Valid,
         _Step.vibe => d.isStep3Valid,
         _Step.prompts => d.isStep5Valid,
-        _Step.finalize => d.isStep4Valid,
+        // A photo is required to finish signup — the reveal is the
+        // product payoff, and the find-date gate demands one anyway.
+        // Asking here beats bouncing someone off the CTA later.
+        _Step.finalize => d.isFinalizeStepValid,
       };
 
   bool get _isLast => _index == _stepCount - 1;

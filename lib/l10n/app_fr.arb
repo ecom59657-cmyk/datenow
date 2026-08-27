@@ -273,7 +273,7 @@
   "photoPhotosDeniedBody": "Active l'accès aux photos pour DateNow dans les Réglages iOS pour choisir une photo.",
   "photoPermissionOpenSettings": "Ouvrir les Réglages",
   "photoPickFailedSnack": "Impossible d'ajouter la photo",
-  "photoOptional": "(optionnel pour l'instant)",
+  "photoRequired": "(obligatoire)",
   "profileSetupSubmit": "Commencer à matcher",
   "profileSetupSaveError": "Impossible d'enregistrer votre profil : {reason}. Réessayez.",
   "profileSetupIncomplete": "Il manque quelques champs.",

@@ -303,7 +303,7 @@
   "photoPhotosDeniedBody": "Enable Photos access for DateNow in iOS Settings to pick a photo.",
   "photoPermissionOpenSettings": "Open Settings",
   "photoPickFailedSnack": "Could not add the photo",
-  "photoOptional": "(optional for now)",
+  "photoRequired": "(required)",
   "profileSetupSubmit": "Start matching",
   "profileSetupSaveError": "We couldn't save your profile: {reason}. Please try again.",
   "@profileSetupSaveError": {

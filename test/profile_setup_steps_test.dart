@@ -13,6 +13,9 @@ import 'package:datenow/features/profile_setup/domain/interest.dart';
 import 'package:datenow/features/profile_setup/domain/prompt.dart';
 import 'package:datenow/features/profile_setup/domain/prompt_answer.dart';
 import 'package:datenow/features/profile_setup/presentation/providers/profile_setup_controller.dart';
+import 'dart:io';
+import 'dart:typed_data';
+
 import 'package:flutter_test/flutter_test.dart';
 
 ProfileDraft _empty() => ProfileDraft(userId: 'u1');
@@ -53,6 +56,70 @@ void main() {
       expect(complete.isStep5Valid, isTrue);
       expect(complete.isComplete, isTrue,
           reason: 'signup must complete with no background answered at all');
+    });
+  });
+
+  group('ProfileDraft — the last step now requires a photo', () {
+    // A draft that answers everything the wizard asks except the photo.
+    ProfileDraft filledExceptPhoto() => ProfileDraft(
+          userId: 'u1',
+          firstName: 'Alex',
+          birthDate: DateTime(1994, 5, 2),
+          gender: domain.Gender.male,
+          orientation: domain.Orientation.straight,
+          seekingGenders: const {domain.Gender.female},
+          intentions: const {domain.Intention.feeling},
+          interests: const {Interest.music, Interest.travel, Interest.cooking},
+          availability: domain.Availability.immediate,
+          prompts: const [
+            PromptAnswer(question: PromptQuestion.perfectSunday, answer: 'a'),
+            PromptAnswer(question: PromptQuestion.badAt, answer: 'b'),
+          ],
+        );
+
+    final photo = Uint8List.fromList(const [1, 2, 3]);
+
+    test('everything answered but no photo does not finish signup', () {
+      final d = filledExceptPhoto();
+      expect(d.isStep4Valid, isTrue, reason: 'availability is set');
+      expect(d.isFinalizeStepValid, isFalse,
+          reason: 'the Terminer button must stay disabled without a photo');
+    });
+
+    test('adding a photo unlocks the last step', () {
+      final d = filledExceptPhoto().copyWith(photoBytes: photo);
+      expect(d.isFinalizeStepValid, isTrue);
+    });
+
+    test('a photo alone is not enough — availability still counts', () {
+      // Built from scratch rather than cleared with copyWith: availability
+      // has no _unset sentinel, so `copyWith(availability: null)` keeps the
+      // old value instead of erasing it.
+      final d = ProfileDraft(userId: 'u1', photoBytes: photo);
+      expect(d.isStep4Valid, isFalse);
+      expect(d.isFinalizeStepValid, isFalse);
+    });
+
+    test('the photo rule never leaks into isComplete', () {
+      // isComplete is what the router reads to decide whether someone
+      // still owes us onboarding. photoBytes is a signup-only buffer, so
+      // folding it in would send every returning user back through the
+      // wizard.
+      final d = filledExceptPhoto();
+      expect(d.photoBytes, isNull);
+      expect(d.isComplete, isTrue);
+    });
+
+    test('the wizard reads the photo rule, not the bare availability rule',
+        () {
+      // Guards the wiring: the screen must map the finalize step to
+      // isFinalizeStepValid. Swapping it back to isStep4Valid compiles
+      // cleanly and silently makes the photo optional again.
+      final src = File(
+        'lib/features/profile_setup/presentation/profile_setup_screen.dart',
+      ).readAsStringSync();
+      expect(src, contains('_Step.finalize => d.isFinalizeStepValid,'));
+      expect(src, isNot(contains('_Step.finalize => d.isStep4Valid,')));
     });
   });
 
