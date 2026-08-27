@@ -6,9 +6,15 @@ signed callback, and only once the user really finished the video. The app has
 no grant of its own any more — `grant_quota_bonus()` is revoked from
 `authenticated` by migration `20260827110000`.
 
-That last sentence is also the trap: **once the migration is applied, no bonus
-can be granted until the callback URL is configured in AdMob.** Deploy in the
-order below.
+That last sentence carries the trap, but only under one condition: **the order
+below matters once a build containing this client code is in users' hands.**
+Between the migration landing and the callback URL being registered, a live app
+would let people watch videos for nothing.
+
+It does not matter while no such build is published. The migrations were
+applied on 2026-08-27 while the App Store still carried 0.2.0+74, which
+predates all of this and calls none of it — so the order was safely reversed
+there. Check what is actually live before deciding you are in a hurry.
 
 ## What's already in the repo
 
@@ -22,9 +28,65 @@ order below.
 | Client waits for the grant instead of making it | ✅ `SupabaseQuotaRepository.awaitRewardedBonus` |
 | Callback URL registered in the AdMob console | ❌ **manual, see below** |
 
+## What is already deployed
+
+As of 2026-08-27, on project `acastkbndpygowltemzp`:
+
+| | |
+|---|---|
+| Both migrations | ✅ applied via the SQL Editor, and recorded in `supabase_migrations.schema_migrations` so the CLI stays in step |
+| `admob-ssv` function | ✅ deployed, **Verify JWT off**, at `https://acastkbndpygowltemzp.supabase.co/functions/v1/admob-ssv` |
+| Callback URL in AdMob | ❌ still to do |
+
+Smoke-tested from outside with no valid signature — the four answers that say
+it is wired correctly:
+
+| Request | Answer | What it proves |
+|---|---|---|
+| no query at all | `400 malformed` | the function runs; Verify JWT really is off |
+| unknown `key_id` | `401 bad_signature` | it reaches Google's key server |
+| real `key_id`, junk signature | `401 bad_signature` | it loaded the live public key and ran the ECDSA check |
+| three-hour-old timestamp | `401 bad_signature` | the signature is checked *before* freshness — unsigned data is never read |
+
+A `503 key_server_unreachable` in place of the second answer would mean the
+edge runtime cannot reach gstatic.com.
+
 ## Deploy order
 
-Doing these out of order costs you every reward in between.
+Doing these out of order costs you every reward in between — see the caveat at
+the top for when that is actually true.
+
+### Without the CLI
+
+Everything below can be done from the dashboard, which is how it was done the
+first time (the CLI session had expired and `supabase login` needs a TTY):
+
+* **Migrations** — SQL Editor → New query → paste each file from
+  `supabase/migrations/` → Run. They are written to be re-runnable
+  (`CREATE OR REPLACE`, `IF NOT EXISTS`, `DROP POLICY IF EXISTS`), so a
+  double-run is harmless. Afterwards, record them by hand or the next
+  `supabase db push` will try to replay them:
+
+  ```sql
+  insert into supabase_migrations.schema_migrations (version, name)
+  values ('20260827100000', 'quota_server_side'),
+         ('20260827110000', 'quota_bonus_ssv')
+  on conflict (version) do nothing;
+  ```
+
+* **Function** — Edge Functions → Deploy a new function → *Via editor*. Two
+  things the editor will let you get wrong: the code must go in **`index.ts`**
+  (a second file beside it is never the entry point), and the **function name
+  field defaults to a random one** like `dynamic-api`. A wrongly named function
+  works, but the CLI would later deploy `admob-ssv` beside it and leave the
+  original live and registered with Google — edits then land on an endpoint
+  nobody calls.
+
+  The editor cannot see `../_shared`, so paste the single-file build instead of
+  `index.ts` from the repo. Regenerate it by inlining the four helpers from
+  `supabase/functions/_shared/`.
+
+### With the CLI
 
 ### 1. Deploy the function first, while the old grant still works
 
@@ -76,7 +138,13 @@ node scripts/test_admob_ssv.mjs      # 25 checks
 ./scripts/test_quota_sql.sh          # 49 checks, throwaway Postgres
 ```
 
-**After deploying** — watch a rewarded video on a real device, then:
+**A debug build cannot test this at all.** `AdIds` switches to Google's public
+test units whenever `kReleaseMode` is false, and those units belong to Google —
+there is nowhere to attach your callback URL. No callback will ever arrive, and
+it looks exactly like a broken endpoint. The first real test needs a **release**
+build (TestFlight) running the live ad unit.
+
+**After deploying** — watch a rewarded video on a release build, then:
 
 ```sql
 select user_id, granted_on, verified, ssv_transaction_id, granted_at
