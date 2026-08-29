@@ -83,6 +83,15 @@ class SupabaseSubscriptionRepository implements SubscriptionRepository {
   /// A missing row means free: `handle_new_user` does not create one, and
   /// absence is exactly what free means. An expired `active_until` also
   /// means free — a lapsed subscription must not keep paying for itself.
+  ///
+  /// A failure means free too, and it has to *say so*. The previous version
+  /// logged the error and dropped it, which looks harmless and is not: the
+  /// stream then emitted nothing at all, ever. Every reader waiting on
+  /// `subscriptionStateProvider.future` — the Home "Lancer un date" gate
+  /// among them — waited forever, and the button died silently. That is
+  /// exactly what happened in production while `public.subscriptions` was
+  /// missing from the database. An error we cannot answer is still an
+  /// answer: not premium.
   @override
   Stream<SubscriptionState> watchState(String userId) {
     return _client
@@ -90,9 +99,14 @@ class SupabaseSubscriptionRepository implements SubscriptionRepository {
         .stream(primaryKey: ['user_id'])
         .eq('user_id', userId)
         .map(_stateFrom)
-        .handleError((Object e, StackTrace st) {
-      _log.error('subscription stream failed: $e', e, st);
-    });
+        .transform(
+          StreamTransformer<SubscriptionState, SubscriptionState>.fromHandlers(
+            handleError: (Object e, StackTrace st, EventSink<SubscriptionState> sink) {
+              _log.error('subscription stream failed: $e', e, st);
+              sink.add(const SubscriptionState.free());
+            },
+          ),
+        );
   }
 
   static SubscriptionState _stateFrom(List<Map<String, dynamic>> rows) {

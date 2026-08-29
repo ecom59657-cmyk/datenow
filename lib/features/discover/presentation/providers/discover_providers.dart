@@ -55,9 +55,16 @@ Future<void> startDateFromSuggestion(
   final quotaRepo = ref.read(quotaRepositoryProvider);
   // Same reason as the Home gate: the cap depends on the tier. A failure
   // to read it degrades to "free", never to a thrown flow.
+  // The timeout matters more than the value: a stream that never resolves
+  // used to leave this await pending for good, and the tap died here with
+  // nothing on screen to show for it. Free is the safe assumption — the
+  // quota RPC reads the real tier server-side.
   var isPremium = false;
   try {
-    isPremium = (await ref.read(subscriptionStateProvider.future)).isPremium;
+    isPremium = (await ref
+            .read(subscriptionStateProvider.future)
+            .timeout(const Duration(seconds: 5)))
+        .isPremium;
   } catch (e) {
     _log.warn('Subscription unreadable ($e) — using the free cap.');
   }

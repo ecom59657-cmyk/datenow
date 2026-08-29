@@ -31,6 +31,7 @@ import '../../quota/data/quota_repository.dart';
 import '../../quota/presentation/widgets/quota_limit_sheet.dart';
 import '../../subscription/data/date_milestone_repository.dart';
 import '../../../core/services/preferences_service.dart';
+import '../../subscription/domain/subscription_state.dart';
 import '../../subscription/presentation/providers/subscription_provider.dart';
 import 'widgets/available_dates_display.dart';
 import 'widgets/home_discover_link.dart';
@@ -401,8 +402,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       // Awaited rather than read off the cached AsyncValue: a paying user
       // whose subscription stream has not resolved yet would otherwise be
       // measured against the free cap and blocked at 3.
-      final isPremium =
-          (await ref.read(subscriptionStateProvider.future)).isPremium;
+      //
+      // The timeout is not belt-and-braces. This exact await once hung
+      // forever — the subscription stream failed, the failure was swallowed
+      // upstream, no value ever came — and the whole CTA died with it, with
+      // no snackbar, no sheet, nothing on screen. No tier lookup is worth a
+      // dead button: after 5 s we assume free and let the quota RPC, which
+      // reads the tier server-side anyway, have the last word.
+      final tier = await ref
+          .read(subscriptionStateProvider.future)
+          .timeout(const Duration(seconds: 5), onTimeout: () {
+        _log.warn('Subscription state did not resolve — assuming free.');
+        return const SubscriptionState.free();
+      });
+      final isPremium = tier.isPremium;
       final status = await ref
           .read(quotaRepositoryProvider)
           .currentStatus(profile, isPremium: isPremium);
