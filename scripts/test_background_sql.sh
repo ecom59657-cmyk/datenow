@@ -6,9 +6,12 @@
 # hold in Postgres too, because the SQL matcher is what actually decides who
 # meets whom — the Dart score only decides what number is printed.
 #
-# mm_find_match itself needs PostGIS and the whole matching schema, which a
-# brew Postgres does not have. What is exercised here is every line of the
-# consent logic; the matcher is only checked for creating cleanly.
+# mm_find_match itself is only checked here for CREATING cleanly, which turned
+# out to prove nothing: it created cleanly for months while raising
+# `column reference "peer_id" is ambiguous` on every call. Running it needs
+# PostGIS — or a six-line stub of it, which is what
+# scripts/test_mm_find_match_sql.sh does. Go there for the matcher; what is
+# exercised below is every line of the consent logic.
 #
 # Requires postgresql@17. No Docker needed.
 
