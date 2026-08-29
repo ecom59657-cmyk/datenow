@@ -45,6 +45,26 @@ Server side fully ready. Remaining: 2-iPhone smoke (§4) then archive (§5) + up
 
 ---
 
+## 0. ⚠ Vérifier que la base distante n'a pas dérivé
+
+```bash
+scripts/check_remote_schema.sh
+```
+
+À faire **avant** tout `db push`, et avant toute archive. Trois fois déjà une
+migration a été enregistrée comme appliquée alors que seule une partie de son
+DDL avait tourné : `public.reports` en mai, la paire messagerie en mai aussi,
+puis `subscriptions` + `user_settings` le 2026-08-29 — celle-là s'est
+manifestée comme un bouton « Lancer un date » qui ne faisait rien du tout, et
+comme un quota serveur qui n'a jamais plafonné personne.
+
+`db push` ne peut pas voir ce trou : l'historique lui dit que tout est
+appliqué. Le script compare les `CREATE TABLE` des migrations à ce que l'API
+REST expose vraiment, sans CLI ni mot de passe. Sortie 1 s'il manque quelque
+chose, avec le nom de la migration coupable.
+
+---
+
 ## 1. ⚠ Apply the compliance migration
 
 **Command:**
